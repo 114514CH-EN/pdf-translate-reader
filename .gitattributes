@@ -1,0 +1,3 @@
+# keep CI files out of the download zip
+.github export-ignore
+.gitattributes export-ignore

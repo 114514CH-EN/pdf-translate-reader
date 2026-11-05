@@ -1,0 +1,55 @@
+# Publishes a GitHub Release when VERSION changes: builds the download zip
+# (git archive, includes the prebuilt frontend/dist) and attaches it.
+# Release notes come from .github/release-notes/v<VERSION>.md.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+      - .github/workflows/release.yml
+      - .github/release-notes/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: v
+        run: echo "tag=v$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the download zip
+        if: steps.check.outputs.exists != 'true'
+        run: |
+          git archive --format=zip --prefix=pdf-translate-reader/ \
+            -o "pdf-translate-reader-${{ steps.v.outputs.tag }}.zip" HEAD
+
+      - name: Create the release
+        if: steps.check.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          gh release create "$TAG" "pdf-translate-reader-$TAG.zip" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG · PDF 双语翻译阅读器" \
+            --notes-file ".github/release-notes/$TAG.md" \
+            --latest
