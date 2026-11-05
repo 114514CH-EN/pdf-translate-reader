@@ -211,6 +211,12 @@
 - 默认形象换成为本项目画的「小页」（`frontend/public/pet/page.svg`，折角纸片，正面朝前所以默认不转身），去掉了 Twemoji 大肥鱼
 - 新增测试 `test_pose_slots_are_separate`——共 **44 passed**；`APP_VERSION` → `2026.11.05-13`
 
+### M18 项目主页 + v1.0.0（2026-11-05）✅
+- 项目主页：`docs/index.html`，GitHub Pages 从 `main` 分支的 `/docs` 发布 → https://114514ch-en.github.io/pdf-translate-reader/ 。中英切换（按浏览器语言默认，记在 localStorage）、跟随系统暗色、手机宽度单栏
+- 截图全部用为项目写的 2 页演示讲义 `docs/demo/fourier-guide.pdf`（傅里叶变换 + 采样），不含任何个人文件；截图在 `docs/img/`（网页用 2x webp，README 用 png）
+- README 中英两版都换成新截图，加上主页 / 下载链接和示例文档说明
+- GitHub Release `v1.0.0`：附 `pdf-translate-reader-v1.0.0.zip`（`git archive`，含构建好的 `frontend/dist`，解压后双击 `run.bat` 即可）
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

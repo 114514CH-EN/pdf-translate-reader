@@ -1,8 +1,10 @@
 # PDF 双语翻译阅读器
 
-**简体中文** | [English](README.en.md)
+**简体中文** | [English](README.en.md) · [项目主页](https://114514ch-en.github.io/pdf-translate-reader/) · [下载 v1.0.0](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest)
 
 本地运行的 PDF 双语阅读与翻译工具：左边原文、右边保持原版式的译文，两栏同步滚动。公式、表格、图片按原样保留，适合读英文论文、实验手册和教材。
+
+![整页预览 + 阅读助手](docs/img/reader.png)
 
 所有文档、译文和笔记都只保存在你自己的电脑上；只有在翻译 / 提问时，文字才会发给你配置的大模型 API。
 
@@ -14,6 +16,8 @@
 - 术语库（全局 + 文档级），可从文档自动抽取；一致性润色
 - 翻译前估算 token、费用和时间；翻译进度条（每页一格，点击跳页）
 - 导出：纯译文 PDF、左右对照 / 交替页 PDF、双语 PDF、Markdown（含高亮和笔记）
+
+![逐句对照视图](docs/img/sentences.png)
 
 **阅读**
 - 划词：选中文字即可查词（语境释义）、翻译、加入术语库、五色高亮、写笔记
@@ -34,7 +38,7 @@
 - 在一页停留一会儿，看到公式、表格或大段文字时会问你要不要讲讲（可关）
 - 默认形象是为本项目画的「小页」：一张折了角的纸
 
-![桌宠版预览](docs/pet-preview.png)
+![桌宠版预览](docs/img/pet.png)
 
 **其他**
 - 支持 DeepSeek、OpenAI、通义千问、Kimi，以及任何 OpenAI 兼容接口（Ollama、LM Studio、自建服务）；设置里可一键「拉取模型列表」
@@ -45,12 +49,12 @@
 
 需要 **Python 3.10+**。仓库里已包含构建好的前端，**不需要 Node.js**。
 
-1. 下载或克隆本仓库
+1. 从 [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest) 下载 zip 解压（或克隆本仓库）
 2. 双击 `run.bat`：第一次运行会自动创建虚拟环境并安装依赖，然后打开浏览器 `http://127.0.0.1:8765`
 3. 打开 ⚙ 设置：
    - **翻译**：选服务商、填 API Key、点「拉取模型列表」选模型，「保存并测试」
    - **阅读助手**：单独配置（可以点「复制翻译 API 的配置」作为起点）
-4. 把 PDF 拖进窗口，点「翻译全文」
+4. 把 PDF 拖进窗口，点「翻译全文」。手边没有文档的话，可以先用仓库里的示例 [`docs/demo/fourier-guide.pdf`](docs/demo/fourier-guide.pdf) 试试
 
 > 使用 DeepSeek V4 时，翻译会自动关闭思考模式（更快、更省）。阅读助手可在设置里选择是否开启。
 
@@ -105,3 +109,5 @@ cd backend && ..\.venv\Scripts\python -m pytest -q tests
 ```
 
 技术栈：FastAPI + SQLite + PyMuPDF + Pillow（后端），React + TypeScript + Vite + Zustand + pdf.js + KaTeX（前端）。开发进度与设计说明见 [PROGRESS.md](PROGRESS.md)。
+
+截图里的示例文档 `docs/demo/fourier-guide.pdf` 是为本项目写的演示讲义。
