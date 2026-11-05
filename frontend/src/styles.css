@@ -996,6 +996,31 @@ textarea {
   flex: none;
   white-space: nowrap;
 }
+/* Word's second-level bullet is a Courier New "o" */
+.abs-hang-marker.is-o {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* code listings: translated comments laid over the text-free background */
+.abs-code-comment {
+  position: absolute;
+  white-space: nowrap;
+  overflow: visible;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.abs-code-text,
+.flow-code {
+  margin: 0;
+  font-family: Consolas, 'JetBrains Mono', 'Cascadia Mono', Menlo, monospace;
+  white-space: pre;
+  overflow-x: auto;
+}
+.flow-code {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .abs-hang-body {
   flex: 1;
   min-width: 0;

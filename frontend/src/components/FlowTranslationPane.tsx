@@ -115,6 +115,8 @@ function kindLabel(block: Block): string {
       return '图片';
     case 'formula':
       return '公式';
+    case 'code':
+      return '代码';
     case 'list':
       return '列表';
     default:
@@ -146,6 +148,13 @@ function PairRow({ block, page, hovered, failed, onHover, editMode, onSave, onSa
 
       {block.type === 'formula' ? (
         <OrigFigure page={page} bbox={block.bbox} />
+      ) : block.type === 'code' ? (
+        <>
+          <div className="flow-src" title="原文">
+            <pre className="flow-code">{block.text}</pre>
+          </div>
+          <EditableTgt block={block} editMode={editMode} onSave={onSave} render={(t) => <pre className="flow-code">{t}</pre>} />
+        </>
       ) : block.type === 'table' && mdRows(srcText) ? (
         <>
           <div className="flow-src">

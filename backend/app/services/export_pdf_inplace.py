@@ -47,6 +47,9 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
                     if c.get("math"):
                         continue  # math cells keep the original glyphs
                     page.add_redact_annot(fitz.Rect(c["bbox"]), fill=False, cross_out=False)
+            elif r["type"] == "code":
+                for rect, _text, _info in _code_comments(r, meta):
+                    page.add_redact_annot(rect, fill=False, cross_out=False)
             else:
                 page.add_redact_annot(bbox, fill=False, cross_out=False)
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE, graphics=fitz.PDF_REDACT_LINE_ART_NONE)
@@ -65,6 +68,13 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
                 if "{{m" in trans:
                     arch = mi.add_to(arch)
                 _draw_table(page, meta, trans, style, arch, css, mi, page_no)
+            elif r["type"] == "code":
+                for rect, text, info in _code_comments(r, meta):
+                    box = fitz.Rect(rect.x0, rect.y0, max(rect.x1, page.rect.x1 - 30), rect.y1 + 1)
+                    cstyle = {**style, "color": info.get("cc", style.get("color", 0)),
+                              "size": (style.get("size") or 10) * 0.95, "bold": False}
+                    page.insert_htmlbox(box, block_html(text, cstyle), css=css, archive=arch,
+                                        scale_low=0.5, overlay=True)
             else:
                 body = math_body(trans, meta, page_no, mi)
                 if body is not None:
@@ -86,6 +96,23 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
     orig.close()
     mi.cleanup()
     return out_path
+
+
+def _code_comments(r, meta: dict) -> list[tuple]:
+    """(comment area on the page, translated comment incl. marker, line info) per commented line."""
+    from .code_blocks import split_line, translation_fits
+
+    if not translation_fits(r["text"], r["translation"], meta):
+        return []
+    out = []
+    for line, info in zip(r["translation"].split("\n"), (meta.get("code") or {}).get("lines") or []):
+        if info.get("cx") is None:
+            continue
+        _code, head, comment = split_line(line, info.get("ci"))
+        if comment:
+            rect = fitz.Rect(info["cx"] - 0.5, info["y0"], max(info["x1"], info["cx"] + 1) + 0.5, info["y1"])
+            out.append((rect, head + comment, info))
+    return out
 
 
 def _kept_math_rects(r) -> list[fitz.Rect]:

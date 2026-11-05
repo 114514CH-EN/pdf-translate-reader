@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from ..db import get_db
-from . import prompts
+from . import code_blocks, prompts
 from .llm_client import chat_completion
 from .sentence_split import join_units, sentence_units
 from .settings_store import load_settings
@@ -100,6 +100,7 @@ def select_blocks(doc_id: int, scope: str, page_no: int | None, block_ids: list[
             meta = json.loads(d.pop("meta_json") or "{}")
         except Exception:
             meta = {}
+        d["meta"] = meta
         # translate the placeholder text: formulas stay as {{mN}} and are re-inserted verbatim
         d["src"] = meta.get("ph") or d["text"]
         d["placeholders"] = PH_RE.findall(d["src"])
@@ -178,6 +179,10 @@ def plan_blocks(doc_id: int, scope: str, params: dict, target_lang: str, model: 
             done_count += 1
         elif b["edited"] and not overwrite_edits:
             done_count += 1
+        elif b["type"] == "code" and not force and code_blocks.translation_fits(b["text"], b["translation"], b["meta"]):
+            done_count += 1  # code parts unchanged: any model is fine for the comments
+        elif b["type"] == "code":
+            todo.append(b)  # an old paragraph-style translation of a listing is redone
         elif not force and b["translation"] and b["cache_key"] == cache_key(b["text"], target_lang, model, glossary_rev):
             done_count += 1
         else:
@@ -217,6 +222,17 @@ async def run_translate_job(job_id: int, doc_id: int, params: dict) -> None:
         target_lang = doc["target_lang"] or target_lang
 
     blocks, todo, done_count = plan_blocks(doc_id, scope, params, target_lang, model, glossary_rev)
+    # code listings: only the comments go to the model; a listing without any is kept as is
+    no_comments = []
+    for b in todo:
+        if b["type"] == "code":
+            b["units"] = code_blocks.comment_units(b["text"], b["meta"])
+            if not b["units"]:
+                no_comments.append(b)
+    for b in no_comments:
+        _store_translation(b, b["text"], target_lang, model, glossary_rev)
+        todo.remove(b)
+        done_count += 1
     for b in todo:
         if b["type"] in ("paragraph", "list"):
             units = sentence_units(b["src"])
@@ -325,6 +341,14 @@ async def _translate_batch(
         sents = item.get("sentences")
         units = b.get("units")
         ph = b.get("placeholders") or []
+        if b["type"] == "code":
+            if not (sents and len(sents) == len(units or [])):
+                # one string back instead of a list: one comment per line
+                lines = [x for x in (item.get("translation") or "").split("\n") if x.strip()]
+                sents = lines if len(lines) == len(units or []) else None
+            if sents:
+                out[b["id"]] = (code_blocks.rebuild(b["text"], b["meta"], [str(x) for x in sents]), None)
+            continue
         if sents and units and len(sents) == len(units):
             sents = [repair_placeholders(x, PH_RE.findall(u)) for x, u in zip(sents, units)]
             out[b["id"]] = (join_units(b["segs"], sents, target_lang), list(zip(units, sents)))

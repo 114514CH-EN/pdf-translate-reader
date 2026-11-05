@@ -25,7 +25,7 @@ export interface DocDetail extends DocumentRow {
   last_frac?: number | null;
 }
 
-export type BlockType = 'heading' | 'paragraph' | 'list' | 'table' | 'image' | 'formula';
+export type BlockType = 'heading' | 'paragraph' | 'list' | 'table' | 'image' | 'formula' | 'code';
 
 export interface BlockStyle {
   size: number;
@@ -93,6 +93,18 @@ export interface BlockMeta {
   hang?: number;
   /** extra space (pt) above each numbered item of the block (paragraph spacing) */
   item_gaps?: number[];
+  /** code listing: per line box, and where its comment starts (page x `cx`, char index `ci`, colour `cc`) */
+  code?: { lines: CodeLine[]; cw?: number };
+}
+
+export interface CodeLine {
+  y0: number;
+  y1: number;
+  x0: number;
+  x1: number;
+  cx?: number;
+  ci?: number;
+  cc?: number;
 }
 
 export interface Block {

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import shutil
 from pathlib import Path
@@ -191,6 +192,20 @@ def reextract_document(doc_id: int) -> int:
                 i = used.get(key, 0)
                 remap[old_id] = cands[min(i, len(cands) - 1)]
                 used[key] = i + 1
+        # same text whose kind changed between running text types
+        # ("o for example …" was a paragraph, is now a list item)
+        prose = ("paragraph", "list", "heading")
+        taken = set(remap.values())
+        loose: dict[tuple, list[int]] = {}
+        for (pg, typ, txt), ids in new_ids.items():
+            if typ in prose:
+                loose.setdefault((pg, txt), []).extend(i for i in ids if i not in taken)
+        for old_id, (pg, typ, txt) in old_blocks.items():
+            if old_id in remap or typ not in prose:
+                continue
+            free = loose.get((pg, txt))
+            if free:
+                remap[old_id] = free.pop(0)
         kept = 0
         remap_notes: dict[int, int] = {}
         # blocks that were split by the new extractor (heading ⇥ "[20 marks]",
@@ -216,7 +231,9 @@ def reextract_document(doc_id: int) -> int:
             target = compact(old_norm)
             for i in range(len(cands)):
                 acc = ""
-                for k in range(i, min(i + 4, len(cands))):
+                # up to 10 pieces: a list the old extractor kept as one paragraph
+                # ("o Alphabet size\no H(x)\n…") is now one block per item
+                for k in range(i, min(i + 10, len(cands))):
                     acc += compact(cands[k]["text"])
                     if acc == target and k > i:
                         group = cands[i:k + 1]
@@ -251,7 +268,7 @@ def reextract_document(doc_id: int) -> int:
             old_by_page.setdefault(r["page_no"], []).append(r)
         merge_rows: list[tuple] = []
         for r in new_rows:
-            if r["id"] in assigned_new or r["type"] in ("formula", "image", "table"):
+            if r["id"] in assigned_new or r["type"] in ("formula", "image", "table", "code"):
                 continue
             target = compact(r["text"])
             cands = [o for o in old_by_page.get(r["page_no"], []) if o["id"] not in consumed_old]
@@ -309,7 +326,37 @@ def reextract_document(doc_id: int) -> int:
         for n in old_notes:
             nb = remap.get(n["block_id"]) or remap_notes.get(n["block_id"])
             db.execute("UPDATE notes SET block_id=? WHERE id=?", (nb, n["id"]))
+        _fix_absorbed_brackets(db, doc_id)
     return kept
+
+
+def _fix_absorbed_brackets(db, doc_id: int) -> None:
+    """A bracket that now belongs to a formula ("[1 1 0 1" + "]") must not stay
+    next to its placeholder in a kept translation, or it shows twice."""
+    rows = db.execute(
+        "SELECT t.id, t.text, b.meta_json, b.page_id FROM translations t JOIN blocks b ON b.id=t.block_id"
+        " WHERE b.doc_id=? AND t.text LIKE '%{{m%'", (doc_id,)
+    ).fetchall()
+    run_text: dict[int, dict[str, str]] = {}
+    for r in rows:
+        if r["page_id"] not in run_text:
+            pg = db.execute("SELECT extract_json FROM pages WHERE id=?", (r["page_id"],)).fetchone()
+            try:
+                runs = json.loads(pg["extract_json"] or "{}").get("math_runs", []) if pg else []
+            except Exception:
+                runs = []
+            run_text[r["page_id"]] = {m["id"]: m.get("text") or "" for m in runs}
+        texts = run_text[r["page_id"]]
+        new = r["text"]
+        for rid in set(re.findall(r"\{\{(m\d+)\}\}", new)):
+            t = texts.get(rid, "").strip()
+            ph = "{{" + rid + "}}"
+            if t[-1:] in ")]}|" and ph + t[-1] in new:
+                new = new.replace(ph + t[-1], ph)
+            if t[:1] in "([{|" and t[0] + ph in new:
+                new = new.replace(t[0] + ph, ph)
+        if new != r["text"]:
+            db.execute("UPDATE translations SET text=? WHERE id=?", (new, r["id"]))
 
 
 def upgrade_old_documents() -> None:

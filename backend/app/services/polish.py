@@ -57,7 +57,7 @@ def find_candidates(doc_id: int, lang: str) -> tuple[list[dict], list[dict]]:
         rows = db.execute(
             "SELECT b.id, b.type, b.level, b.text, b.meta_json, t.text AS translation FROM blocks b"
             " JOIN translations t ON t.block_id=b.id AND t.lang=?"
-            " WHERE b.doc_id=? AND t.edited=0 AND b.type NOT IN ('image','formula') ORDER BY b.page_no, b.order_idx",
+            " WHERE b.doc_id=? AND t.edited=0 AND b.type NOT IN ('image','formula','code') ORDER BY b.page_no, b.order_idx",
             (lang, doc_id),
         ).fetchall()
     # doc-specific terms shadow global ones with the same source

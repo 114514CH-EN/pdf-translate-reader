@@ -36,6 +36,8 @@ def build_translation_messages(
         '"sentences": an array of exactly N strings where item i translates source sentence [i] — keep the 1:1 '
         "alignment, never merge or split sentences, and do not include the [i] labels. Keep item numbers/bullets "
         "that start a sentence (e.g. '1.2.', '•').",
+        "Blocks of type=code are source-code comments, one per numbered item: translate each comment's words "
+        "only and keep identifiers, function names, file names and numbers exactly as written; no comment markers.",
         'Output STRICT JSON only: {"translations":[{"id": <int>, "translation": <string>} | {"id": <int>, "sentences": [<string>, …]}]}'
         " — one entry per input block, same ids.",
         "No commentary outside the JSON.",

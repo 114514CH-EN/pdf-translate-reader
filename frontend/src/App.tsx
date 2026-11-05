@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.05-13';
+const EXPECTED_BACKEND = '2026.11.05-14';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PdfPane } from './components/PdfPane';

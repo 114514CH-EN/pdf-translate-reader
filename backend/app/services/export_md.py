@@ -70,6 +70,11 @@ def export_markdown(doc_id: int, out_path: Path, lang: str, bilingual: bool = Fa
                     ).decode("ascii")
                     lines += [f"![formula](data:image/png;base64,{b64})", ""]
                 continue
+            if r["type"] == "code":
+                body = r["translation"] or r["text"]
+                fence = "~~~~" if "```" in body else "```"
+                lines += [fence, body, fence, ""]
+                continue
             src_text = math_markdown(meta.get("ph") or r["text"], meta, page_no, mi)
             if bilingual and r["text"]:
                 lines += [f"> {src_text.replace(chr(10), chr(10) + '> ')}", ""]

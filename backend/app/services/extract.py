@@ -214,7 +214,7 @@ def _normalize_table(tbl, words: list[tuple]) -> tuple[int, int, list[dict]]:
     return len(grid_rows), n_cols, out
 
 
-EXTRACT_VER = 14  # v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 15  # v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -263,7 +263,99 @@ def restore_placeholders(translation: str, runs: list[dict]) -> str | None:
     return "".join(out)
 
 
+# Word bullets set in Symbol / Wingdings come out as private-use code points
+_PUA_BULLETS = {
+    "\uf0b7": "•", "\uf0a7": "▪", "\uf0a8": "□", "\uf06c": "●", "\uf06e": "■", "\uf071": "❑",
+    "\uf076": "❖", "\uf0d8": "➢", "\uf0e0": "➢", "\uf0fc": "✓", "\uf0fe": "☑", "\uf02d": "–",
+}
+_SYMBOL_FONT = re.compile(r"symbol|wingding|webding", re.I)
+
+
+def _fix_bullets(text: str, font: str) -> str:
+    if text and _SYMBOL_FONT.search(font or "") and any(ch in _PUA_BULLETS for ch in text):
+        return "".join(_PUA_BULLETS.get(ch, ch) for ch in text)
+    return text
+
+
+_PAIRS = {"[": "]", "(": ")", "{": "}"}
+_CLOSERS = {v: k for k, v in _PAIRS.items()}
+
+
+def _unbalanced(text: str) -> tuple[str | None, str | None]:
+    """(closer still needed, opener still needed) for a formula's text."""
+    need_close = need_open = None
+    for o, c in _PAIRS.items():
+        n = text.count(o) - text.count(c)
+        if n > 0:
+            need_close = c
+        elif n < 0:
+            need_open = o
+    if text.count("|") % 2 == 1:
+        need_close = need_close or "|"
+    return need_close, need_open
+
+
+def _split_span(sp: dict, n: int) -> tuple[dict, dict]:
+    """Split a span after n characters; widths estimated from Helvetica metrics."""
+    t = sp.get("text") or ""
+    size = sp.get("size") or 10
+    x0, y0, x1, y1 = sp["bbox"]
+    try:
+        whole = fitz.get_text_length(t, fontname="helv", fontsize=size) or 1.0
+        part = fitz.get_text_length(t[:n], fontname="helv", fontsize=size)
+    except Exception:
+        whole, part = float(len(t) or 1), float(n)
+    xm = x0 + (x1 - x0) * part / whole
+    a = {**sp, "text": t[:n], "bbox": [x0, y0, round(xm, 2), y1]}
+    b = {**sp, "text": t[n:], "bbox": [round(xm, 2), y0, x1, y1],
+         "origin": [round(xm, 2), (sp.get("origin") or [x0, y1])[1]]}
+    return a, b
+
+
+def _absorb_brackets(spans: list[dict]) -> list[dict]:
+    """Pull a bracket that closes (or opens) a formula into the formula's span.
+
+    Word often sets "[1 1 0 1" in Cambria Math but the closing "]" in the body
+    font; the formula crop would then stop just before the bracket and the
+    translation loses it.
+    """
+    out = list(spans)
+    i = 0
+    while i < len(out):
+        sp = out[i]
+        if not MATH_FONT_RE.search(sp.get("font") or ""):
+            i += 1
+            continue
+        # contiguous math-font spans form the formula text
+        j = i
+        text = ""
+        while j < len(out) and MATH_FONT_RE.search(out[j].get("font") or ""):
+            text += out[j].get("text") or ""
+            j += 1
+        need_close, need_open = _unbalanced(text.strip())
+        if need_close and j < len(out):
+            nxt = out[j]
+            t = nxt.get("text") or ""
+            if t[:1] == need_close and not MATH_FONT_RE.search(nxt.get("font") or ""):
+                a, b = _split_span(nxt, 1)
+                a["force_m"] = True
+                out[j:j + 1] = [a, b] if b["text"] else [a]
+                j += 1
+        if need_open and i > 0:
+            prv = out[i - 1]
+            t = prv.get("text") or ""
+            if t[-1:] == need_open and not MATH_FONT_RE.search(prv.get("font") or ""):
+                a, b = _split_span(prv, len(t) - 1)
+                b["force_m"] = True
+                out[i - 1:i] = [a, b] if a["text"] else [b]
+                j += 1
+        i = j
+    return out
+
+
 def _is_math_span(sp: dict) -> bool:
+    if sp.get("force_m"):
+        return True
     t = (sp.get("text") or "").strip()
     if not t or t in "•·▪‣●○◦■□◆◇–—-*":  # list bullets often come from Symbol fonts
         return False
@@ -485,7 +577,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 for sp in ln.get("spans", []):
                     spans.append(
                         {
-                            "text": _fix_text(sp.get("text", ""), dedupe_spans),
+                            "text": _fix_bullets(_fix_text(sp.get("text", ""), dedupe_spans), sp.get("font", "")),
                             "font": sp.get("font", ""),
                             "size": round(sp.get("size", 0), 2),
                             "flags": sp.get("flags", 0),
@@ -494,6 +586,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                             "bbox": [round(v, 2) for v in _span_box(sp)],
                         }
                     )
+                spans = _absorb_brackets(spans)
                 boxes = [_span_box(sp) for sp in ln.get("spans", []) if (sp.get("text") or "").strip()]
                 lines.append({"bbox": _union(boxes) if boxes else list(ln["bbox"]), "spans": spans})
             line_boxes = [ln["bbox"] for ln in lines if ln["spans"]]

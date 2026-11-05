@@ -7,6 +7,7 @@ import { useViewStore } from '../stores/view';
 import type { Block, MathRun, TableCell } from '../types';
 import { HighlightLayer } from './HighlightLayer';
 import { MathText, OrigCrop, hasMath, type PageImage } from './MathText';
+import { codeTranslationFits, emWidth, splitCodeLine } from '../lib/codeBlock';
 
 /** PDF font name → CSS stack with a CJK-capable fallback (no serif surprise). */
 function fontStack(font: string | null | undefined): string {
@@ -179,11 +180,11 @@ interface BlockViewProps {
 function startsWithMarker(text: string, marker: string): boolean {
   const t = text.trimStart();
   if (marker && t.startsWith(marker)) return true;
-  return /^([•·▪●○■◦\-–*]|\(?\d{1,3}[.)、]|\(?[a-zA-Z][.)]|[ivxIVX]{1,4}[.)])\s*/.test(t);
+  return /^([•·▪●○■□◦➢➤✓✔❖\-–*]|o(?=\s)|\(?\d{1,3}[.)、]|\(?[a-zA-Z][.)]|[ivxIVX]{1,4}[.)])\s*/.test(t);
 }
 
 const HANG_MARKER =
-  /^\s*((?:[•·▪‣●○◆◇■◦–—*-])|\(?\d{1,3}(?:\.\d{1,3})*[.)、]|\(\d{1,3}\)|\(?[a-zA-Z][.)]|[ivxIVX]{1,5}[.)])(?:\s+|$)(.*)$/;
+  /^\s*((?:[•·▪‣●○◆◇■□◦➢➤✓✔❖–—*-])|o(?=\s)|\(?\d{1,3}(?:\.\d{1,3})*[.)、]|\(\d{1,3}\)|\(?[a-zA-Z][.)]|[ivxIVX]{1,5}[.)])(?:\s+|$)(.*)$/;
 
 /**
  * Numbered / bulleted text → [{marker, body}] items, so the marker can sit in a
@@ -245,6 +246,70 @@ function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackgroun
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
         )}
+      </div>
+    );
+  }
+
+  // Code listing: the code stays the original rendering (syntax colours, alignment);
+  // the translated comments are laid out from the column where each comment starts.
+  if (block.type === 'code') {
+    const lines = block.meta?.code?.lines ?? [];
+    const fits = codeTranslationFits(block.text, block.translation, block.meta);
+    if (page.url && fits) {
+      const tl = block.translation!.split('\n');
+      const sizePt = basePt * 0.95;
+      const right = Math.max(x1, page.width - 30);
+      return (
+        <>
+          {lines.map((ln, i) => {
+            const cut = ln.cx != null && splitCodeLine(tl[i], ln.ci).comment ? Math.min(ln.cx - 0.6, ln.x1) : ln.x1;
+            return cut > ln.x0 ? (
+              <OrigCrop key={`c${i}`} page={page} bbox={[ln.x0, ln.y0, cut, ln.y1]} zoom={zoom} pad={0.6} />
+            ) : null;
+          })}
+          {lines.map((ln, i) => {
+            if (ln.cx == null) return null;
+            const { head, comment } = splitCodeLine(tl[i], ln.ci);
+            if (!comment) return null;
+            const text = head + comment;
+            const avail = (right - ln.cx) / (emWidth(text) * sizePt);
+            const pt = sizePt * Math.max(0.6, Math.min(1, avail));
+            const h = (ln.y1 - ln.y0) * zoom;
+            return (
+              <div
+                key={`t${i}`}
+                className="abs-code-comment"
+                style={{
+                  left: ln.cx * zoom,
+                  top: ln.y0 * zoom,
+                  height: h,
+                  lineHeight: `${h}px`,
+                  fontSize: pt * zoom,
+                  color: colorToCss(ln.cc ?? style.color) ?? '#2e7d32',
+                  fontFamily: fontStack(style.font),
+                }}
+              >
+                {text}
+              </div>
+            );
+          })}
+          <div className={cls(['orig'])} data-block-id={block.id} style={box} title="代码：只翻译注释" {...hover} />
+        </>
+      );
+    }
+    if (page.url) {
+      return (
+        <>
+          <OrigCrop page={page} bbox={block.bbox} zoom={zoom} pad={1.5} />
+          <div className={cls(['orig'])} data-block-id={block.id} style={box} title="代码（保持原样）" {...hover} />
+        </>
+      );
+    }
+    return (
+      <div className={cls([])} data-block-id={block.id} style={box} {...hover}>
+        <pre className="abs-code-text" style={{ fontSize: baseSize }}>
+          {fits ? block.translation : block.text}
+        </pre>
       </div>
     );
   }
@@ -348,7 +413,10 @@ function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackgroun
         ) : hang ? (
           hang.map((it, i) => (
             <div key={i} className="abs-hang-item" style={{ marginTop: gapAbove(i) }}>
-              <span className="abs-hang-marker" style={useGutter ? { width: hangW } : { marginRight: '0.4em' }}>
+              <span
+                className={`abs-hang-marker ${it.marker === 'o' ? 'is-o' : ''}`}
+                style={useGutter ? { width: hangW } : { marginRight: '0.4em' }}
+              >
                 {it.marker}
               </span>
               <span className="abs-hang-body">

@@ -109,6 +109,11 @@ def export_bilingual_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
                 continue
             if r["type"] == "image" or not (r["text"] or r["translation"]):
                 continue  # raster images are emitted as figures
+            if r["type"] == "code":
+                put_figure(page_no, fitz.Rect(json.loads(r["bbox_json"])) + (-3, -3, 3, 3))
+                if r["translation"] and r["translation"] != r["text"]:
+                    put_html(block_html(r["translation"], {"size": 9, "color": 0x333333}))
+                continue
             meta = json.loads(r["meta_json"] or "{}")
             src_text = meta.get("ph") or r["text"]
             orig_size = float(json.loads(r["style_json"] or "{}").get("size") or 11)

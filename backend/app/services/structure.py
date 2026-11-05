@@ -8,9 +8,38 @@ import statistics
 BOLD_BIT = 16
 ITALIC_BIT = 2
 
+_BULLETS = "•·▪‣●○◦◆◇■□➢➤✓✔❖–—-"
 _LIST_RE = re.compile(
-    r"^\s*(?P<marker>(?:[•·▪‣●○◆◇–—-])|(?:\d{1,3}[.)])|(?:[a-zA-Z][.)])|(?:[ivxIVX]{1,5}[.)]))\s+"
+    r"^\s*(?P<marker>(?:[" + _BULLETS + r"])|(?:\d{1,3}[.)])|(?:[a-zA-Z][.)])|(?:[ivxIVX]{1,5}[.)]))\s+"
 )
+# Word's second-level bullet is a Courier New "o"; it only counts as a marker
+# when it is a span of its own in a monospace / symbol font (never the word "o")
+_O_BULLET_FONT = re.compile(r"courier|symbol|wingding|mono", re.I)
+_MONO_FONT = re.compile(
+    r"mono|courier|consolas|menlo|monaco|inconsolata|lucida ?console|lucidasanstypewriter|sourcecode|"
+    r"source ?code|fira ?code|jetbrains|cascadia|cmtt|lmmono|sfmono|andale|typewriter|nimbusmon|"
+    r"letter ?gothic|ocr-?[ab]|prestige|fixedsys",
+    re.I,
+)
+
+
+def _o_bullet(spans: list[dict]) -> bool:
+    """First visible span is a lone "o" in Courier/Symbol, followed by more text."""
+    seen = [sp for sp in spans if (sp.get("text") or "").strip()]
+    return (
+        len(seen) >= 2
+        and seen[0]["text"].strip() == "o"
+        and bool(_O_BULLET_FONT.search(seen[0].get("font") or ""))
+    )
+
+
+def _line_marker(text: str, spans: list[dict]) -> str | None:
+    m = _LIST_RE.match(text)
+    if m:
+        return m.group("marker")
+    if _o_bullet(spans):
+        return "o"
+    return None
 
 
 def _norm_text(t: str) -> str:
@@ -212,7 +241,7 @@ def _bold_frac(spans: list[dict]) -> float:
     return bold / total if total else 0.0
 
 
-_MARKER_ONLY = re.compile(r"^(?:[•·▪‣●○◆◇–—-]|\(?\d{1,3}(?:\.\d{1,3})*[.)]?|\(?[a-zA-Z][.)]|\([ivxIVX]{1,5}\)|[ivxIVX]{1,5}[.)])$")
+_MARKER_ONLY = re.compile(r"^(?:[•·▪‣●○◦◆◇■□➢➤✓✔❖–—-]|o|\(?\d{1,3}(?:\.\d{1,3})*[.)]?|\(?[a-zA-Z][.)]|\([ivxIVX]{1,5}\)|[ivxIVX]{1,5}[.)])$")
 
 
 def _hang_indent(spans: list[dict], x0: float) -> float | None:
@@ -378,6 +407,179 @@ def _is_formula_line(ph: str) -> bool:
     return bool(re.fullmatch(r"[\s,.;:]*(\(\s*\d+(\.\d+)*\s*\))?[\s,.;:]*", rest))
 
 
+def _is_mono(sp: dict) -> bool:
+    return bool(_MONO_FONT.search(sp.get("font") or ""))
+
+
+def _is_code_line(spans: list[dict]) -> bool:
+    """A line (almost) entirely set in a monospace font — a code listing.
+
+    A lone Courier "o" sub-bullet or an inline `identifier` in a sentence is not.
+    """
+    total = mono = 0
+    for sp in spans:
+        n = len((sp.get("text") or "").replace(" ", ""))
+        total += n
+        mono += n if _is_mono(sp) else 0
+    return total >= 3 and mono >= 0.85 * total
+
+
+_COMMENT_HEAD = re.compile(r"^(%+|//+|#+)\s?")
+
+
+def comment_start(line: str) -> int | None:
+    """Index where a line comment starts (MATLAB %, C/JS //, Python/shell #), or None.
+
+    Quotes are skipped (MATLAB: ' after an identifier or bracket is a transpose,
+    not a string). A "%" or "#" followed by an operand (``a % b``) is not a comment:
+    a comment has to read like words.
+    """
+    quote = None
+    prev = ""
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch == '"' or (ch == "'" and not (prev.isalnum() or prev in ")]}'_.")):
+            quote = ch
+        elif ch in "%#" or line.startswith("//", i):
+            if ch == "#" and i == 0 and re.match(r"#\s*(include|define|if|ifdef|ifndef|endif|else|pragma|undef|!)", line):
+                pass
+            else:
+                rest = _COMMENT_HEAD.sub("", line[i:])
+                words = re.findall(r"[A-Za-z\u00C0-\uFFFF]{2,}", rest)
+                if words and (i == 0 or line[i - 1].isspace() or ch != "#"):
+                    if len(words) >= 2 or len(rest.strip()) == len(words[0]):
+                        return i
+        if not ch.isspace():
+            prev = ch
+        i += 1
+    return None
+
+
+def _code_item(span_lists: list[list[dict]], bboxes: list[list[float]], style: dict) -> dict:
+    """A code listing: lines keep their indentation; only comments get translated.
+
+    meta.code.lines[i] = {y0, y1, x0, x1, cx?, ci?, cc?}: line box, where the comment
+    starts (page x and character index) and its colour. The viewer shows the code
+    part as a crop of the original page and lays the translated comment from cx.
+    Fragments on the same row (code and comment drawn separately) form one line.
+    """
+    size = style.get("size") or 10
+    widths = []
+    for spans in span_lists:
+        for sp in spans:
+            t = sp.get("text") or ""
+            if len(t) >= 4 and _is_mono(sp):
+                widths.append((sp["bbox"][2] - sp["bbox"][0]) / len(t))
+    cw = statistics.median(widths) if widths else size * 0.55
+
+    # rows: fragments whose boxes overlap vertically are one line, left to right
+    frags = sorted(zip(bboxes, span_lists), key=lambda f: (f[0][1], f[0][0]))
+    rows: list[list[tuple[list[float], list[dict]]]] = []
+    for bb, spans in frags:
+        if rows:
+            last = rows[-1][-1][0]
+            h = min(last[3] - last[1], bb[3] - bb[1])
+            if h > 0 and min(last[3], bb[3]) - max(last[1], bb[1]) >= 0.6 * h:
+                rows[-1].append((bb, spans))
+                continue
+        rows.append([(bb, spans)])
+    x_left = min(b[0] for b in bboxes)
+
+    texts, lines = [], []
+    for row in rows:
+        row.sort(key=lambda f: f[0][0])
+        spans = [sp for _, sps in row for sp in sps if sp.get("text")]
+        # build the line from geometry: indentation and gaps become spaces
+        text, starts = "", []
+        cursor = x_left
+        for sp in spans:
+            t = sp.get("text") or ""
+            gap = sp["bbox"][0] - cursor
+            if gap > 0.5 * cw:
+                text += " " * round(gap / cw)
+            starts.append(len(text))
+            text += t
+            cursor = max(cursor, sp["bbox"][2])
+        full = text.rstrip()
+        bb = [min(f[0][0] for f in row), min(f[0][1] for f in row),
+              max(f[0][2] for f in row), max(f[0][3] for f in row)]
+        info: dict = {"y0": round(bb[1], 2), "y1": round(bb[3], 2), "x0": round(bb[0], 2), "x1": round(bb[2], 2)}
+        ci = comment_start(full)
+        if ci is not None:
+            info["ci"] = ci
+            cx = None
+            for sp, st in zip(spans, starts):
+                t = sp.get("text") or ""
+                if st <= ci < st + len(t):
+                    cx = sp["bbox"][0] + (ci - st) * cw
+                    info["cc"] = sp.get("color", 0)
+                    break
+            info["cx"] = round(cx if cx is not None else x_left + ci * cw, 2)
+        texts.append(full)
+        lines.append(info)
+    return {
+        "type": "code",
+        "text": "\n".join(texts),
+        "bbox": [x_left, min(b[1] for b in bboxes), max(b[2] for b in bboxes), max(b[3] for b in bboxes)],
+        "style": style,
+        "line_height": size * 1.2,
+        "list_marker": None,
+        "code": {"lines": lines, "cw": round(cw, 3)},
+        "_parts": (span_lists, bboxes),
+    }
+
+
+def _merge_code(items: list[dict]) -> list[dict]:
+    """Join code fragments that belong to one listing.
+
+    PyMuPDF may hand a listing over in pieces (the code column, the comment
+    column, a short comment detached as a tab segment); fragments that touch
+    or overlap vertically and sit side by side or one under the other are one
+    listing.
+    """
+    code = [it for it in items if it["type"] == "code"]
+    if len(code) < 2:
+        return items
+
+    def near(a: dict, b: dict) -> bool:
+        x, y = a["bbox"], b["bbox"]
+        size = a["style"].get("size") or 10
+        if abs((b["style"].get("size") or 10) - size) >= 1:
+            return False
+        v_gap = max(y[1] - x[3], x[1] - y[3])
+        h_gap = max(y[0] - x[2], x[0] - y[2])
+        return v_gap < 1.0 * size and h_gap < 8 * size
+
+    merged = True
+    while merged:
+        merged = False
+        for a_i in range(len(code)):
+            for b_i in range(a_i + 1, len(code)):
+                a, b = code[a_i], code[b_i]
+                if near(a, b):
+                    sl, bl = a["_parts"]
+                    sl2, bl2 = b["_parts"]
+                    code[a_i] = _code_item(sl + sl2, bl + bl2, a["style"])
+                    del code[b_i]
+                    merged = True
+                    break
+            if merged:
+                break
+    # keep the listing where its first fragment was
+    out, placed = [], False
+    for it in items:
+        if it["type"] != "code":
+            out.append(it)
+        elif not placed:
+            out.extend(code)
+            placed = True
+    return out
+
+
 def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
     """Build typed blocks (heading/paragraph/list/table/image) with style + bbox metadata."""
     raw_blocks = page_payload.get("raw_blocks", [])
@@ -408,22 +610,28 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
             ph_lines = [ph_lines[i] for i in keep]
         if not lines:
             continue
-        # split display formulas (lines made only of math runs) from the text around them
-        groups: list[tuple[bool, list[int]]] = []
+        # split display formulas (lines made only of math runs) and code (monospace
+        # lines) from the text around them
+        groups: list[tuple[str, list[int]]] = []
         for i, ph in enumerate(ph_lines):
-            f = _is_formula_line(ph) and ("{{m" in ph or (groups and groups[-1][0]))
-            if groups and groups[-1][0] == f:
+            if _is_code_line(span_lists[i]):
+                kind = "code"
+            elif _is_formula_line(ph) and ("{{m" in ph or (groups and groups[-1][0] == "formula")):
+                kind = "formula"
+            else:
+                kind = "text"
+            if groups and groups[-1][0] == kind:
                 groups[-1][1].append(i)
             else:
-                groups.append((f, [i]))
+                groups.append((kind, [i]))
         segments = []
-        for is_formula, ids in groups:
+        for kind, ids in groups:
             seg = ([lines[i] for i in ids], [span_lists[i] for i in ids], [line_bboxes[i] for i in ids],
                    [ph_lines[i] for i in ids])
-            if is_formula:
-                segments.append(("formula", seg))
-            else:
+            if kind == "text":
                 segments.extend(("text", r) for r in _style_runs(*seg))
+            else:
+                segments.append((kind, seg))
         for kind, (run_lines, run_spans, run_bboxes, run_phs) in segments:
             text = "\n".join(run_lines)
             ph_text = "\n".join(p for p in run_phs if p)
@@ -431,6 +639,9 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
             style = _span_style([sp for sp in flat if not sp.get("m")] or flat)
             run_ids = _PH_RE.findall(ph_text)
             math = [runs_by_id[r[2:-2]] for r in run_ids if r[2:-2] in runs_by_id]
+            if kind == "code":
+                text_items.append(_code_item(run_spans, run_bboxes, style))
+                continue
             if kind == "formula":
                 boxes = [m["bbox"] for m in math] + run_bboxes
                 text_items.append(
@@ -455,10 +666,7 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
             ]
             lh = (bbox[3] - bbox[1]) / max(len(run_lines), 1)
             all_sizes.extend([style["size"]] * len(text))
-            marker = None
-            m = _LIST_RE.match(run_lines[0])
-            if m:
-                marker = m.group("marker")
+            marker = _line_marker(run_lines[0], run_spans[0])
             text_items.append(
                 {
                     "type": "paragraph",
@@ -470,15 +678,19 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
                     "ph": ph_text if math else None,
                     "math": math,
                     "hang": _hang_indent(run_spans[0], bbox[0]),
-                    "geo": [(t, list(bb)) for t, bb in zip(run_lines, run_bboxes)],
+                    "geo": [(t, list(bb), _line_marker(t, sp) is not None)
+                            for t, bb, sp in zip(run_lines, run_bboxes, run_spans)],
                 }
             )
 
+    text_items = _merge_code(text_items)
+    for it in text_items:
+        it.pop("_parts", None)
     median_size = statistics.median(all_sizes) if all_sizes else 12.0
 
     # first pass: list vs text
     for it in text_items:
-        if it["type"] == "formula":
+        if it["type"] in ("formula", "code"):
             it["level"] = 0
             continue
         if it["list_marker"]:
@@ -573,15 +785,23 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
     return blocks
 
 
-def _item_gaps(geo: list[tuple[str, list[float]]]) -> list[float] | None:
+def _item_gaps(geo: list[tuple], size: float | None = None) -> list[float] | None:
     """Extra vertical space (pt) above each numbered/bulleted item of a block.
 
     "2.1. …\n…\n2.2. …" — Word puts paragraph spacing between items; the
     translation is laid out in flow, so without this the items run together.
+    geo entries are (line text, line bbox[, starts an item]).
     """
     if len(geo) < 2:
         return None
-    starts = [i for i, (t, _) in enumerate(geo) if _LIST_RE.match(t) or _MARKER_ONLY.match(t.split()[0] if t.split() else "")]
+
+    def is_start(g: tuple) -> bool:
+        if len(g) > 2 and g[2]:
+            return True
+        t = g[0]
+        return bool(_LIST_RE.match(t) or _MARKER_ONLY.match(t.split()[0] if t.split() else ""))
+
+    starts = [i for i, g in enumerate(geo) if is_start(g)]
     if len(starts) < 2 or starts[0] != 0:
         return None
     line_gaps = [geo[i][1][1] - geo[i - 1][1][3] for i in range(1, len(geo)) if i not in starts]
@@ -596,9 +816,11 @@ def _with_math(it: dict) -> dict:
     if it.get("type") in ("paragraph", "list"):
         if it.get("hang"):
             meta["hang"] = it["hang"]
-        gaps = _item_gaps(it.get("geo") or [])
+        gaps = _item_gaps(it.get("geo") or [], (it.get("style") or {}).get("size") or 11)
         if gaps:
             meta["item_gaps"] = gaps
+    if it.get("type") == "code" and it.get("code"):
+        meta["code"] = it["code"]
     if it.get("math") and it.get("ph") and "{{m" in it["ph"]:
         meta["ph"] = it["ph"]
         meta["math"] = [{k: m[k] for k in ("id", "bbox", "baseline", "size")} for m in it["math"]]
