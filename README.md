@@ -1,5 +1,7 @@
 # PDF 双语翻译阅读器
 
+**简体中文** | [English](README.en.md)
+
 本地运行的 PDF 双语阅读与翻译工具：左边原文、右边保持原版式的译文，两栏同步滚动。公式、表格、图片按原样保留，适合读英文论文、实验手册和教材。
 
 所有文档、译文和笔记都只保存在你自己的电脑上；只有在翻译 / 提问时，文字才会发给你配置的大模型 API。
@@ -24,6 +26,13 @@
 - 选中段落 / 公式一键「解释」「讲公式」；「总结本页」「本页自测」
 - 回答中的公式用 KaTeX 渲染；支持 DeepSeek V4 思考模式并可展开查看思考过程
 
+**桌宠版（小页）**
+- 同一个程序的第二个界面：阅读助手变成趴在窗口下沿的桌宠，点一下弹出对话气泡；会走动、可拖动，划词提问时自动跑出来
+- 形象可换：图片网址（gif 也行）或本地文件，导入时自动去背景（动图逐帧处理，保留动画）
+- 默认形象是 Twemoji 的 🐳（© Twitter, Inc and other contributors，[CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)）
+
+![桌宠版预览](docs/pet-preview.png)
+
 **其他**
 - 支持 DeepSeek、OpenAI、通义千问、Kimi，以及任何 OpenAI 兼容接口（Ollama、LM Studio、自建服务）；设置里可一键「拉取模型列表」
 - 用量与费用统计（按用途 / 文档），支持缓存命中价和峰谷时段计价
@@ -42,9 +51,13 @@
 
 > 使用 DeepSeek V4 时，翻译会自动关闭思考模式（更快、更省）。阅读助手可在设置里选择是否开启。
 
+### 桌宠版
+
+双击 `run_pet.bat`，打开 `http://127.0.0.1:8765/pet`。两个版本共用同一个后端和同一份 `data/`，可以随时切换。
+
 ### 打包成 exe
 
-运行 `build_exe.bat`（需要 Python 和 Node.js），生成 `dist\PDFTranslate\PDFTranslate.exe`，整个文件夹可以复制到别处使用。
+运行 `build_exe.bat`（需要 Python 和 Node.js），生成 `dist\PDFTranslate\PDFTranslate.exe`，整个文件夹可以复制到别处使用；加 `--pet` 参数启动桌宠版。
 
 ## 数据存放
 
@@ -54,6 +67,7 @@
 | `data/uploads/` | 上传的 PDF 与页面缓存 |
 | `data/backups/` | 自动备份（最近 10 份） |
 | `data/config.json` | 设置（API Key 已加密） |
+| `data/pet/` | 桌宠形象（导入的图片） |
 
 `data/` 已在 `.gitignore` 中排除，不会被提交。
 
@@ -65,11 +79,11 @@ python -m venv .venv && .venv\Scripts\pip install -r backend\requirements.txt
 .venv\Scripts\python -m uvicorn backend.app.main:app --port 8765 --reload
 
 # 前端（另开一个终端，开发服务器把 /api 代理到 8765）
-cd frontend && npm install && npm run dev      # http://localhost:5173
+cd frontend && npm install && npm run dev      # http://localhost:5173（桌宠版：/pet.html）
 npm run build                                  # 生成 frontend/dist
 
 # 测试（使用临时数据目录，不会碰到你的文档库）
 cd backend && ..\.venv\Scripts\python -m pytest -q tests
 ```
 
-技术栈：FastAPI + SQLite + PyMuPDF（后端），React + TypeScript + Vite + Zustand + pdf.js + KaTeX（前端）。开发进度与设计说明见 [PROGRESS.md](PROGRESS.md)。
+技术栈：FastAPI + SQLite + PyMuPDF + Pillow（后端），React + TypeScript + Vite + Zustand + pdf.js + KaTeX（前端）。开发进度与设计说明见 [PROGRESS.md](PROGRESS.md)。

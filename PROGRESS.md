@@ -3,7 +3,8 @@
 > 更新时间：2026-11-05
 > 项目位置：`F:\pdf_translate`
 > 形态：本地 Web 应用（FastAPI + React），启动 `run.bat`（自动打开浏览器）→ http://127.0.0.1:8765
-> 打包 exe：运行 `build_exe.bat` → `dist\PDFTranslate\PDFTranslate.exe`
+> 桌宠版：启动 `run_pet.bat` → http://127.0.0.1:8765/pet（同一个后端、同一份 `data\`，侧栏「阅读助手」换成桌宠「小页」）
+> 打包 exe：运行 `build_exe.bat` → `dist\PDFTranslate\PDFTranslate.exe`（加 `--pet` 参数即桌宠版）
 
 ---
 
@@ -170,6 +171,32 @@
 
 ---
 
+### M16 桌宠版阅读助手（小页）（2026-11-05）✅
+- 第二个入口 `/pet`：同一份后端与 `data\`，把侧栏「阅读助手」换成一个趴在窗口下沿的桌宠 + 头顶气泡
+- 问答能力零改动：SSE 流式、思考过程、参考页、总结、自测、重生成、清空全部走原来的 `useChatStore` 与 `/api/documents/{id}/chat`
+- 桌宠行为：沿窗口下沿随机走动、可拖可甩（松手落回地面并压扁一下）、点击开关气泡、划词自动叫醒
+- **形象完全外置，程序不内置任何角色**：气泡里「换装」可以填一个外部图片直链（png / jpg / gif / webp / svg / avif），或者选本地文件
+  - 网址方式：`<img src=外部地址>`，浏览器直接加载，不经过后端
+  - 文件方式：`POST /api/pet/avatar` 存到 `data\pet\avatar.*`，`GET /api/pet/avatar` 取回，换浏览器、重启都还在（上限 12 MB）
+  - **导入时自动去背景，动图逐帧处理**：`backend/app/routers/pet.py` 的 `_strip_frame` 从四条边泛洪填充，只删掉与边框连通、且颜色接近边框平均色的那一片（容差 30）——角色内部本来就是这个颜色的地方（白色头巾、高光）不会被挖掉。处理放在服务端是因为动图要逐帧重新编码，canvas 做不到
+  - 动图输出成 **APNG**：动画保留，且每像素有真正的 8 位 alpha（GIF 只有 1 位透明索引）。帧按 256 色调色板存，120 帧 480×480 的 GIF（8.8 MB）压到 200×200 约 3 MB，处理约 3 秒
+  - 缩放上限 200 px（桌宠最大也就显示 200 px）；动图以外的图输出普通 PNG；SVG 不去背景；外部网址的图不处理（跨域会污染 canvas），面板里另有「去掉背景」按钮可重跑
+  - 默认形象是随程序附带的一条大肥鱼 `frontend/public/pet/fatfish.svg` —— Twemoji 的 🐳，**Copyright 2020 Twitter, Inc and other contributors, CC-BY 4.0**（出处写在文件头的注释里）。除它之外程序不带任何角色素材
+  - 边长 64–200 px 可调，立绘类的图调大些；改大小会自动把桌宠推回窗口内
+  - 图片加载失败（链接挂了或后端文件被删）自动退回虚线空槽位，不留破图
+- 复查修复：动图去背景原来逐帧单独量化调色板，而 APNG 全部帧只能共用一个调色板（后面的帧颜色会错），且新版 Pillow 在调色板帧 + disposal=1 时直接报 `images do not match`。改成把所有帧拼成一张长图统一量化（`_shared_palette`），帧以 SOURCE 方式整帧替换（不会留残影）；120 帧 480×480 约 3.4 秒。新增 `tests/test_pet.py`（3 项：保留内部同色区域、GIF→APNG 帧数与透明、上传校验）——共 **43 passed**
+- 构建：`vite` 多页（`index.html` + `pet.html`），桌宠代码按需加载（`PetAssistant-*.js` 约 15 KB），主版本完全不受影响；`build_exe.bat` 一并打包；`APP_VERSION` 升到 `2026.11.05-12`
+
+### 已知限制（设计取舍，非 bug）
+- ~~导出白底遮盖会擦掉非白底色块背景~~（已修复：不再刷白）
+- Word 导出的数学下标（如 T_samp）在 PDF 的 ToUnicode 里本身就映射错（全部映射成 𝑠），文字层/复制出来的文字无法还原；**显示与导出一律用原图，不受影响**
+- 更新文档提取逻辑后（EXTRACT_VER），启动时会自动重新解析旧文档并按原文匹配保留译文/笔记；prompt 升级到 v2 后旧译文的缓存失效，再点「翻译全文」会重新翻译（编辑过的不动）
+- 无边框表格 `find_tables` 可能漏识别（回退为段落处理）
+- API Key 明文存 `data/config.json`（单用户本地应用可接受；仅绑 127.0.0.1）
+- OCR（扫描件）未做
+
+---
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）
@@ -197,16 +224,6 @@
 - OCR（扫描版 PDF）
 - 公式区域内的文字（如 "where x is …" 混排在公式行里）目前整行当公式不翻译
 
-### 已知限制（设计取舍，非 bug）
-- ~~导出白底遮盖会擦掉非白底色块背景~~（已修复：不再刷白）
-- Word 导出的数学下标（如 T_samp）在 PDF 的 ToUnicode 里本身就映射错（全部映射成 𝑠），文字层/复制出来的文字无法还原；**显示与导出一律用原图，不受影响**
-- 更新文档提取逻辑后（EXTRACT_VER），启动时会自动重新解析旧文档并按原文匹配保留译文/笔记；prompt 升级到 v2 后旧译文的缓存失效，再点「翻译全文」会重新翻译（编辑过的不动）
-- 无边框表格 `find_tables` 可能漏识别（回退为段落处理）
-- API Key 明文存 `data/config.json`（单用户本地应用可接受；仅绑 127.0.0.1）
-- OCR（扫描件）未做
-
----
-
 ## 四、架构速览（给未来的自己）
 
 ```
@@ -215,7 +232,7 @@ F:\pdf_translate\
 │  ├─ main.py                  FastAPI 入口 + 静态托管 frontend/dist
 │  ├─ schema.sql / db.py       SQLite（WAL）
 │  ├─ routers\                 documents / pages / translate / jobs / settings /
-│  │                           glossary / notes / assistant / export
+│  │                           glossary / notes / assistant / export / pet
 │  ├─ services\
 │  │  ├─ extract.py            PyMuPDF 原始提取（块/表格网格/图片）
 │  │  ├─ structure.py          块类型化：阅读顺序/标题分级/列表/样式
@@ -235,9 +252,11 @@ F:\pdf_translate\
 │  ├─ components\PdfPane.tsx            pdf.js canvas + TextLayer（可复制）
 │  ├─ components\Icon.tsx / MathText.tsx  图标集 / 公式原图渲染
 │  ├─ lib\theme.ts + themes.css         界面风格（token 覆盖）
+│  ├─ pet\                    桌宠版：PetAssistant.tsx（气泡/拖拽/走动）/ PetBody.tsx / appearance.ts（形象来源）/ pet.css
 │  └─ ...（工具栏/标签/侧栏三件套/设置/导出，共 12 组件）
 ├─ data\                       pdf_translate.db / uploads\ / config.json / fonts\
-└─ run.bat
+├─ run.bat                     经典版启动
+└─ run_pet.bat                 桌宠版启动（同一个后端，开 /pet）
 ```
 
 **关键工程决策**
@@ -249,3 +268,4 @@ F:\pdf_translate\
 6. 前端改动后必须重新 `npm run build`（run.bat 只在 dist 不存在时构建）
 7. 公式永不从提取文字重绘：`{{mN}}` 占位符 + 原页渲染截取（阅读）/ 矢量回贴（导出）
 8. 同步滚动按「页 + 页内比例」映射（两栏页面几何相同），逐句视图再用块锚点细化
+9. 两个版本共用一份后端和 `data\`，用 Vite 多页入口区分（`main.tsx` / `pet/main.tsx`），而不是复制一份项目：桌宠只是表现层，`isPetMode()` 在首次渲染前定死，主版本一行行为都不变

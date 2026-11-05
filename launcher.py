@@ -14,6 +14,11 @@ import webbrowser
 HOST, PORT = "127.0.0.1", 8765
 URL = f"http://{HOST}:{PORT}"
 
+# --pet opens the desktop-pet build (/pet) instead of the classic reader (/).
+# One server, one data folder, two interfaces.
+PET = "--pet" in sys.argv
+APP_URL = f"{URL}/pet" if PET else URL
+
 
 def _port_open() -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -24,7 +29,7 @@ def _port_open() -> bool:
 def _open_when_ready() -> None:
     for _ in range(120):
         if _port_open():
-            webbrowser.open(URL)
+            webbrowser.open(APP_URL)
             return
         time.sleep(0.25)
 
@@ -97,8 +102,8 @@ def main() -> None:
     if _port_open():
         running = _running_version()
         if running == APP_VERSION:
-            print(f"已在运行：{URL}")
-            webbrowser.open(URL)
+            print(f"已在运行：{APP_URL}")
+            webbrowser.open(APP_URL)
             return
         # an older server (e.g. started before an update) is still holding the port:
         # reusing it would serve the new page with old backend code
@@ -113,7 +118,7 @@ def main() -> None:
 
     if "--no-browser" not in sys.argv:
         threading.Thread(target=_open_when_ready, daemon=True).start()
-    print(f"PDF 双语翻译阅读器已启动：{URL}（关闭此窗口即退出）")
+    print(f"PDF 双语翻译阅读器{'（桌宠版）' if PET else ''}已启动：{APP_URL}（关闭此窗口即退出）")
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
 
 

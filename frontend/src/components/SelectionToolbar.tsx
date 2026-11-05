@@ -5,6 +5,7 @@ import { useDocStore } from '../stores/doc';
 import { useHighlightStore } from '../stores/highlights';
 import { useViewStore } from '../stores/view';
 import type { AssistantMode, Highlight, HighlightColor } from '../types';
+import { isPetMode, summonPet } from '../pet/mode';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 
@@ -214,7 +215,8 @@ export function SelectionToolbar() {
 
   const ask = async (mode: AssistantMode) => {
     const chat = useChatStore.getState();
-    setSidebarTab('assistant');
+    if (isPetMode()) summonPet();
+    else setSidebarTab('assistant');
     await chat.loadFor(docId);
     const label = mode === 'formula' ? '讲解这个公式' : mode === 'translate' ? '翻译并解释术语' : '解释这段内容';
     close();

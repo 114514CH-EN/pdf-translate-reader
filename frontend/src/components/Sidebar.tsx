@@ -5,12 +5,18 @@ import { AssistantTab } from './AssistantTab';
 import { NotesTab } from './NotesTab';
 import { GlossaryTab } from './GlossaryTab';
 import { Icon } from './Icon';
+import { isPetMode, summonPet } from '../pet/mode';
 
 const TABS: { key: SidebarTab; label: string; icon: string }[] = [
   { key: 'assistant', label: '阅读助手', icon: 'chat' },
   { key: 'notes', label: '笔记', icon: 'note' },
   { key: 'glossary', label: '术语库', icon: 'book' },
 ];
+
+/** The pet build has no 阅读助手 tab — the pet itself is the assistant. */
+function visibleTabs() {
+  return isPetMode() ? TABS.filter((t) => t.key !== 'assistant') : TABS;
+}
 
 const W_KEY = 'pdftr.sidebarWidth';
 const MIN_W = 260;
@@ -33,6 +39,7 @@ export function Sidebar({ docId }: { docId: string | null }) {
   const [width, setWidth] = useState(readWidth);
   const [resizing, setResizing] = useState(false);
   const ref = useRef<HTMLElement>(null);
+  const tabs = visibleTabs();
 
   useEffect(() => {
     try {
@@ -74,7 +81,7 @@ export function Sidebar({ docId }: { docId: string | null }) {
         >
           <Icon name="panelOpen" size={16} />
         </button>
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -106,7 +113,7 @@ export function Sidebar({ docId }: { docId: string | null }) {
       />
       <div className="sidebar-head">
         <div className="sidebar-tabs" role="tablist">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.key}
               type="button"
@@ -120,6 +127,17 @@ export function Sidebar({ docId }: { docId: string | null }) {
             </button>
           ))}
         </div>
+        {isPetMode() && (
+          <button
+            type="button"
+            className="icon-btn"
+            title="叫出小页"
+            aria-label="叫出小页"
+            onClick={() => summonPet()}
+          >
+            <Icon name="sparkle" size={16} />
+          </button>
+        )}
         <button
           type="button"
           className="icon-btn"

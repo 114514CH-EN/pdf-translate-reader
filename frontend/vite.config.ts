@@ -25,5 +25,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 2000,
+    // two versions of the same app: the classic reader (index.html) and the
+    // desktop-pet reading assistant (pet.html). Both share one backend.
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        pet: 'pet.html',
+      },
+    },
   },
 });

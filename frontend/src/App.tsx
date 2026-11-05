@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.05-11';
+const EXPECTED_BACKEND = '2026.11.05-12';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PdfPane } from './components/PdfPane';
@@ -23,6 +23,12 @@ import { useTranslationStore } from './stores/translation';
 import { useSettingsStore } from './stores/settings';
 import { TOOLBAR_EVENT, actionFor, comboFromEvent, resolveShortcuts } from './lib/shortcuts';
 import { applyTheme, nextTheme, type ThemeMode } from './lib/theme';
+import { isPetMode } from './pet/mode';
+
+/** Only the pet build downloads this — the classic reader never fetches it. */
+const PetAssistant = lazy(() =>
+  import('./pet/PetAssistant').then((m) => ({ default: m.PetAssistant })),
+);
 
 function Toasts() {
   const toasts = useViewStore((s) => s.toasts);
@@ -300,6 +306,11 @@ export default function App() {
 
         <SettingsModal />
         <SelectionToolbar />
+        {isPetMode() && (
+          <Suspense fallback={null}>
+            <PetAssistant />
+          </Suspense>
+        )}
         <Toasts />
       </div>
     </UploadDropZone>

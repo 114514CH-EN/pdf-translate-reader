@@ -55,7 +55,7 @@ def test_inplace_export(tmp_path):
     page = pdf.load_page(0)
     text = page.get_text()
     # source removed, translation present & extractable (copyable)
-    assert "COMMUNICATION" not in text
+    assert "SIGNALS" not in text
     assert "译文0内容" in text
     # translation inside original bbox tolerance (±2pt)
     blocks = [b for b in build_blocks(payload, 1)]

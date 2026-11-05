@@ -27,11 +27,11 @@ def make_fixture(path: Path) -> None:
     body = styles["BodyText"]
     doc = SimpleDocTemplate(str(path), pagesize=letter)
     story = [
-        Paragraph("COMMUNICATION SYSTEMS: LAB 2", h1),
+        Paragraph("SIGNALS AND SYSTEMS: LAB 1", h1),
         Spacer(1, 12),
         Paragraph("Introduction", h2),
         Paragraph(
-            "This lab is designed to introduce you to frequency representations of data using the Fourier transform.",
+            "This lab looks at signals in the frequency domain using the Fourier transform.",
             body,
         ),
         Paragraph("Learning Outcomes", h2),
