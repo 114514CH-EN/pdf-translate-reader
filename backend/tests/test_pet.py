@@ -67,3 +67,24 @@ def test_upload_validation():
         assert c.post("/api/pet/avatar/strip").status_code == 400  # SVG is not stripped
         c.delete("/api/pet/avatar")
         assert c.post("/api/pet/avatar/strip").status_code == 404
+
+
+def test_pose_slots_are_separate():
+    with TestClient(app) as c:
+        c.delete("/api/pet/avatar")
+        png = _png_on_white()
+        assert c.post("/api/pet/avatar", files={"file": ("a.png", png, "image/png")}).status_code == 200
+        r = c.post("/api/pet/avatar?slot=walk", files={"file": ("w.gif", _gif_on_white(), "image/gif")})
+        assert r.status_code == 200 and r.json()["url"] == "/api/pet/avatar?slot=walk"
+        assert c.get("/api/pet/avatars").json()["slots"] == ["idle", "walk"]
+        assert c.post("/api/pet/avatar/strip?slot=walk").json()["animated"] is True
+        # stripping the walk pose leaves the main picture alone
+        assert Image.open(BytesIO(c.get("/api/pet/avatar").content)).format == "PNG"
+        assert getattr(Image.open(BytesIO(c.get("/api/pet/avatar?slot=walk").content)), "n_frames", 1) == 4
+        assert c.get("/api/pet/avatar?slot=sleep").status_code == 404
+        assert c.post("/api/pet/avatar?slot=dance", files={"file": ("a.png", png, "image/png")}).status_code == 400
+        c.delete("/api/pet/avatar?slot=walk")
+        assert c.get("/api/pet/avatars").json()["slots"] == ["idle"]
+        c.post("/api/pet/avatar?slot=sleep", files={"file": ("s.png", png, "image/png")})
+        c.delete("/api/pet/avatar")
+        assert c.get("/api/pet/avatars").json()["slots"] == []

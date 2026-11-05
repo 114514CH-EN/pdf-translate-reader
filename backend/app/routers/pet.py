@@ -15,7 +15,7 @@ import contextlib
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, ImageSequence
 
@@ -50,8 +50,29 @@ def _extension(upload: UploadFile) -> str | None:
     return None
 
 
-def _current() -> Path | None:
-    found = sorted(PET_DIR.glob("avatar.*"))
+# The main picture is avatar.*; each pose may have its own picture, avatar-<slot>.*
+# (walk / think / talk / listen / sleep). A pose without a picture uses the main one.
+SLOTS = {"idle", "walk", "think", "talk", "listen", "sleep"}
+
+
+def _slot(slot: str | None) -> str:
+    s = (slot or "idle").strip().lower()
+    if s not in SLOTS:
+        raise HTTPException(400, f"未知的动作：{slot}（可选 {' / '.join(sorted(SLOTS))}）")
+    return s
+
+
+def _stem(slot: str) -> str:
+    return "avatar" if slot == "idle" else f"avatar-{slot}"
+
+
+def _files(slot: str) -> list[Path]:
+    stem = _stem(slot)
+    return sorted(p for p in PET_DIR.glob(f"{stem}.*") if p.stem == stem)
+
+
+def _current(slot: str = "idle") -> Path | None:
+    found = _files(slot)
     return found[0] if found else None
 
 
@@ -194,16 +215,23 @@ def _shared_palette(frames: list[Image.Image]) -> list[Image.Image]:
 
 # ------------------------------------------------------------------ endpoints
 
+@router.get("/avatars")
+def list_avatars():
+    """Which poses have their own uploaded picture."""
+    return {"slots": sorted(s for s in SLOTS if _current(s) is not None)}
+
+
 @router.get("/avatar")
-def get_avatar():
-    path = _current()
+def get_avatar(slot: str | None = Query(None)):
+    path = _current(_slot(slot))
     if path is None:
         raise HTTPException(404, "还没有导入形象")
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
 @router.post("/avatar")
-async def put_avatar(file: UploadFile):
+async def put_avatar(file: UploadFile, slot: str | None = Query(None)):
+    s = _slot(slot)
     ext = _extension(file)
     if ext is None:
         raise HTTPException(400, "只支持 png / jpg / gif / webp / svg / avif")
@@ -213,16 +241,17 @@ async def put_avatar(file: UploadFile):
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "图片太大（上限 12 MB）")
     PET_DIR.mkdir(parents=True, exist_ok=True)
-    for old in PET_DIR.glob("avatar.*"):
+    for old in _files(s):
         old.unlink(missing_ok=True)
-    (PET_DIR / f"avatar{ext}").write_bytes(data)
-    return {"ok": True, "url": "/api/pet/avatar", "bytes": len(data)}
+    (PET_DIR / f"{_stem(s)}{ext}").write_bytes(data)
+    return {"ok": True, "url": _url(s), "slot": s, "bytes": len(data)}
 
 
 @router.post("/avatar/strip")
-def strip_avatar():
+def strip_avatar(slot: str | None = Query(None)):
     """去掉已导入形象的背景；动图会去完每一帧再存成 APNG，动画不丢。"""
-    path = _current()
+    s = _slot(slot)
+    path = _current(s)
     if path is None:
         raise HTTPException(404, "还没有导入形象")
     if path.suffix.lower() == ".svg":
@@ -232,17 +261,24 @@ def strip_avatar():
     except Exception as e:  # noqa: BLE001 - report whatever PIL said
         raise HTTPException(400, f"处理不了这张图：{type(e).__name__}: {e}") from e
 
-    target = PET_DIR / "avatar.png"
-    for old in PET_DIR.glob("avatar.*"):
+    target = PET_DIR / f"{_stem(s)}.png"
+    for old in _files(s):
         if old != target:
             with contextlib.suppress(OSError):
                 old.unlink()
     target.write_bytes(data)
-    return {"ok": True, "url": "/api/pet/avatar", "animated": animated, "bytes": len(data)}
+    return {"ok": True, "url": _url(s), "slot": s, "animated": animated, "bytes": len(data)}
 
 
 @router.delete("/avatar")
-def delete_avatar():
-    for old in PET_DIR.glob("avatar.*"):
-        old.unlink(missing_ok=True)
+def delete_avatar(slot: str | None = Query(None)):
+    """Without ?slot= every picture goes (换回默认形象); with it only that pose's."""
+    targets = [_slot(slot)] if slot else sorted(SLOTS)
+    for s in targets:
+        for old in _files(s):
+            old.unlink(missing_ok=True)
     return {"ok": True}
+
+
+def _url(slot: str) -> str:
+    return "/api/pet/avatar" if slot == "idle" else f"/api/pet/avatar?slot={slot}"

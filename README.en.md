@@ -30,8 +30,11 @@ The interface is in Chinese, and the default translation direction is English �
 
 **Desktop pet edition (小页)**
 - A second interface for the same app: the reading assistant becomes a small pet that sits on the bottom edge of the window and opens a chat bubble when clicked. It wanders, can be dragged around, and pops up when you ask about selected text
-- Change its look with an image URL (GIFs work) or a local file. Backgrounds are removed on import, frame by frame for animations, so the animation is kept
-- The default look is Twemoji's 🐳 (© Twitter, Inc and other contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/))
+- Change its look with an image URL (GIFs work) or a local file. Backgrounds are removed on import, frame by frame for animations, so the animation is kept. Walking, thinking, talking, listening and sleeping can each have their own picture
+- It turns to face the way it walks, dozes off when nothing happens for a while, perks up when you select text, and hops to tell you an answer finished while the bubble was closed
+- Right-click menu: summarise the page, quiz, change look, quiet mode, tuck into the corner (comes out only when you ask about selected text)
+- After you stay on a page for a few seconds, it offers to explain the formulas, tables or long passages it sees there (can be turned off)
+- The default look is 小页, a folded sheet of paper drawn for this project
 
 ![Desktop pet edition preview](docs/pet-preview.png)
 
@@ -60,6 +63,21 @@ Double-click `run_pet.bat`, which opens `http://127.0.0.1:8765/pet`. Both editio
 ### Build an exe
 
 Run `build_exe.bat` (needs Python and Node.js). It produces `dist\PDFTranslate\PDFTranslate.exe`, and the whole folder can be copied elsewhere. Start it with `--pet` for the desktop pet edition.
+
+## FAQ
+
+**Double-clicking `run.bat` shows "Open File - Security Warning: The publisher could not be verified"**
+
+Windows marks files that came from the internet or another computer; nothing is wrong with the program. Click "Run", or remove the mark once in one of these ways:
+
+- If you downloaded a zip: **before extracting**, right-click the zip → Properties → tick "Unblock" at the bottom → OK, then extract. None of the files inside will warn again
+- If it is already extracted: type `powershell` in the folder's address bar, press Enter and run
+
+  ```powershell
+  Get-ChildItem -Recurse -File -Include *.bat,*.py | Unblock-File
+  ```
+
+- For a single file: right-click it → Properties → tick "Unblock"
 
 ## Where data is stored
 

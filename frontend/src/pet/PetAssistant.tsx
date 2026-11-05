@@ -2,6 +2,10 @@
  * 桌宠版阅读助手：小页。它趴在窗口下沿，会走动、被拖着甩、被划词叫醒，
  * 用它头顶的对话气泡回答问题。对话能力全部来自 useChatStore —— 和后端
  * /api/documents/{id}/chat 的 SSE 流式没有一行区别，这里只是换了个身体。
+ *
+ * 它还会：按走路方向转身；很久没动静就睡着，你划词 / 打字时竖起耳朵；
+ * 气泡关着时答完了会跳一跳提醒你；右键有菜单；可以设成安静或者藏到角落；
+ * 在一页停留一会儿，看到公式 / 表格 / 大段文字时主动问要不要讲讲。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
@@ -9,17 +13,22 @@ import { Markdown } from '../components/Markdown';
 import { useChatStore } from '../stores/chat';
 import { useDocStore } from '../stores/doc';
 import { useSettingsStore } from '../stores/settings';
+import { useTranslationStore } from '../stores/translation';
 import { useViewStore } from '../stores/view';
-import { PetBody, type PetMood } from './PetBody';
+import type { AssistantMode, Block } from '../types';
+import { PetBody, type PetBadge, type PetMood } from './PetBody';
 import {
   DEFAULT_APPEARANCE,
   PET_SIZE_MAX,
   PET_SIZE_MIN,
+  POSE_SLOTS,
   loadAppearance,
   looksLikeImageUrl,
   saveAppearance,
   uploadedUrl,
   type Appearance,
+  type Facing,
+  type PoseSlot,
 } from './appearance';
 import { PET_SUMMON_EVENT } from './mode';
 import './pet.css';
@@ -28,20 +37,52 @@ import './pet.css';
 const GROUND = 32;
 const BUBBLE_MAX_W = 416;
 const POS_KEY = 'pdftr.pet.pos';
+const PRESENCE_KEY = 'pdftr.pet.presence';
+const TIPS_KEY = 'pdftr.pet.tips';
+
+/** no pointer / key / wheel for this long and the pet dozes off */
+const SLEEP_AFTER_MS = 3 * 60 * 1000;
+/** how long to stay on a page before the pet offers help with it */
+const TIP_DWELL_MS = 8000;
+/** at least this long between two offers (grows each time one is turned down) */
+const TIP_COOLDOWN_MS = 150 * 1000;
+const TIP_SHOW_MS = 16000;
+
+/** normal: 走动、主动提示；quiet: 原地不动、不搭话；hidden: 缩在右下角，划词或点它才出来 */
+type Presence = 'normal' | 'quiet' | 'hidden';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-function readRatio(): number {
+function readStore<T>(key: string, parse: (raw: string) => T | undefined, fallback: T): T {
   try {
-    const raw = localStorage.getItem(POS_KEY);
-    if (raw) {
-      const v = JSON.parse(raw) as { ratio?: unknown };
-      if (typeof v.ratio === 'number' && Number.isFinite(v.ratio)) return clamp(v.ratio, 0, 1);
+    const raw = localStorage.getItem(key);
+    if (raw != null) {
+      const v = parse(raw);
+      if (v !== undefined) return v;
     }
   } catch {
     /* first run, or storage blocked */
   }
-  return 0.66;
+  return fallback;
+}
+
+function writeStore(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* not remembered */
+  }
+}
+
+function readRatio(): number {
+  return readStore(
+    POS_KEY,
+    (raw) => {
+      const v = JSON.parse(raw) as { ratio?: unknown };
+      return typeof v.ratio === 'number' && Number.isFinite(v.ratio) ? clamp(v.ratio, 0, 1) : undefined;
+    },
+    0.66,
+  );
 }
 
 /** A stored question looks like "> quote\n\nquestion". */
@@ -51,6 +92,44 @@ function splitQuote(content: string): { quote: string; text: string } {
 }
 
 const short = (t: string, n = 18) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+const isSvg = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
+
+/** What the pet offers for a page, decided from the blocks already loaded for it. */
+interface TipOffer {
+  text: string;
+  ask: string;
+  mode: AssistantMode;
+}
+
+function offerFor(pageNo: number, blocks: Block[]): TipOffer | null {
+  const formulaBlocks = blocks.filter((b) => b.type === 'formula').length;
+  const inlineMath = blocks.reduce((n, b) => n + (b.type === 'formula' ? 0 : b.meta?.math?.length ?? 0), 0);
+  const tables = blocks.filter((b) => b.type === 'table').length;
+  const chars = blocks
+    .filter((b) => b.type === 'paragraph' || b.type === 'list' || b.type === 'heading')
+    .reduce((n, b) => n + (b.text?.length ?? 0), 0);
+
+  if (formulaBlocks >= 1 || inlineMath >= 4) {
+    const n = formulaBlocks || inlineMath;
+    return {
+      text: formulaBlocks ? `这页有 ${n} 个公式，要我讲讲吗？` : `这页有好几处公式（${n} 处），要我讲讲吗？`,
+      ask: `讲讲第 ${pageNo} 页的公式：每个公式在说什么、各个符号是什么意思，以及它在这里怎么用。`,
+      mode: 'ask',
+    };
+  }
+  if (tables >= 1) {
+    return {
+      text: tables > 1 ? `这页有 ${tables} 张表，要我帮你读一下重点吗？` : '这页有张表，要我帮你读一下重点吗？',
+      ask: `帮我读一下第 ${pageNo} 页的表格：每一列是什么意思，有哪些值得注意的数字或规律。`,
+      mode: 'ask',
+    };
+  }
+  if (chars > 1600) {
+    return { text: '这页字挺多的，要我先帮你总结一下吗？', ask: '总结本页', mode: 'page' };
+  }
+  return null;
+}
 
 export function PetAssistant() {
   const docId = useDocStore((s) => s.activeId);
@@ -84,8 +163,11 @@ export function PetAssistant() {
   const [dragging, setDragging] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [walking, setWalking] = useState(false);
+  /** which way it is heading — the picture is flipped to match */
+  const [heading, setHeading] = useState<'left' | 'right'>('left');
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const openRef = useRef(open);
   const [history, setHistory] = useState(false);
   const [picking, setPicking] = useState(false);
   const [appearance, setAppearance] = useState<Appearance>(() => loadAppearance());
@@ -95,8 +177,36 @@ export function PetAssistant() {
   });
   const [uploading, setUploading] = useState(false);
   const [stripping, setStripping] = useState(false);
+  const [poseBusy, setPoseBusy] = useState<PoseSlot | null>(null);
   const [input, setInput] = useState('');
   const [composing, setComposing] = useState(false);
+
+  const [presence, setPresenceState] = useState<Presence>(() =>
+    readStore<Presence>(PRESENCE_KEY, (r) => (r === 'quiet' || r === 'hidden' || r === 'normal' ? r : undefined), 'normal'),
+  );
+  const presenceRef = useRef(presence);
+  const [tipsOn, setTipsOnState] = useState(() => readStore(TIPS_KEY, (r) => (r === 'off' ? false : r === 'on' ? true : undefined), true));
+  /** null = awake; idle = dozed off by itself (any activity wakes it); manual = told to sleep (wakes when clicked) */
+  const [sleep, setSleepState] = useState<null | 'idle' | 'manual'>(null);
+  const sleepRef = useRef(sleep);
+  const [listening, setListening] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [unread, setUnread] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [tip, setTip] = useState<(TipOffer & { page: number }) | null>(null);
+  const [settling, setSettling] = useState(false);
+
+  const setOpen = useCallback((next: boolean | ((o: boolean) => boolean)) => {
+    setOpenState((o) => {
+      const v = typeof next === 'function' ? next(o) : next;
+      openRef.current = v;
+      return v;
+    });
+  }, []);
+  const setSleep = useCallback((v: null | 'idle' | 'manual') => {
+    sleepRef.current = v;
+    setSleepState(v);
+  }, []);
 
   const size = appearance.size;
   // handlers and effects read the current edge length through a ref
@@ -106,22 +216,49 @@ export function PetAssistant() {
   }, [size]);
   const maxX = useCallback(() => Math.max(0, window.innerWidth - sizeRef.current - 14), []);
   const fileRef = useRef<HTMLInputElement>(null);
+  const poseFileRef = useRef<HTMLInputElement>(null);
+  const poseTarget = useRef<PoseSlot | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const hitRef = useRef<HTMLDivElement>(null);
+
+  /** Keep the ref in step with the state synchronously — pointerup needs the final x. */
+  const place = useCallback((next: { x: number; y: number }) => {
+    posRef.current = next;
+    setPos(next);
+  }, []);
 
   // growing the pet near the right edge would push it off screen
   const lastSize = useRef(size);
   useEffect(() => {
     if (lastSize.current === size) return;
     lastSize.current = size;
-    posRef.current = { x: Math.min(posRef.current.x, maxX()), y: GROUND };
-    setPos(posRef.current);
-  }, [size, maxX]);
+    place({ x: Math.min(posRef.current.x, maxX()), y: GROUND });
+  }, [size, maxX, place]);
+
+  const setPresence = useCallback(
+    (p: Presence) => {
+      presenceRef.current = p;
+      setPresenceState(p);
+      writeStore(PRESENCE_KEY, p);
+      setTip(null);
+      // the hidden pet lives in the corner; when it comes out it stands there
+      if (p === 'hidden') {
+        setOpen(false);
+        place({ x: maxX(), y: GROUND });
+      }
+    },
+    [maxX, place, setOpen],
+  );
+  const setTipsOn = (on: boolean) => {
+    setTipsOnState(on);
+    writeStore(TIPS_KEY, on ? 'on' : 'off');
+    if (!on) setTip(null);
+  };
 
   const applyAppearance = (next: Appearance) => {
     setAppearance(next);
     saveAppearance(next);
   };
-
-  const petSrc = appearance.url;
 
   const applyUrl = () => {
     const url = urlDraft.trim();
@@ -140,32 +277,65 @@ export function PetAssistant() {
   };
 
   /** 让服务端把已导入形象的背景去掉（动图逐帧处理，动画保留） */
-  const stripStored = async (): Promise<{ animated: boolean }> => {
-    const res = await fetch('/api/pet/avatar/strip', { method: 'POST' });
+  const stripStored = async (slot?: PoseSlot): Promise<{ animated: boolean }> => {
+    const res = await fetch(`/api/pet/avatar/strip${slot ? `?slot=${slot}` : ''}`, { method: 'POST' });
     if (!res.ok) throw new Error(await errorDetail(res));
     return (await res.json()) as { animated: boolean };
+  };
+
+  const putFile = async (file: File, slot?: PoseSlot) => {
+    const form = new FormData();
+    form.append('file', file);
+    const up = await fetch(`/api/pet/avatar${slot ? `?slot=${slot}` : ''}`, { method: 'POST', body: form });
+    if (!up.ok) throw new Error(await errorDetail(up));
+    // SVG is vector art: there is no background to strip
+    return isSvg(file) ? null : stripStored(slot);
   };
 
   const uploadFile = async (file: File | undefined) => {
     if (!file) return;
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const up = await fetch('/api/pet/avatar', { method: 'POST', body: form });
-      if (!up.ok) throw new Error(await errorDetail(up));
-      const info = await stripStored();
+      const info = await putFile(file);
       applyAppearance({
         ...appearance,
         kind: 'upload',
         url: uploadedUrl(Date.now()),
         name: file.name || 'avatar.png',
       });
-      toast(info.animated ? '形象已更新，背景已去掉（动画保留）' : '形象已更新，背景已去掉', 'success');
+      toast(
+        info ? (info.animated ? '形象已更新，背景已去掉（动画保留）' : '形象已更新，背景已去掉') : '形象已更新',
+        'success',
+      );
     } catch (e) {
       toast(`导入失败：${e instanceof Error ? e.message : String(e)}`, 'error');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const uploadPose = async (slot: PoseSlot, file: File | undefined) => {
+    if (!file) return;
+    setPoseBusy(slot);
+    try {
+      await putFile(file, slot);
+      applyAppearance({ ...appearance, poses: { ...appearance.poses, [slot]: uploadedUrl(Date.now(), slot) } });
+      toast(`「${POSE_SLOTS.find((p) => p.slot === slot)?.label}」的图已导入`, 'success');
+    } catch (e) {
+      toast(`导入失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+    } finally {
+      setPoseBusy(null);
+    }
+  };
+
+  const clearPose = async (slot: PoseSlot) => {
+    const poses = { ...appearance.poses };
+    delete poses[slot];
+    applyAppearance({ ...appearance, poses });
+    try {
+      await fetch(`/api/pet/avatar?slot=${slot}`, { method: 'DELETE' });
+    } catch {
+      /* replaced by the next import anyway */
     }
   };
 
@@ -190,41 +360,42 @@ export function PetAssistant() {
     try {
       await fetch('/api/pet/avatar', { method: 'DELETE' });
     } catch {
-      /* the server copy is gone with the next upload anyway */
+      /* the server copies are gone with the next upload anyway */
     }
   };
 
   const [vw, setVw] = useState(() => window.innerWidth);
   const [vh, setVh] = useState(() => window.innerHeight);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ offX: number; offY: number; startX: number; startY: number; moved: boolean } | null>(null);
-
-  /** Keep the ref in step with the state synchronously — pointerup needs the final x. */
-  const place = useCallback((next: { x: number; y: number }) => {
-    posRef.current = next;
-    setPos(next);
-  }, []);
+  const dragRef = useRef<{ offX: number; offY: number; startX: number; startY: number; lastX: number; moved: boolean } | null>(null);
 
   // ---- where the pet stands ----
   useEffect(() => {
-    place({ x: Math.round(readRatio() * maxX()), y: GROUND });
+    place({ x: presenceRef.current === 'hidden' ? maxX() : Math.round(readRatio() * maxX()), y: GROUND });
     setPlaced(true);
-  }, [place]);
+  }, [place, maxX]);
 
   useEffect(() => {
     const onResize = () => {
       setVw(window.innerWidth);
       setVh(window.innerHeight);
-      place({ x: Math.min(posRef.current.x, maxX()), y: Math.min(posRef.current.y, window.innerHeight - sizeRef.current - GROUND) });
+      setMenu(null);
+      const x = presenceRef.current === 'hidden' ? maxX() : Math.min(posRef.current.x, maxX());
+      place({ x, y: Math.min(posRef.current.y, window.innerHeight - sizeRef.current - GROUND) });
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [place]);
+  }, [place, maxX]);
+
+  const wake = useCallback(() => {
+    if (sleepRef.current) setSleep(null);
+  }, [setSleep]);
 
   // ---- drag it around, let go and it falls back to the bottom edge ----
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    setMenu(null);
     e.currentTarget.setPointerCapture(e.pointerId);
     const rect = e.currentTarget.getBoundingClientRect();
     dragRef.current = {
@@ -232,17 +403,31 @@ export function PetAssistant() {
       offY: e.clientY - rect.top,
       startX: e.clientX,
       startY: e.clientY,
+      lastX: e.clientX,
       moved: false,
     };
-    setDragging(true);
-    setWalking(false);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d) return;
-    if (!d.moved && Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 3) d.moved = true;
+    if (!d.moved && Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 3) {
+      d.moved = true;
+      setDragging(true);
+      setWalking(false);
+      setTip(null);
+      wake();
+      if (presenceRef.current === 'hidden') {
+        setPresence('normal');
+        toast('小页出来了（右键它可以再藏起来）', 'info');
+      }
+    }
     if (!d.moved) return;
+    const dx = e.clientX - d.lastX;
+    if (Math.abs(dx) > 2) {
+      setHeading(dx < 0 ? 'left' : 'right');
+      d.lastX = e.clientX;
+    }
     const x = clamp(e.clientX - d.offX, 8, maxX());
     const top = clamp(e.clientY - d.offY, 8, window.innerHeight - sizeRef.current - GROUND);
     place({ x, y: window.innerHeight - sizeRef.current - top });
@@ -255,15 +440,13 @@ export function PetAssistant() {
     if (!d) return;
     setDragging(false);
     if (!d.moved) {
+      wake();
+      setTip(null);
       setOpen((o) => !o);
       return;
     }
     const limit = maxX();
-    try {
-      localStorage.setItem(POS_KEY, JSON.stringify({ ratio: limit > 0 ? posRef.current.x / limit : 0 }));
-    } catch {
-      /* not remembered */
-    }
+    writeStore(POS_KEY, JSON.stringify({ ratio: limit > 0 ? posRef.current.x / limit : 0 }));
     if (posRef.current.y > GROUND + 2) {
       setDropping(true);
       place({ x: posRef.current.x, y: GROUND });
@@ -279,13 +462,15 @@ export function PetAssistant() {
     if (Math.abs(to - from) < 70) {
       to = from < limit / 2 ? Math.min(limit, from + 130 + Math.random() * 170) : Math.max(14, from - 130 - Math.random() * 170);
     }
+    setHeading(to < from ? 'left' : 'right');
     setWalking(true);
     place({ x: to, y: GROUND });
     window.setTimeout(() => setWalking(false), 2450);
-  }, [place]);
+  }, [place, maxX]);
 
+  const canWander = placed && !open && !dragging && !dropping && !menu && !tip && presence === 'normal' && !sleep;
   useEffect(() => {
-    if (!placed || open || dragging || dropping) return;
+    if (!canWander) return;
     let timer = 0;
     const tick = () => {
       if (!document.hidden) wander();
@@ -293,17 +478,63 @@ export function PetAssistant() {
     };
     timer = window.setTimeout(tick, 7000 + Math.random() * 9000);
     return () => window.clearTimeout(timer);
-  }, [placed, open, dragging, dropping, wander]);
+  }, [canWander, wander]);
+
+  // ---- dozing off when nothing happens, waking on any activity ----
+  const lastActivity = useRef(Date.now());
+  useEffect(() => {
+    let last = 0;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - last < 500) return;
+      last = now;
+      lastActivity.current = now;
+      if (sleepRef.current === 'idle') setSleep(null);
+    };
+    const events = ['pointermove', 'pointerdown', 'keydown', 'wheel'] as const;
+    for (const ev of events) window.addEventListener(ev, onActivity, { passive: true });
+    const timer = window.setInterval(() => {
+      if (sleepRef.current || openRef.current || useChatStore.getState().streaming) return;
+      if (Date.now() - lastActivity.current > SLEEP_AFTER_MS) {
+        setSleep('idle');
+        setTip(null);
+      }
+    }, 10000);
+    return () => {
+      for (const ev of events) window.removeEventListener(ev, onActivity);
+      window.clearInterval(timer);
+    };
+  }, [setSleep]);
+
+  // ---- ears up while the reader selects text (outside the bubble) ----
+  useEffect(() => {
+    const onSel = () => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? '';
+      const node = sel?.anchorNode;
+      const el = node instanceof Element ? node : node?.parentElement;
+      setListening(!!text && !el?.closest('.pet-bubble, .pet-tip, .pet-menu'));
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => document.removeEventListener('selectionchange', onSel);
+  }, []);
+  useEffect(() => {
+    if (!typing) return;
+    const t = window.setTimeout(() => setTyping(false), 1400);
+    return () => window.clearTimeout(t);
+  }, [typing, input]);
 
   // ---- summoning: the sidebar button, 划词, a new question ----
   useEffect(() => {
     const onSummon = () => {
+      setSleep(null);
+      setTip(null);
       setOpen(true);
       setWalking(false);
     };
     window.addEventListener(PET_SUMMON_EVENT, onSummon);
     return () => window.removeEventListener(PET_SUMMON_EVENT, onSummon);
-  }, []);
+  }, [setOpen, setSleep]);
 
   useEffect(() => {
     if (docId) void loadFor(docId);
@@ -311,17 +542,142 @@ export function PetAssistant() {
   }, [docId, loadFor]);
 
   useEffect(() => {
-    if (streaming) setOpen(true);
+    if (streaming) {
+      setSleep(null);
+      setTip(null);
+      setOpen(true);
+    }
+  }, [streaming, setOpen, setSleep]);
+
+  // an answer that finished while the bubble was closed: badge + hop until it is opened
+  const wasStreaming = useRef(streaming);
+  useEffect(() => {
+    if (wasStreaming.current && !streaming && !openRef.current) {
+      const all = useChatStore.getState().messages;
+      const last = all[all.length - 1];
+      if (last?.role === 'assistant' && !last.error) setUnread(true);
+    }
+    wasStreaming.current = streaming;
   }, [streaming]);
+  useEffect(() => {
+    if (open) setUnread(false);
+  }, [open]);
+  useEffect(() => {
+    setUnread(false);
+  }, [docId]);
 
   useEffect(() => {
     if (notConfigured) setOpen(true);
-  }, [notConfigured]);
+  }, [notConfigured, setOpen]);
 
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, streamingText, streaming]);
+
+  // ---- Esc: close the menu, then the 换装 panel, then the bubble ----
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (useViewStore.getState().settingsOpen) return;
+      if (menu) {
+        setMenu(null);
+        hitRef.current?.focus();
+        e.preventDefault();
+        return;
+      }
+      if (tip) {
+        setTip(null);
+        e.preventDefault();
+        return;
+      }
+      if (!openRef.current) return;
+      // Esc in another field (the search box) belongs to that field
+      const t = e.target instanceof HTMLElement ? e.target : null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"]') && !t.closest('.pet-bubble')) return;
+      e.preventDefault();
+      if (picking) setPicking(false);
+      else setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menu, tip, picking, setOpen]);
+
+  // ---- right-click menu ----
+  const openMenu = (x: number, y: number) => {
+    setTip(null);
+    setMenu({ x, y });
+  };
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('.pet-menu-item:not(:disabled)')?.focus();
+    const onDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenu(null);
+    };
+    const onScroll = () => setMenu(null);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('wheel', onScroll, { passive: true });
+    window.addEventListener('blur', onScroll);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('wheel', onScroll);
+      window.removeEventListener('blur', onScroll);
+    };
+  }, [menu]);
+
+  // ---- offering help with the page the reader stopped on ----
+  const tipped = useRef(new Set<string>());
+  const lastTipAt = useRef(0);
+  const turnedDown = useRef(0);
+  useEffect(() => {
+    setTip((t) => (t && t.page !== currentPage ? null : t));
+    if (!docId || !tipsOn || presence !== 'normal') return;
+    const key = `${docId}:${currentPage}`;
+    if (tipped.current.has(key)) return;
+    const timer = window.setTimeout(() => {
+      const chat = useChatStore.getState();
+      if (openRef.current || chat.streaming || chat.notConfigured || sleepRef.current || document.hidden) return;
+      if (Date.now() - lastTipAt.current < TIP_COOLDOWN_MS * (1 + turnedDown.current)) return;
+      const page = useTranslationStore.getState().pages[currentPage];
+      if (!page?.loaded) return;
+      tipped.current.add(key);
+      const offer = offerFor(currentPage, page.blocks);
+      if (!offer) return;
+      lastTipAt.current = Date.now();
+      setTip({ ...offer, page: currentPage });
+    }, TIP_DWELL_MS);
+    return () => window.clearTimeout(timer);
+  }, [docId, currentPage, tipsOn, presence]);
+  useEffect(() => {
+    if (!tip) return;
+    const t = window.setTimeout(() => setTip(null), TIP_SHOW_MS);
+    return () => window.clearTimeout(t);
+  }, [tip]);
+
+  const acceptTip = () => {
+    if (!tip) return;
+    turnedDown.current = 0;
+    const { ask, mode, page } = tip;
+    setTip(null);
+    setOpen(true);
+    void send(ask, page, { mode });
+  };
+  const declineTip = () => {
+    turnedDown.current = Math.min(turnedDown.current + 1, 4);
+    setTip(null);
+  };
+
+  // ---- hidden in the corner: it comes out whenever the bubble opens ----
+  const tucked = presence === 'hidden' && !open && !dragging && !menu;
+  const wasTucked = useRef(tucked);
+  useEffect(() => {
+    if (wasTucked.current === tucked) return;
+    wasTucked.current = tucked;
+    setSettling(true);
+    const t = window.setTimeout(() => setSettling(false), 480);
+    return () => window.clearTimeout(t);
+  }, [tucked]);
+  const shown = tucked ? { x: maxX(), y: -Math.round(size * 0.48) } : pos;
 
   const mood: PetMood = dragging || dropping
     ? 'idle'
@@ -329,9 +685,19 @@ export function PetAssistant() {
       ? streamingText
         ? 'talk'
         : 'think'
-      : walking
-        ? 'walk'
-        : 'idle';
+      : sleep
+        ? 'sleep'
+        : walking
+          ? 'walk'
+          : listening || typing
+            ? 'listen'
+            : 'idle';
+
+  const faces: Facing = appearance.faces;
+  const flip = faces !== 'front' && heading !== faces;
+  const poseSrc = mood !== 'idle' ? appearance.poses[mood as PoseSlot] : undefined;
+  const preload = Object.values(appearance.poses).filter((u): u is string => !!u);
+  const badge: PetBadge = open ? null : notConfigured ? 'alert' : unread ? 'unread' : null;
 
   // ---- bubble geometry: above the pet, nudged back inside the window ----
   const bubbleW = Math.min(BUBBLE_MAX_W, Math.max(260, vw - 24));
@@ -339,6 +705,15 @@ export function PetAssistant() {
   const bubbleBottom = clamp(pos.y + size + 12, 14, Math.max(14, vh - 200));
   const bubbleMaxH = Math.max(150, Math.min(460, vh - bubbleBottom - 20));
   const tailX = clamp(pos.x + size / 2 - bubbleLeft, 18, bubbleW - 18);
+
+  const tipW = Math.min(250, vw - 20);
+  const tipLeft = clamp(shown.x + size / 2 - tipW / 2, 10, Math.max(10, vw - tipW - 10));
+  const tipBottom = clamp(shown.y + size + 10, 14, Math.max(14, vh - 120));
+
+  const MENU_W = 200;
+  const MENU_H = 330;
+  const menuLeft = menu ? clamp(menu.x, 8, Math.max(8, vw - MENU_W - 8)) : 0;
+  const menuTop = menu ? clamp(menu.y - MENU_H, 8, Math.max(8, vh - MENU_H - 8)) : 0;
 
   const doSend = async (text: string) => {
     const msg = text.trim();
@@ -357,8 +732,14 @@ export function PetAssistant() {
     }
   };
 
-  const shown = history ? messages : messages.slice(-2);
+  const shownMessages = history ? messages : messages.slice(-2);
   const lastAssistant = messages.map((m) => m.role).lastIndexOf('assistant');
+  const canAsk = !!docId && !streaming && !notConfigured;
+
+  const menuAction = (fn: () => void) => () => {
+    setMenu(null);
+    fn();
+  };
 
   const setupCard = (
     <div className="pet-setup">
@@ -379,38 +760,188 @@ export function PetAssistant() {
     </div>
   );
 
+  const label = sleep ? '小页 · 在睡觉，点一下叫醒' : unread ? '小页 · 有一条新回答，点击查看' : '小页 · 阅读助手，点击展开对话，右键更多';
+
   return (
     <>
       <div
-        className={`pet ${walking ? 'is-walking' : ''} ${dragging ? 'is-dragging' : ''} ${dropping ? 'is-dropping' : ''}`}
-        style={{ left: pos.x, bottom: pos.y, width: size, height: size, visibility: placed ? 'visible' : 'hidden' }}
+        className={[
+          'pet',
+          walking ? 'is-walking' : '',
+          dragging ? 'is-dragging' : '',
+          dropping ? 'is-dropping' : '',
+          presence === 'quiet' && !open ? 'is-quiet' : '',
+          tucked ? 'is-tucked' : '',
+          settling && !tucked ? 'is-untucking' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={{ left: shown.x, bottom: shown.y, width: size, height: size, visibility: placed ? 'visible' : 'hidden' }}
       >
         <div
+          ref={hitRef}
           className="pet-hit"
           role="button"
           tabIndex={0}
-          aria-label="小页 · 阅读助手，点击展开对话"
+          title={label}
+          aria-label={label}
           aria-expanded={open}
+          aria-haspopup="menu"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            openMenu(e.clientX, e.clientY);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
+              wake();
               setOpen((o) => !o);
+            } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+              e.preventDefault();
+              const r = e.currentTarget.getBoundingClientRect();
+              openMenu(r.left + r.width / 2, r.top);
             }
           }}
         >
           <PetBody
-            src={petSrc}
+            src={appearance.url}
+            poseSrc={poseSrc}
+            preload={preload}
             mood={mood}
             dragging={dragging}
             dropping={dropping}
-            alert={notConfigured && !open}
+            badge={badge}
+            flip={flip}
           />
         </div>
       </div>
+
+      {tip && !open && (
+        <div className="pet-tip" role="status" style={{ left: tipLeft, bottom: tipBottom, width: tipW }}>
+          <div>{tip.text}</div>
+          <div className="pet-tip-actions">
+            <button type="button" className="pet-chip-btn primary" onClick={acceptTip}>
+              好啊
+            </button>
+            <button type="button" className="pet-chip-btn" onClick={declineTip}>
+              不用了
+            </button>
+            <button type="button" className="pet-tip-off" onClick={() => setTipsOn(false)} title="以后不再主动提示（右键小页可以重新打开）">
+              别再提示
+            </button>
+          </div>
+        </div>
+      )}
+
+      {menu && (
+        <div
+          ref={menuRef}
+          className="pet-menu"
+          role="menu"
+          aria-label="小页"
+          style={{ left: menuLeft, top: menuTop, width: MENU_W }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('.pet-menu-item:not(:disabled)') ?? []);
+            const i = items.indexOf(document.activeElement as HTMLButtonElement);
+            items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+          }}
+        >
+          <button type="button" role="menuitem" className="pet-menu-item" onClick={menuAction(() => { wake(); setOpen((o) => !o); })}>
+            <span className="pet-menu-check" />
+            {open ? '收起对话' : '打开对话'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pet-menu-item"
+            disabled={!canAsk}
+            onClick={menuAction(() => void send('总结本页', useViewStore.getState().currentPage, { mode: 'page' }))}
+          >
+            <span className="pet-menu-check" />
+            总结本页
+            <span className="pet-menu-note">第 {currentPage} 页</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pet-menu-item"
+            disabled={!canAsk}
+            onClick={menuAction(() => void send('本页自测', useViewStore.getState().currentPage, { mode: 'quiz' }))}
+          >
+            <span className="pet-menu-check" />
+            本页自测
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pet-menu-item"
+            onClick={menuAction(() => {
+              wake();
+              setOpen(true);
+              setPicking(true);
+            })}
+          >
+            <span className="pet-menu-check" />
+            换装…
+          </button>
+          <div className="pet-menu-sep" role="separator" />
+          {(
+            [
+              ['normal', '正常', '会走动'],
+              ['quiet', '安静', '不走动不搭话'],
+              ['hidden', '藏到角落', '划词时出来'],
+            ] as const
+          ).map(([p, text, note]) => (
+            <button
+              key={p}
+              type="button"
+              role="menuitemradio"
+              aria-checked={presence === p}
+              className="pet-menu-item"
+              onClick={menuAction(() => setPresence(p))}
+            >
+              <span className="pet-menu-check">{presence === p ? '●' : ''}</span>
+              {text}
+              <span className="pet-menu-note">{note}</span>
+            </button>
+          ))}
+          <div className="pet-menu-sep" role="separator" />
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={tipsOn}
+            className="pet-menu-item"
+            disabled={presence !== 'normal'}
+            title={presence !== 'normal' ? '安静和藏起来的时候不会主动提示' : '在一页停留一会儿，看到公式、表格或大段文字时问你要不要讲讲'}
+            onClick={menuAction(() => setTipsOn(!tipsOn))}
+          >
+            <span className="pet-menu-check">{tipsOn ? '✓' : ''}</span>
+            主动提示
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pet-menu-item"
+            onClick={menuAction(() => {
+              if (sleep) setSleep(null);
+              else {
+                setOpen(false);
+                setTip(null);
+                setSleep('manual');
+              }
+            })}
+          >
+            <span className="pet-menu-check" />
+            {sleep ? '叫醒它' : '让它睡一会'}
+          </button>
+        </div>
+      )}
 
       {open && (
         <>
@@ -458,7 +989,7 @@ export function PetAssistant() {
             >
               <Icon name="rows" size={14} />
             </button>
-            <button type="button" className="icon-btn" title="收起来" aria-label="收起对话" onClick={() => setOpen(false)}>
+            <button type="button" className="icon-btn" title="收起来（Esc）" aria-label="收起对话" onClick={() => setOpen(false)}>
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -499,6 +1030,29 @@ export function PetAssistant() {
                     />
                   </div>
 
+                  <div className="pet-field">
+                    <span className="pet-field-label">原图里它朝哪边（走路时会按方向转身；走起来像倒着走就改一下）</span>
+                    <div className="pet-seg" role="radiogroup" aria-label="原图朝向">
+                      {(
+                        [
+                          ['left', '朝左'],
+                          ['right', '朝右'],
+                          ['front', '正面，不转身'],
+                        ] as const
+                      ).map(([f, text]) => (
+                        <button
+                          key={f}
+                          type="button"
+                          role="radio"
+                          aria-checked={faces === f}
+                          onClick={() => applyAppearance({ ...appearance, faces: f })}
+                        >
+                          {text}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="pet-field-row">
                     <button
                       type="button"
@@ -524,10 +1078,10 @@ export function PetAssistant() {
                     <button
                       type="button"
                       className="pet-chip-btn"
-                      disabled={appearance.kind === 'builtin'}
+                      disabled={appearance.kind === 'builtin' && Object.keys(appearance.poses).length === 0}
                       onClick={() => void resetAppearance()}
                     >
-                      换回大肥鱼
+                      换回小页
                     </button>
                     <input
                       ref={fileRef}
@@ -542,7 +1096,7 @@ export function PetAssistant() {
                   </div>
 
                   {appearance.kind === 'builtin' && (
-                    <div className="pet-picker-hint">现在用的是附带的大肥鱼（Twemoji 🐳，CC-BY 4.0）。</div>
+                    <div className="pet-picker-hint">现在用的是附带的小页。</div>
                   )}
                   {appearance.kind === 'upload' && (
                     <div className="pet-picker-hint">
@@ -554,6 +1108,51 @@ export function PetAssistant() {
                       直接引用外部地址，图片换了这边跟着变；外部图片没法在这里去背景，需要透明底请下载后导入。
                     </div>
                   )}
+
+                  <div className="pet-field">
+                    <span className="pet-field-label">动作图（可选）：每个动作单独一张，没有的就用上面的形象</span>
+                    <div className="pet-poses">
+                      {POSE_SLOTS.map(({ slot, label: poseLabel, hint }) => {
+                        const u = appearance.poses[slot];
+                        return (
+                          <div key={slot} className="pet-pose">
+                            <span className="pet-pose-thumb">{u ? <img src={u} alt="" /> : '—'}</span>
+                            <span className="pet-pose-label">
+                              {poseLabel}
+                              <small>{hint}</small>
+                            </span>
+                            <button
+                              type="button"
+                              className="pet-chip-btn"
+                              disabled={poseBusy !== null}
+                              onClick={() => {
+                                poseTarget.current = slot;
+                                poseFileRef.current?.click();
+                              }}
+                            >
+                              {poseBusy === slot ? '导入中…' : u ? '更换' : '导入'}
+                            </button>
+                            {u && (
+                              <button type="button" className="pet-chip-btn" onClick={() => void clearPose(slot)}>
+                                清除
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <input
+                      ref={poseFileRef}
+                      className="pet-import"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const slot = poseTarget.current;
+                        if (slot) void uploadPose(slot, e.target.files?.[0]);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <div className="pet-picker-bar">
@@ -601,8 +1200,8 @@ export function PetAssistant() {
                   </div>
                 )}
 
-                {shown.map((m, i) => {
-                  const index = messages.length - shown.length + i;
+                {shownMessages.map((m, i) => {
+                  const index = messages.length - shownMessages.length + i;
                   if (m.role === 'user') {
                     const { quote, text } = splitQuote(m.content);
                     return (
@@ -739,7 +1338,10 @@ export function PetAssistant() {
                 rows={1}
                 placeholder="问我这份文档…（Enter 发送，Shift+Enter 换行）"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  setTyping(true);
+                }}
                 onCompositionStart={() => setComposing(true)}
                 onCompositionEnd={() => setComposing(false)}
                 onKeyDown={(e) => {

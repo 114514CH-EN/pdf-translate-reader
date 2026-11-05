@@ -71,6 +71,14 @@
   object-position: 50% 100%;
   -webkit-user-drag: none;
 }
+.pet-img[hidden] {
+  display: none;
+}
+/* turned to face the way it walks; the flip sits on the image so it never
+   fights the pose animations on .pet-art */
+.pet-img.is-flipped {
+  transform: scaleX(-1);
+}
 
 /* nothing chosen yet: a dashed slot, not a character */
 .pet-slot {
@@ -110,7 +118,22 @@
   animation: pet-squash 0.5s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 .pet-body.is-sleep .pet-art {
-  animation: pet-breathe 5.6s ease-in-out infinite;
+  animation: pet-doze 5.6s ease-in-out infinite;
+}
+.pet-body.is-listen .pet-art {
+  animation: pet-perk 1.9s ease-in-out infinite;
+}
+/* a pose with its own picture (often a GIF) moves by itself: only a soft breath */
+.pet-body.has-pose:not(.is-drag):not(.is-drop) .pet-art {
+  animation: pet-breathe 3.8s ease-in-out infinite;
+}
+/* an answer nobody has read yet: hop now and then */
+.pet-body.has-unread.is-idle .pet-art,
+.pet-body.has-unread.is-sleep .pet-art {
+  animation: pet-hop 2.8s ease-in-out infinite;
+}
+.pet-body.is-sleep .pet-shadow {
+  transform: translateX(-50%) scaleX(1.08);
 }
 
 .pet-body.is-drag .pet-shadow {
@@ -125,6 +148,40 @@
   }
   50% {
     transform: translateY(-2px) scaleY(1.02);
+  }
+}
+@keyframes pet-doze {
+  0%,
+  100% {
+    transform: translateY(1px) scaleY(0.97) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(2px) scaleY(0.95) rotate(-3deg);
+  }
+}
+@keyframes pet-perk {
+  0%,
+  100% {
+    transform: translateY(-2px) rotate(-3deg) scale(1.02);
+  }
+  50% {
+    transform: translateY(-3px) rotate(2deg) scale(1.03);
+  }
+}
+@keyframes pet-hop {
+  0%,
+  62%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  70% {
+    transform: translateY(0) scaleY(0.92) scaleX(1.05);
+  }
+  80% {
+    transform: translateY(-12px) scaleY(1.05);
+  }
+  90% {
+    transform: translateY(0) scaleY(0.96);
   }
 }
 @keyframes pet-wobble {
@@ -237,11 +294,248 @@
 
 .pet-zzz {
   position: absolute;
-  right: 0;
-  top: -14px;
-  font-size: 12px;
+  right: 2px;
+  top: -18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
   color: var(--text-faint);
-  animation: pet-dot 2.6s ease-in-out infinite;
+  font-weight: 600;
+}
+.pet-zzz i {
+  font-style: normal;
+  font-size: 10px;
+  opacity: 0;
+  animation: pet-z 3s ease-in-out infinite;
+}
+.pet-zzz i:nth-child(2) {
+  font-size: 12px;
+  animation-delay: 0.5s;
+}
+.pet-zzz i:nth-child(3) {
+  font-size: 15px;
+  animation-delay: 1s;
+}
+@keyframes pet-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px);
+  }
+  30%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(4px, -8px);
+  }
+}
+
+.pet-ear {
+  position: absolute;
+  right: 4px;
+  top: -12px;
+  font-size: 13px;
+  color: var(--accent);
+  animation: pet-dot 1.4s ease-in-out infinite;
+}
+
+.pet-unread {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow);
+  animation: pet-alert-pulse 2.6s ease-in-out infinite;
+}
+
+/* ---------- 勿扰 / 藏起来 ---------- */
+
+.pet.is-quiet:not(:hover):not(.is-dragging) .pet-body {
+  opacity: 0.55;
+}
+.pet .pet-body {
+  transition: opacity 0.25s ease;
+}
+/* tucked into the bottom-right corner: only the top of the head peeks out */
+.pet.is-tucked {
+  transition: left 0.45s ease, bottom 0.45s ease;
+}
+.pet.is-tucked .pet-art {
+  transition: transform 0.2s ease;
+}
+.pet.is-tucked:hover .pet-art,
+.pet.is-tucked:focus-within .pet-art {
+  transform: translateY(-14px);
+}
+.pet.is-tucked .pet-shadow {
+  opacity: 0;
+}
+.pet.is-untucking {
+  transition: left 0.4s ease, bottom 0.4s cubic-bezier(0.34, 1.28, 0.64, 1);
+}
+
+/* ---------- 右键菜单 ---------- */
+
+.pet-menu {
+  position: fixed;
+  z-index: 45;
+  min-width: 176px;
+  padding: 5px;
+  background: var(--panel);
+  border: var(--bw) solid var(--border);
+  border-radius: 11px;
+  box-shadow: var(--shadow-lg);
+  animation: pet-bubble-in 0.14s ease-out;
+}
+.pet-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.pet-menu-item:hover:not(:disabled),
+.pet-menu-item:focus-visible {
+  outline: none;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pet-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pet-menu-check {
+  width: 14px;
+  flex: none;
+  text-align: center;
+  color: var(--accent);
+}
+.pet-menu-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.pet-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-soft);
+}
+
+/* ---------- 主动提示：一个小小的话泡 ---------- */
+
+.pet-tip {
+  position: fixed;
+  z-index: 41;
+  max-width: 250px;
+  padding: 8px 10px 8px 11px;
+  background: var(--panel);
+  border: var(--bw) solid var(--border);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  font-size: 12.5px;
+  line-height: 1.55;
+  animation: pet-bubble-in 0.2s ease-out;
+}
+.pet-tip-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pet-tip-actions .pet-chip-btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pet-tip-off {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.pet-tip-off:hover {
+  color: var(--text-dim);
+  text-decoration: underline;
+}
+
+/* ---------- 换装：朝向 + 动作图 ---------- */
+
+.pet-seg {
+  display: inline-flex;
+  border: var(--bw) solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pet-seg button {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border: 0;
+  background: var(--panel);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.pet-seg button + button {
+  border-left: var(--bw) solid var(--border-soft);
+}
+.pet-seg button[aria-checked='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pet-poses {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pet-pose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pet-pose-thumb {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: var(--bw) dashed var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.pet-pose-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.pet-pose-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+}
+.pet-pose-label small {
+  font-size: 10.5px;
+  color: var(--text-faint);
 }
 
 /* ---------- bubble ---------- */
@@ -595,7 +889,13 @@
     transition: none;
   }
   .pet-body *,
-  .pet-bubble {
+  .pet-bubble,
+  .pet-menu,
+  .pet-tip {
     animation: none !important;
+  }
+  .pet.is-tucked,
+  .pet.is-untucking {
+    transition: none;
   }
 }
