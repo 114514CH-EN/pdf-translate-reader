@@ -883,6 +883,21 @@ function DataSettings() {
       setBusy(false);
     }
   };
+  const quitApp = async () => {
+    if (!window.confirm('退出 PDF 双语翻译阅读器？正在进行的翻译会中断。')) return;
+    try {
+      await apiClient.shutdown();
+    } catch (e) {
+      toast(`退出失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+      return;
+    }
+    // the server is gone: leave a plain page instead of an app full of connection errors
+    document.title = '已退出 · PDF 双语翻译阅读器';
+    document.body.innerHTML =
+      '<div style="font:15px/1.7 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 16px;color:#334">' +
+      '<h2 style="margin:0 0 8px">已退出</h2><p>后台服务已关闭，可以关掉这个页面了。</p>' +
+      '<p style="color:#778">下次双击 run.bat（桌宠版：run_pet.bat）即可重新打开。</p></div>';
+  };
   return (
     <>
       <fieldset className="fieldset">
@@ -907,6 +922,17 @@ function DataSettings() {
         <div className="card-actions">
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void backupNow()}>
             {busy ? '备份中…' : '立即备份'}
+          </button>
+        </div>
+      </fieldset>
+      <fieldset className="fieldset">
+        <legend>退出程序</legend>
+        <p className="fieldset-hint">
+          关闭后台服务（和关掉启动时的命令行窗口一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 run.bat 或 run_pet.bat 即可重新打开。
+        </p>
+        <div className="card-actions">
+          <button type="button" className="btn btn-sm btn-danger" onClick={() => void quitApp()}>
+            退出程序
           </button>
         </div>
       </fieldset>

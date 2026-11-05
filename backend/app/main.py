@@ -1,9 +1,14 @@
-from fastapi import FastAPI, HTTPException
+import os
+import signal
+import threading
+import time
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import APP_VERSION, FRONTEND_DIST
+from .config import APP_VERSION, BASE_DIR, FRONTEND_DIST
 from .db import init_db
 from .routers import assistant, documents, export, glossary, notes, pages, pet, reading, settings, translate
 
@@ -87,7 +92,40 @@ app.include_router(pet.router)
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"]}
+    # pid / base_dir let the launcher recognise (and stop) an older copy of itself
+    return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "pid": os.getpid(),
+            "base_dir": str(BASE_DIR)}
+
+
+SHUTDOWN_HEADER = "x-pdftr-shutdown"
+
+
+def _exit_soon() -> None:
+    """Let the response go out, then stop uvicorn the way Ctrl+C does; hard exit as a backstop."""
+    time.sleep(0.3)
+    try:
+        signal.raise_signal(signal.SIGINT)
+    except Exception:
+        pass
+    time.sleep(6)
+    os._exit(0)
+
+
+@app.post("/api/shutdown")
+def shutdown(request: Request):
+    """Stop this server (the app's 「退出程序」 button, or a newer launcher replacing it).
+
+    Works wherever the process runs — no process id needed. The custom header
+    makes browsers send a CORS preflight first, which other sites do not pass,
+    so a web page cannot close the app behind the reader's back.
+    """
+    if request.headers.get(SHUTDOWN_HEADER) != "1":
+        raise HTTPException(403, "缺少确认头")
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        raise HTTPException(403, "只能从本机关闭")
+    threading.Thread(target=_exit_soon, daemon=True).start()
+    return {"ok": True, "pid": os.getpid()}
 
 
 @app.get("/pet", include_in_schema=False)

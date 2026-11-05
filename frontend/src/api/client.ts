@@ -225,6 +225,10 @@ export const api = {
     return request('/settings/backups');
   },
 
+  /** stop the local server (the 「退出程序」 button) */
+  shutdown(): Promise<{ ok: boolean }> {
+    return request<{ ok: boolean }>('/shutdown', { method: 'POST', headers: { 'X-PDFTR-Shutdown': '1' } });
+  },
   createBackup(): Promise<{ name: string; items: BackupInfo[] }> {
     return request('/settings/backups', { method: 'POST' });
   },
