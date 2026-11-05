@@ -66,21 +66,6 @@
 
 运行 `build_exe.bat`（需要 Python 和 Node.js），生成 `dist\PDFTranslate\PDFTranslate.exe`，整个文件夹可以复制到别处使用；加 `--pet` 参数启动桌宠版。
 
-## 常见问题
-
-**双击 `run.bat` 弹出「打开文件 - 安全警告：无法验证发布者」**
-
-这是 Windows 给「从网上下载 / 从别处拷来」的文件打的标记，不是程序有问题。点「运行」即可；想一劳永逸，用下面任意一种方法去掉标记：
-
-- 下载的是 zip：**解压前**右键 zip →「属性」→ 勾选底部的「解除锁定」→「确定」，再解压，里面的文件就都不会再提示
-- 已经解压了：在项目文件夹的地址栏输入 `powershell` 回车，执行
-
-  ```powershell
-  Get-ChildItem -Recurse -File -Include *.bat,*.py | Unblock-File
-  ```
-
-- 只处理一个文件：右键它 →「属性」→ 勾选「解除锁定」
-
 ## 数据存放
 
 | 位置 | 内容 |

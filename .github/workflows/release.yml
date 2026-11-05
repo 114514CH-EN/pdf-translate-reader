@@ -1,6 +1,7 @@
 # Publishes a GitHub Release when VERSION changes: builds the download zip
 # (git archive, includes the prebuilt frontend/dist) and attaches it.
-# Release notes come from .github/release-notes/v<VERSION>.md.
+# Release notes come from .github/release-notes/v<VERSION>.md; editing that file
+# later refreshes the notes of the existing release.
 name: Release
 
 on:
@@ -35,6 +36,13 @@ jobs:
           if gh release view "${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Update the notes of an existing release
+        if: steps.check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: gh release edit "$TAG" --notes-file ".github/release-notes/$TAG.md"
 
       - name: Build the download zip
         if: steps.check.outputs.exists != 'true'

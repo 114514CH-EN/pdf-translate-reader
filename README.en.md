@@ -68,21 +68,6 @@ Double-click `run_pet.bat`, which opens `http://127.0.0.1:8765/pet`. Both editio
 
 Run `build_exe.bat` (needs Python and Node.js). It produces `dist\PDFTranslate\PDFTranslate.exe`, and the whole folder can be copied elsewhere. Start it with `--pet` for the desktop pet edition.
 
-## FAQ
-
-**Double-clicking `run.bat` shows "Open File - Security Warning: The publisher could not be verified"**
-
-Windows marks files that came from the internet or another computer; nothing is wrong with the program. Click "Run", or remove the mark once in one of these ways:
-
-- If you downloaded a zip: **before extracting**, right-click the zip → Properties → tick "Unblock" at the bottom → OK, then extract. None of the files inside will warn again
-- If it is already extracted: type `powershell` in the folder's address bar, press Enter and run
-
-  ```powershell
-  Get-ChildItem -Recurse -File -Include *.bat,*.py | Unblock-File
-  ```
-
-- For a single file: right-click it → Properties → tick "Unblock"
-
 ## Where data is stored
 
 | Location | Contents |
