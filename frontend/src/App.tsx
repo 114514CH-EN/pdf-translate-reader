@@ -1,0 +1,307 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+/** must equal backend/app/config.py APP_VERSION */
+const EXPECTED_BACKEND = '2026.11.05-11';
+import { DocumentTabs } from './components/DocumentTabs';
+import { Toolbar } from './components/Toolbar';
+import { PdfPane } from './components/PdfPane';
+import { PageAbsoluteView } from './components/PageAbsoluteView';
+import { FlowTranslationPane } from './components/FlowTranslationPane';
+import { Sidebar } from './components/Sidebar';
+import { ProgressStrip } from './components/ProgressStrip';
+import { SearchBar } from './components/SearchBar';
+import { SelectionToolbar } from './components/SelectionToolbar';
+import { useReadingPosition } from './hooks/useReadingPosition';
+import { SettingsModal } from './components/SettingsModal';
+import { JobsProgressBanner } from './components/JobsProgressBanner';
+import { UploadDropZone } from './components/UploadDropZone';
+import { useSyncScroll } from './hooks/useSyncScroll';
+import { useJobEvents } from './hooks/useJobEvents';
+import { useDocStore } from './stores/doc';
+import { useViewStore } from './stores/view';
+import { useTranslationStore } from './stores/translation';
+import { useSettingsStore } from './stores/settings';
+import { TOOLBAR_EVENT, actionFor, comboFromEvent, resolveShortcuts } from './lib/shortcuts';
+import { applyTheme, nextTheme, type ThemeMode } from './lib/theme';
+
+function Toasts() {
+  const toasts = useViewStore((s) => s.toasts);
+  const dismiss = useViewStore((s) => s.dismissToast);
+  return (
+    <div className="toasts">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast ${t.kind}`} onClick={() => dismiss(t.id)}>
+          {t.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    el.isContentEditable
+  );
+}
+
+export default function App() {
+  const documents = useDocStore((s) => s.documents);
+  const activeId = useDocStore((s) => s.activeId);
+  const loadDocuments = useDocStore((s) => s.loadDocuments);
+  const openDocument = useDocStore((s) => s.openDocument);
+
+  const mode = useViewStore((s) => s.mode);
+  const leftPanePct = useViewStore((s) => s.leftPanePct);
+  const setLeftPanePct = useViewStore((s) => s.setLeftPanePct);
+  const requestPageNav = useViewStore((s) => s.requestPageNav);
+  const currentPage = useViewStore((s) => s.currentPage);
+  const editMode = useViewStore((s) => s.editMode);
+
+  const job = useTranslationStore((s) => s.job);
+  const refreshPage = useTranslationStore((s) => s.refreshPage);
+  const resetTranslations = useTranslationStore((s) => s.reset);
+
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const dividerRef = useRef<HTMLDivElement>(null);
+
+  // initial load
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  // when a doc becomes active, refresh detail + reset per-doc state
+  useEffect(() => {
+    if (activeId) {
+      useViewStore.setState({ currentPage: 1, pageCount: 0 }); // each doc starts at its first page
+      resetTranslations();
+      // the assistant panel resets itself in loadFor(docId) — resetting here would race it
+      void openDocument(activeId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
+  // on startup, activate the first open tab (closing the last tab leaves the empty state)
+  const bootRef = useRef(false);
+  const openIds = useDocStore((s) => s.openIds);
+  useEffect(() => {
+    if (bootRef.current || documents.length === 0) return;
+    bootRef.current = true;
+    if (!activeId && openIds.length > 0) useDocStore.getState().setActive(openIds[0]);
+  }, [activeId, documents, openIds]);
+
+  // detect an old backend process still serving this (new) page
+  const [backendStale, setBackendStale] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((h: { version?: string }) => {
+        if (h.version !== EXPECTED_BACKEND) setBackendStale(h.version ?? '旧版本');
+      })
+      .catch(() => undefined);
+  }, []);
+
+  // settings (theme + shortcuts) are needed app-wide, not only in the modal
+  const ui = useSettingsStore((s) => s.settings.ui);
+  useEffect(() => {
+    void useSettingsStore.getState().load();
+  }, []);
+  const theme = (ui?.theme as ThemeMode | undefined) ?? 'system';
+  useEffect(() => applyTheme(theme), [theme]);
+
+  // keyboard shortcuts (configurable in 设置 → 快捷键; ignored while typing)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('.shortcut-capture')) return; // the settings dialog is recording a key
+      const combo = comboFromEvent(e);
+      if (!combo) return;
+      const map = resolveShortcuts(useSettingsStore.getState().settings.ui?.shortcuts);
+      // search replaces the browser's find, also while typing in a field
+      if (actionFor(combo, map) === 'search' && useDocStore.getState().activeId) {
+        e.preventDefault();
+        useViewStore.getState().setSearchOpen(true);
+        window.dispatchEvent(new Event('pdftr:focus-search'));
+        return;
+      }
+      if (isTypingTarget(e.target)) return;
+      const action = actionFor(combo, map);
+      if (!action) return;
+      e.preventDefault();
+      const view = useViewStore.getState();
+      switch (action) {
+        case 'prevPage':
+          requestPageNav(view.currentPage - 1);
+          break;
+        case 'nextPage':
+          requestPageNav(view.currentPage + 1);
+          break;
+        case 'toggleMode':
+          view.setMode(view.mode === 'page' ? 'flow' : 'page');
+          break;
+        case 'toggleEdit':
+          view.setEditMode(!view.editMode);
+          break;
+        case 'zoomIn':
+          view.zoomIn();
+          break;
+        case 'zoomOut':
+          view.zoomOut();
+          break;
+        case 'openSettings':
+          view.setSettingsOpen(true);
+          break;
+        case 'toggleTheme': {
+          const st = useSettingsStore.getState();
+          void st.save({ ui: { ...st.settings.ui, theme: nextTheme((st.settings.ui?.theme as ThemeMode) ?? 'system') } });
+          break;
+        }
+        default:
+          window.dispatchEvent(new CustomEvent(TOOLBAR_EVENT, { detail: action }));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [requestPageNav]);
+
+  // sync scroll between panes in both modes
+  useSyncScroll(leftRef, rightRef, !!activeId);
+  // 最近阅读位置
+  useReadingPosition(leftRef);
+
+  // job SSE: on done, refresh current page blocks
+  const lastProgressRefresh = useRef(0);
+  const refreshLoaded = () => {
+    const id = useDocStore.getState().activeId;
+    if (!id) return;
+    const loaded = Object.values(useTranslationStore.getState().pages)
+      .filter((pg) => pg.loaded)
+      .map((pg) => pg.pageNo);
+    for (const n of loaded) void refreshPage(id, n);
+  };
+  useJobEvents(job?.id ?? null, {
+    onProgress: () => {
+      // show translations as they arrive (throttled)
+      const now = Date.now();
+      if (now - lastProgressRefresh.current > 2500) {
+        lastProgressRefresh.current = now;
+        refreshLoaded();
+      }
+    },
+    onDone: (done) => {
+      useTranslationStore.getState().setFailedBlockIds((done.result?.failed_ids ?? []).map(String));
+      const id = useDocStore.getState().activeId;
+      if (id) {
+        // a job can touch every page: refresh all pages already loaded
+        const loaded = Object.values(useTranslationStore.getState().pages)
+          .filter((pg) => pg.loaded)
+          .map((pg) => pg.pageNo);
+        const { currentPage: p } = useViewStore.getState();
+        for (const n of loaded.length ? loaded : [p]) void refreshPage(id, n);
+      }
+    },
+    onError: (err) => {
+      useViewStore.getState().toast(`翻译任务失败：${err}`, 'error');
+    },
+  });
+
+  // resizable divider
+  const onDividerPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startPct = useViewStore.getState().leftPanePct;
+    const main = dividerRef.current?.parentElement;
+    const mainW = main?.clientWidth ?? window.innerWidth;
+    const onMove = (ev: PointerEvent) => {
+      const delta = ((ev.clientX - startX) / mainW) * 100;
+      setLeftPanePct(startPct + delta);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.classList.remove('resizing');
+    };
+    document.body.classList.add('resizing');
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [setLeftPanePct]);
+
+  return (
+    <UploadDropZone>
+      <div className="app">
+        <header className="topbar">
+          <DocumentTabs />
+        </header>
+
+        {backendStale && (
+          <div className="stale-banner" role="alert">
+            后台服务还是旧版本（{backendStale}），新功能（公式原样显示、页面背景、润色等）不可用。请关闭旧的服务窗口（黑色命令行窗口）后重新运行
+            run.bat。
+          </div>
+        )}
+        {job && activeId && <JobsProgressBanner docId={activeId} />}
+
+        <Toolbar />
+        <ProgressStrip />
+
+        <main className="main" aria-label="阅读区">
+          <SearchBar />
+          <div className="split">
+          <section className="pane pane-left" style={{ width: `${leftPanePct}%` }}>
+            <PdfPane
+              scrollRef={leftRef}
+              docId={activeId}
+            />
+          </section>
+          <div
+            ref={dividerRef}
+            className="split-divider"
+            role="separator"
+            aria-orientation="vertical"
+            onPointerDown={onDividerPointerDown}
+          />
+          <section className="pane pane-right">
+            {activeId ? (
+              mode === 'page' ? (
+                <PageAbsoluteView scrollRef={rightRef} docId={activeId} />
+              ) : (
+                <FlowTranslationPane scrollRef={rightRef} docId={activeId} />
+              )
+            ) : (
+              <div className="translation-pane pane-empty">
+                <div className="empty-hint">
+                  {documents.length > 0 ? '没有打开的文档' : '请先上传 PDF'}
+                  <div className="empty-sub">
+                    {documents.length > 0
+                      ? '从标签栏的「文档库」打开一个文档，或拖拽新的 PDF 到窗口'
+                      : '拖拽 PDF 到窗口，或点击标签栏 + 号选择文件'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+          </div>
+
+          <Sidebar docId={activeId} />
+        </main>
+
+        {/* hint bar */}
+        <footer className="statusbar">
+          <span>{editMode ? '编辑模式：点击译文即可修改' : '←/→ 翻页 · 拖拽分隔线调整布局'}</span>
+          <span>
+            第 {currentPage} 页
+            {mode === 'page' ? ' · 整页预览' : ' · 逐句对照'}
+          </span>
+        </footer>
+
+        <SettingsModal />
+        <SelectionToolbar />
+        <Toasts />
+      </div>
+    </UploadDropZone>
+  );
+}

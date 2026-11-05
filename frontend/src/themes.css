@@ -1,0 +1,531 @@
+/* =====================================================================
+   Interface styles. Each block re-defines the tokens from styles.css and
+   adds only its few signature rules. PDF pages stay paper-white in every
+   style (they are the document), except where the style is about paper.
+   #NN = adapted from github.com/joshhu/uitest
+   ===================================================================== */
+
+:root[data-scheme='dark'] {
+  color-scheme: dark;
+}
+
+/* ---------- 默认 · 暗色 ---------- */
+:root[data-theme='dark'] {
+  --bg: #17191e;
+  --panel: #1f2229;
+  --panel-2: #262a32;
+  --border: #363b46;
+  --border-soft: #2c3039;
+  --text: #e6e8ec;
+  --text-dim: #a6adba;
+  --text-faint: #7b8392;
+  --accent: #6d93ff;
+  --accent-hover: #86a6ff;
+  --accent-ink: #0d1222;
+  --danger: #f06a6a;
+  --ok: #4cc38a;
+  --pane-bg: #121418;
+  --btn-hover-bg: #2c313a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --page-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- #56 电子墨水 / 纸张 ----------
+   Black ink on warm paper, typography-first, thin ink rules, no shadows,
+   no colour, and no motion (e-ink panels don't animate). The PDF pages are
+   rendered greyscale on the same paper so the whole screen reads as one sheet. */
+:root[data-theme='eink'] {
+  --radius-sm: 0;
+  --paper: #f5f1eb;
+  --ink: #1a1a1a;
+  --bg: var(--paper);
+  --panel: var(--paper);
+  --panel-2: #ece6dc;
+  --border: var(--ink);
+  --border-soft: #cfc7b8;
+  --text: var(--ink);
+  --text-dim: #444444;
+  --text-faint: #666666;
+  --accent: var(--ink);
+  --accent-hover: #000000;
+  --accent-ink: var(--paper);
+  --accent-soft: rgba(26, 26, 26, 0.07);
+  --danger: #8f2424;
+  --ok: #2f5d3a;
+  --pane-bg: #ebe5da;
+  --page-shadow: 0 0 0 1px var(--ink);
+  --shadow: none;
+  --shadow-lg: none;
+  --radius: 0;
+  --radius-lg: 0;
+  --radius-btn: 0;
+  --btn-bg: transparent;
+  --btn-border: var(--ink);
+  --btn-hover-bg: var(--ink);
+  --btn-hover-border: var(--ink);
+  --btn-hover-text: var(--paper);
+  --btn-shadow: none;
+  --btn-press: none;
+  --focus: var(--ink);
+  --font-ui: 'Newsreader', Georgia, 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', SimSun, serif;
+  --font-read: var(--font-ui);
+  --font-num: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --ease: 0s;
+}
+
+:root[data-theme='eink'] *,
+:root[data-theme='eink'] *::before,
+:root[data-theme='eink'] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-theme='eink'] body::before {
+  /* faint paper grain */
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+:root[data-theme='eink'] ::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+:root[data-theme='eink'] .pdf-page,
+:root[data-theme='eink'] .abs-view .abs-page {
+  filter: grayscale(1) contrast(1.06);
+}
+
+:root[data-theme='eink'] .pdf-page::after,
+:root[data-theme='eink'] .abs-view .abs-page::after {
+  /* white page → paper, black ink stays black */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--paper);
+  mix-blend-mode: multiply;
+}
+
+:root[data-theme='eink'] .segmented {
+  background: transparent;
+  padding: 0;
+  gap: 0;
+}
+
+:root[data-theme='eink'] .seg-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+:root[data-theme='eink'] .seg-btn + .seg-btn {
+  border-left: 1px solid var(--ink);
+}
+
+:root[data-theme='eink'] .icon-btn.bordered:hover:not(:disabled),
+:root[data-theme='eink'] .zoom-label:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+:root[data-theme='eink'] .btn.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+:root[data-theme='eink'] .doc-tab.active {
+  border-color: var(--ink);
+}
+
+:root[data-theme='eink'] .topbar,
+:root[data-theme='eink'] .toolbar {
+  background: var(--paper);
+}
+
+:root[data-theme='eink'] .page-input,
+:root[data-theme='eink'] .lib-count {
+  background: transparent;
+  border-color: var(--border-soft);
+}
+
+:root[data-theme='eink'] .jobs-progress {
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+}
+
+:root[data-theme='eink'] .jobs-progress-fill {
+  border-radius: 0;
+}
+
+:root[data-theme='eink'] .flow-pair {
+  border-radius: 0;
+}
+
+:root[data-theme='eink'] .flow-sent-tgt,
+:root[data-theme='eink'] .flow-tgt {
+  font-size: 1.08em;
+  line-height: 1.7;
+}
+
+/* ---------- #50 瑞士现代主义 ----------
+   Objective grid, Helvetica-style sans, black rules, one signal red. */
+:root[data-theme='swiss'] {
+  --radius-sm: 0;
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f2f2f2;
+  --border: #000000;
+  --border-soft: #d9d9d9;
+  --text: #000000;
+  --text-dim: #4d4d4d;
+  --text-faint: #8c8c8c;
+  --accent: #e4002b;
+  --accent-hover: #b80022;
+  --accent-ink: #ffffff;
+  --pane-bg: #f2f2f2;
+  --page-shadow: 0 0 0 1px #000;
+  --shadow: none;
+  --shadow-lg: 0 0 0 1px #000, 8px 8px 0 rgba(0, 0, 0, 0.08);
+  --radius: 0;
+  --radius-lg: 0;
+  --radius-btn: 0;
+  --btn-border: #000;
+  --btn-hover-bg: #000;
+  --btn-hover-border: #000;
+  --btn-hover-text: #fff;
+  --btn-shadow: none;
+  --btn-press: none;
+  --focus: #e4002b;
+  --font-ui: 'Inter', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='swiss'] .topbar {
+  background: #000;
+  border-bottom: none;
+}
+
+:root[data-theme='swiss'] .doc-tab,
+:root[data-theme='swiss'] .doc-tabs .btn-ghost {
+  color: #bfbfbf;
+}
+
+:root[data-theme='swiss'] .doc-tabs .btn-ghost:hover,
+:root[data-theme='swiss'] .doc-tab:hover:not(.active) {
+  background: #1f1f1f;
+  color: #fff;
+}
+
+:root[data-theme='swiss'] .doc-tab.active {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+  font-weight: 700;
+}
+
+:root[data-theme='swiss'] .toolbar {
+  border-bottom: 3px solid #000;
+}
+
+:root[data-theme='swiss'] .btn,
+:root[data-theme='swiss'] .seg-btn {
+  font-weight: 600;
+}
+
+:root[data-theme='swiss'] .segmented {
+  padding: 0;
+  gap: 0;
+  background: #fff;
+}
+
+:root[data-theme='swiss'] .seg-btn.active {
+  background: #000;
+  color: #fff;
+  box-shadow: none;
+}
+
+:root[data-theme='swiss'] .icon-btn:hover:not(:disabled),
+:root[data-theme='swiss'] .zoom-label:hover {
+  background: #000;
+  color: #fff;
+}
+
+:root[data-theme='swiss'] .jobs-progress,
+:root[data-theme='swiss'] .jobs-progress-fill {
+  border-radius: 0;
+}
+
+/* ---------- #14 液态玻璃 ----------
+   Frosted translucent panels floating over a violet–pink gradient. */
+:root[data-theme='glass'] {
+  --radius-sm: 8px;
+  --bg: transparent;
+  --panel: rgba(255, 255, 255, 0.14);
+  --panel-2: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.32);
+  --border-soft: rgba(255, 255, 255, 0.18);
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.8);
+  --text-faint: rgba(255, 255, 255, 0.58);
+  --accent: #ffd2f7;
+  --accent-hover: #ffffff;
+  --accent-ink: #4a1d6b;
+  --accent-soft: rgba(255, 255, 255, 0.2);
+  --danger: #ffb4b4;
+  --ok: #b4ffd2;
+  --pane-bg: transparent;
+  --page-shadow: 0 22px 50px rgba(40, 0, 80, 0.35);
+  --shadow: 0 4px 16px rgba(40, 0, 80, 0.18);
+  --shadow-lg: 0 18px 48px rgba(40, 0, 80, 0.35);
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-btn: 999px;
+  --btn-bg: rgba(255, 255, 255, 0.16);
+  --btn-border: rgba(255, 255, 255, 0.3);
+  --btn-hover-bg: rgba(255, 255, 255, 0.28);
+  --btn-hover-border: rgba(255, 255, 255, 0.5);
+  --btn-shadow: none;
+  --focus: rgba(255, 255, 255, 0.7);
+  --font-ui: 'Inter', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='glass'] body {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) fixed;
+}
+
+:root[data-theme='glass'] .topbar,
+:root[data-theme='glass'] .toolbar,
+:root[data-theme='glass'] .sidebar,
+:root[data-theme='glass'] .jobs-banner,
+:root[data-theme='glass'] .flow-page,
+:root[data-theme='glass'] .statusbar {
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+
+:root[data-theme='glass'] .menu,
+:root[data-theme='glass'] .modal {
+  background: rgba(72, 40, 120, 0.72);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+}
+
+:root[data-theme='glass'] .btn-primary {
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.75), rgba(168, 85, 247, 0.75));
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+:root[data-theme='glass'] .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.95), rgba(168, 85, 247, 0.95));
+  color: #fff;
+}
+
+:root[data-theme='glass'] .split-caret {
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme='glass'] .seg-btn.active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+:root[data-theme='glass'] input,
+:root[data-theme='glass'] select,
+:root[data-theme='glass'] textarea {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+:root[data-theme='glass'] select option {
+  color: #222;
+}
+
+/* ---------- #07 OLED 深色 ----------
+   True black (pixels off), white type, one neon-green signal with a soft glow. */
+:root[data-theme='oled'] {
+  --bg: #000000;
+  --panel: #000000;
+  --panel-2: #121212;
+  --border: rgba(255, 255, 255, 0.16);
+  --border-soft: rgba(255, 255, 255, 0.09);
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.7);
+  --text-faint: rgba(255, 255, 255, 0.45);
+  --accent: #39ff14;
+  --accent-hover: #6aff4f;
+  --accent-ink: #000000;
+  --accent-soft: rgba(57, 255, 20, 0.12);
+  --danger: #ff5a5a;
+  --ok: #39ff14;
+  --pane-bg: #000000;
+  --page-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow: none;
+  --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 18px 40px rgba(0, 0, 0, 0.9);
+  --btn-bg: #121212;
+  --btn-border: rgba(255, 255, 255, 0.18);
+  --btn-hover-bg: #1c1c1c;
+  --btn-hover-border: rgba(255, 255, 255, 0.4);
+  --btn-shadow: none;
+  --font-ui: 'Inter', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='oled'] .btn-primary {
+  box-shadow: 0 0 18px rgba(57, 255, 20, 0.35);
+}
+
+:root[data-theme='oled'] .pdf-page,
+:root[data-theme='oled'] .abs-view .abs-page {
+  filter: brightness(0.9); /* less glare from the white page on a black screen */
+}
+
+:root[data-theme='oled'] .jobs-progress-fill {
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
+}
+
+/* ---------- #38 新粗野主义 ----------
+   Thick black outlines, hard offset shadows that "press in" on click. */
+:root[data-theme='brutal'] {
+  --radius-sm: 0;
+  --bg: #fff8e7;
+  --panel: #ffffff;
+  --panel-2: #fff8e7;
+  --border: #000000;
+  --border-soft: rgba(0, 0, 0, 0.3);
+  --text: #000000;
+  --text-dim: #1f1f1f;
+  --text-faint: #555555;
+  --accent: #ff6b6b;
+  --accent-hover: #ff4f4f;
+  --accent-ink: #000000;
+  --accent-soft: #ffe66d;
+  --pane-bg: #fff8e7;
+  --page-shadow: 0 0 0 2px #000, 6px 6px 0 2px #000;
+  --shadow: 3px 3px 0 #000;
+  --shadow-lg: 0 0 0 2px #000, 6px 6px 0 2px #000;
+  --radius: 0;
+  --radius-lg: 0;
+  --radius-btn: 0;
+  --bw: 2px;
+  --btn-bg: #ffffff;
+  --btn-border: #000000;
+  --btn-hover-bg: #a8e6cf;
+  --btn-hover-border: #000000;
+  --btn-shadow: 3px 3px 0 #000;
+  --btn-active-shadow: 0 0 0 #000;
+  --btn-press: translate(3px, 3px);
+  --focus: #000;
+  --font-ui: 'Space Grotesk', system-ui, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+:root[data-theme='brutal'] .btn,
+:root[data-theme='brutal'] .seg-btn {
+  font-weight: 700;
+}
+
+:root[data-theme='brutal'] .btn-primary {
+  background: #ffe66d;
+  border-color: #000;
+  color: #000;
+}
+
+:root[data-theme='brutal'] .btn-primary:hover:not(:disabled) {
+  background: #ffd93d;
+  border-color: #000;
+  color: #000;
+}
+
+:root[data-theme='brutal'] .split-caret {
+  border-left: 2px solid #000;
+}
+
+:root[data-theme='brutal'] .cluster {
+  box-shadow: 3px 3px 0 #000;
+}
+
+:root[data-theme='brutal'] .segmented {
+  background: #fff;
+  box-shadow: 3px 3px 0 #000;
+}
+
+:root[data-theme='brutal'] .seg-btn.active {
+  background: #ffe66d;
+  color: #000;
+  box-shadow: none;
+  outline: 2px solid #000;
+}
+
+:root[data-theme='brutal'] .doc-tab.active {
+  background: #ffe66d;
+}
+
+:root[data-theme='brutal'] .menu {
+  margin-top: 4px;
+}
+
+:root[data-theme='brutal'] .jobs-progress {
+  border: 2px solid #000;
+  border-radius: 0;
+  background: #fff;
+}
+
+:root[data-theme='brutal'] .jobs-progress-fill {
+  background: #4ecdc4;
+  border-radius: 0;
+}
+
+/* ---------- #42 有机自然 ----------
+   Rice paper, moss and sage; soft pills; a humanist sans with a garden serif for reading. */
+:root[data-theme='organic'] {
+  --radius-sm: 10px;
+  --bg: #f5f1e8;
+  --panel: #fbf8f1;
+  --panel-2: #efe8da;
+  --border: #e0d8c8;
+  --border-soft: #e8e0d0;
+  --text: #3e4a32;
+  --text-dim: #5d6b4d;
+  --text-faint: #8a9a7b;
+  --accent: #5d6b4d;
+  --accent-hover: #3e4a32;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(143, 188, 143, 0.22);
+  --danger: #b5543c;
+  --ok: #5d8a4d;
+  --pane-bg: #ece5d6;
+  --page-shadow: 0 8px 28px rgba(62, 74, 50, 0.14);
+  --shadow: 0 2px 8px rgba(62, 74, 50, 0.08);
+  --shadow-lg: 0 14px 36px rgba(62, 74, 50, 0.18);
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-btn: 999px;
+  --btn-bg: #fbf8f1;
+  --btn-border: #ddd3c0;
+  --btn-hover-bg: #efe8da;
+  --btn-hover-border: #c9bda6;
+  --btn-shadow: none;
+  --focus: rgba(93, 107, 77, 0.5);
+  --font-ui: 'Nunito', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-read: 'Cormorant Garamond', 'Songti SC', 'Noto Serif SC', SimSun, serif;
+}
+
+:root[data-theme='organic'] .flow-sent-tgt,
+:root[data-theme='organic'] .flow-tgt,
+:root[data-theme='organic'] .flow-src,
+:root[data-theme='organic'] .flow-sent-src {
+  font-size: 1.12em;
+}
+
+:root[data-theme='organic'] .seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+}

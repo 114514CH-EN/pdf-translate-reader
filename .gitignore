@@ -1,0 +1,29 @@
+# ---- 个人数据：文档、译文、笔记、数据库、备份、含 API Key 的配置 ----
+/data/
+
+# ---- 运行环境 / 依赖（可重新生成）----
+/.venv/
+venv/
+frontend/node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- 打包产物（build_exe.bat）----
+/build/
+/dist/
+*.spec
+
+# ---- 前端：只保留正式构建的 frontend/dist ----
+frontend/dist.new/
+frontend/.vite/
+
+# ---- 本地工具 / 系统文件 ----
+.playwright-cli/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
