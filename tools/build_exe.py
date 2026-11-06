@@ -79,6 +79,11 @@ def pack(target: Path) -> None:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):  # an English Windows console (cp1252) cannot print Chinese
+        try:
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass
     if "--pack-only" not in sys.argv:
         build()
     if "--zip" in sys.argv:
