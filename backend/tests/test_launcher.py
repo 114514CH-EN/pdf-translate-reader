@@ -51,7 +51,10 @@ def _setup(monkeypatch, tmp_path):
     monkeypatch.setattr(launcher, "SPARE_PORTS", range(port + 1, port + 20))
     monkeypatch.setattr(launcher, "_open", lambda p: None)
     monkeypatch.setattr(launcher, "_wait_closed", lambda p, s: not launcher._port_open(p) or _settle(p))
-    monkeypatch.setattr(launcher.os, "name", "posix")  # no taskkill in tests
+    # never look for or kill real processes in tests
+    monkeypatch.setattr(launcher, "_port_pids", lambda p: set())
+    monkeypatch.setattr(launcher, "_folder_pids", lambda b: set())
+    monkeypatch.setattr(launcher, "_kill", lambda pids: None)
     return port
 
 

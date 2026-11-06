@@ -110,6 +110,38 @@ def select_blocks(doc_id: int, scope: str, page_no: int | None, block_ids: list[
 
 PH_RE = re.compile(r"\{\{m\d+\}\}")
 
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff]")
+_PROSE_WORD = re.compile(r"\b[A-Za-z][a-z]{2,}\b")
+_EN_RUN = re.compile(r"(?:\b[A-Za-z][A-Za-z'’-]*\b[ ,;:]+){4,}\b[A-Za-z][A-Za-z'’-]*\b")
+_NOISE = re.compile(r"\{\{m\d+\}\}|https?://\S+|\S+@\S+|`[^`]*`")
+
+
+def _is_cjk_target(lang: str) -> bool:
+    return (lang or "").lower().startswith(("zh", "ja", "ko"))
+
+
+def left_in_english(src: str, tgt: str, lang: str) -> bool:
+    """A translation into Chinese/Japanese/Korean that kept (part of) the English.
+
+    True when the source is prose but the result has no CJK at all, or when it
+    still carries a run of 5+ English words copied from the source (a sentence
+    the model skipped). Names, formulas, URLs and short terms do not count.
+    """
+    if not _is_cjk_target(lang) or not tgt:
+        return False
+    s = _NOISE.sub(" ", src)
+    t = _NOISE.sub(" ", tgt)
+    if len(_PROSE_WORD.findall(s)) < 3:
+        return False
+    if not _CJK.search(t):
+        return True
+    low = " ".join(s.lower().split())
+    for m in _EN_RUN.finditer(t):
+        run = " ".join(m.group(0).lower().split()).strip(" ,;:")
+        if len(_PROSE_WORD.findall(run)) >= 4 and run in low:
+            return True
+    return False
+
 
 def repair_placeholders(text: str, expected: list[str]) -> str:
     """Drop invented formula placeholders and re-append any the model dropped."""
@@ -183,8 +215,9 @@ def plan_blocks(doc_id: int, scope: str, params: dict, target_lang: str, model: 
             done_count += 1  # code parts unchanged: any model is fine for the comments
         elif b["type"] == "code":
             todo.append(b)  # an old paragraph-style translation of a listing is redone
-        elif not force and b["translation"] and b["cache_key"] == cache_key(b["text"], target_lang, model, glossary_rev):
-            done_count += 1
+        elif not force and b["translation"] and b["cache_key"] == cache_key(b["text"], target_lang, model, glossary_rev) \
+                and not left_in_english(b["src"], b["translation"], target_lang):
+            done_count += 1  # (a translation that kept English is done again)
         else:
             todo.append(b)
     return blocks, todo, done_count
@@ -333,6 +366,28 @@ async def _translate_batch(
             content = await chat_completion(cfg, messages, temperature=0.0)
         parsed = prompts.parse_translation_items(content, ids)
 
+    # items the model (partly) left in English get one more, explicit try
+    stale = [b for b in batch if b["type"] != "code" and _item_left_english(b, parsed.get(b["id"]), target_lang)]
+    if stale:
+        names = ", ".join(str(b["id"]) for b in stale)
+        messages.append({"role": "assistant", "content": content})
+        messages.append({"role": "user", "content": (
+            f"Blocks {names} still contain untranslated English. Translate them COMPLETELY into "
+            f"{prompts.TARGET_NAMES.get(target_lang, target_lang)} — every sentence, including short trailing "
+            "phrases — keeping placeholders, numbers and code as they are. Reply with the same JSON format, "
+            "containing only these ids."
+        )})
+        try:
+            async with SEM:
+                again = await chat_completion(cfg, messages, json_mode=False, temperature=0.1)
+            fixed = prompts.parse_translation_items(again, [b["id"] for b in stale])
+            for b in stale:
+                item = fixed.get(b["id"])
+                if item and not _item_left_english(b, item, target_lang):
+                    parsed[b["id"]] = item
+        except Exception:
+            pass  # keep the first answer
+
     out: dict[int, tuple[str, list[tuple[str, str]] | None]] = {}
     for b in batch:
         item = parsed.get(b["id"])
@@ -360,6 +415,19 @@ async def _translate_batch(
             pairs = [(b["single_unit"], text.strip())] if b.get("single_unit") else None
             out[b["id"]] = (text, pairs)
     return out
+
+
+def _item_left_english(b: dict, item: dict | None, lang: str) -> bool:
+    if not item:
+        return False
+    sents = item.get("sentences")
+    units = b.get("units")
+    if sents and units and len(sents) == len(units):
+        return any(left_in_english(u, str(x), lang) for u, x in zip(units, sents))
+    text = item.get("translation")
+    if text is None and sents:
+        text = " ".join(str(x) for x in sents)
+    return left_in_english(b["src"], text or "", lang)
 
 
 def store_sentences(db, block_id: int, pairs: list[tuple[str, str]] | None) -> None:

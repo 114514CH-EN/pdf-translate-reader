@@ -236,6 +236,13 @@
 - 关闭方式：关掉命令行窗口、Ctrl+C，或「设置 → 数据与安全 → 退出程序」（页面会变成「已退出」提示）
 - `APP_VERSION` → `2026.11.05-15`；新增 `tests/test_launcher.py`（5 项：关不掉的旧版 → 备用端口、听话的旧版 → 原端口、备用端口上的同版本复用、空闲端口、关闭接口要请求头）——共 **56 passed**
 
+### M21 表格整格翻译 + 漏翻补翻 + Windows exe + v1.1.0（2026-11-06）✅
+- **评分表残留英文**：Word 表格里「一格好几行」的格子，find_tables 把每一行文字当成一行（Lab 1 的评分表 15 行）——逐行翻译出碎片、小字，最后一行还掉到表外没翻。`_merge_wrapped_rows`：同一对横线之间、被竖线围住、而且文字一行接一行续写（下一行小写开头或上一行没句号）的行合并成一格，格子撑满两条横线之间。一行一条记录的数据表、没有竖线的 booktabs 表不受影响（`_page_rules` 合并 Word 每格单独画的边框线段）。`EXTRACT_VER` → 16
+- **漏翻补翻**：目标语言是中/日/韩时，`left_in_english()` 判断译文完全没有 CJK、或带着原文里连续 5 个以上英文词 → 同一对话里请模型只把这些块重翻一次；人名、函数名、短术语、公式、网址不算。已有的「留着英文」的译文（未手动编辑），再点「翻译全文」会被重翻
+- **Windows exe**：`tools/build_exe.py`（PyInstaller onedir，图标 `assets/app.ico` 由小页 SVG 生成）→ `dist\PDFTranslate\PDFTranslate.exe` + `PDFTranslate-Pet.exe`（同一个程序，文件名以 `-Pet` 结尾进入桌宠版）+ 使用说明.txt；`build_exe.bat` 改为调用它；启动器设置控制台标题、输出防编码错误、exe 启动出错时停住窗口显示错误
+- **发布流程**：`release.yml` 新增 `windows-app` 任务（windows-latest）：装依赖 → 跑测试（只报告）→ 打包 → 启动 exe 冒烟测试（health、/pet、退出接口）→ 打 zip 上传到 Release。在本机用干净虚拟环境验证过打包产物（Linux 版）：页面、桌宠页、上传提取、退出、data 放在程序旁边都正常
+- `APP_VERSION` → `2026.11.06-1`，`VERSION` → 1.1.0；新增 `tests/test_tables_and_leftovers.py`（3 项）——共 **59 passed**
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

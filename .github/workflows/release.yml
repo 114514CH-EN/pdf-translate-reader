@@ -1,5 +1,6 @@
-# Publishes a GitHub Release when VERSION changes: builds the download zip
-# (git archive, includes the prebuilt frontend/dist) and attaches it.
+# Publishes a GitHub Release when VERSION changes and attaches
+#   pdf-translate-reader-vX.zip          the source (git archive, includes the prebuilt frontend/dist)
+#   PDFTranslate-vX-windows.zip          the Windows app (PyInstaller on windows-latest, no Python needed)
 # Release notes come from .github/release-notes/v<VERSION>.md; editing that file
 # later refreshes the notes of the existing release.
 name: Release
@@ -19,6 +20,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      created: ${{ steps.check.outputs.exists != 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,7 +48,7 @@ jobs:
           TAG: ${{ steps.v.outputs.tag }}
         run: gh release edit "$TAG" --notes-file ".github/release-notes/$TAG.md"
 
-      - name: Build the download zip
+      - name: Build the source zip
         if: steps.check.outputs.exists != 'true'
         run: |
           git archive --format=zip --prefix=pdf-translate-reader/ \
@@ -61,3 +65,54 @@ jobs:
             --title "$TAG · PDF 双语翻译阅读器" \
             --notes-file ".github/release-notes/$TAG.md" \
             --latest
+
+  windows-app:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt pyinstaller
+
+      - name: Run the tests
+        continue-on-error: true  # reported, but a Windows-only test quirk must not block the download
+        working-directory: backend
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tests
+
+      - name: Build PDFTranslate.exe
+        run: python tools/build_exe.py
+
+      - name: Smoke test the exe
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\PDFTranslate\PDFTranslate.exe -ArgumentList '--no-browser' -PassThru
+          $h = $null
+          for ($i = 0; $i -lt 90 -and -not $h; $i++) {
+            try { $h = Invoke-RestMethod http://127.0.0.1:8765/api/health } catch { Start-Sleep 1 }
+          }
+          if (-not $h.ok) { throw "PDFTranslate.exe did not start" }
+          Write-Host "running $($h.version)"
+          $page = Invoke-WebRequest http://127.0.0.1:8765/pet -UseBasicParsing
+          if ($page.StatusCode -ne 200) { throw "pet page missing" }
+          Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/shutdown -Headers @{ 'X-PDFTR-Shutdown' = '1' } | Out-Null
+          $p.WaitForExit(15000) | Out-Null
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; throw "exe did not exit" }
+
+      - name: Pack and upload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          # the smoke test created dist\PDFTranslate\data — never ship it
+          Remove-Item -Recurse -Force dist\PDFTranslate\data -ErrorAction SilentlyContinue
+          $zip = "PDFTranslate-$env:TAG-windows.zip"
+          python tools/build_exe.py --pack-only --zip $zip
+          gh release upload $env:TAG $zip --clobber

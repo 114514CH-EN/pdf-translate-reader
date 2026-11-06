@@ -1,6 +1,6 @@
 # PDF Bilingual Translation Reader
 
-[简体中文](README.md) | **English** · [Homepage](https://114514ch-en.github.io/pdf-translate-reader/) · [Download v1.0.0](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest)
+[简体中文](README.md) | **English** · [Homepage](https://114514ch-en.github.io/pdf-translate-reader/) · [Download for Windows](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest)
 
 A local PDF reader and translator: the original on the left, a translation laid out like the original on the right, with both panes scrolling together. Formulas, tables and images are kept as they are, which makes it suited to English papers, lab handouts and textbooks.
 
@@ -49,24 +49,31 @@ The interface is in Chinese, and the default translation direction is English �
 
 ## Quick start (Windows)
 
-Requires **Python 3.10+**. The repository includes the built frontend, so **Node.js is not needed**.
+### Option 1: download the exe (recommended, nothing to install)
 
-1. Download the zip from [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest) and extract it (or clone this repository)
-2. Double-click `run.bat`. The first run creates a virtual environment, installs the dependencies and opens `http://127.0.0.1:8765` in your browser
+1. From [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest), download **`PDFTranslate-vX.Y.Z-windows.zip`** and extract it anywhere
+2. Double-click **`PDFTranslate.exe`**; your browser opens `http://127.0.0.1:8765`. **`PDFTranslate-Pet.exe`** starts the desktop pet edition
 3. Open ⚙ Settings:
    - **翻译 (Translation)**: choose a provider, enter the API key, click "拉取模型列表" (fetch models) to pick a model, then "保存并测试" (save and test)
    - **阅读助手 (Reading assistant)**: configured separately (click "复制翻译 API 的配置" to start from the translation settings)
 4. Drop a PDF into the window and click "翻译全文" (translate all). No document at hand? Try the sample [`docs/demo/fourier-guide.pdf`](docs/demo/fourier-guide.pdf)
 
+Documents, translations and settings are stored in the `data\` folder next to the exe. To upgrade, download the new version and copy the old `data\` folder into it.
+
 > With DeepSeek V4, thinking mode is turned off automatically for translation (faster and cheaper). For the reading assistant you can choose in Settings.
 
-### Desktop pet edition
+### Option 2: run from source
 
-Double-click `run_pet.bat`, which opens `http://127.0.0.1:8765/pet`. Both editions share the same backend and the same `data/` folder, so you can switch between them at any time.
+Requires **Python 3.10+**. The repository includes the built frontend, so **Node.js is not needed**. Download the source zip (or clone this repository) and double-click `run.bat`; for the pet edition double-click `run_pet.bat` (opens `http://127.0.0.1:8765/pet`). The first run creates a virtual environment and installs the dependencies. Both editions share the same backend and the same `data/` folder.
 
-### Build an exe
+### Starting and closing
 
-Run `build_exe.bat` (needs Python and Node.js). It produces `dist\PDFTranslate\PDFTranslate.exe`, and the whole folder can be copied elsewhere. Start it with `--pet` for the desktop pet edition.
+- To close it: close the console window, press Ctrl+C, or click "退出程序" (quit) in Settings → 数据与安全 (Data & security)
+- If an older version is still running when you start it, it is asked to quit first; if it cannot be stopped (for example it runs in another sandbox), the app starts on the next free port from 8766 instead
+
+### Build the exe yourself
+
+Run `build_exe.bat` (needs Python). It produces `dist\PDFTranslate\` with `PDFTranslate.exe` and `PDFTranslate-Pet.exe`; the whole folder can be copied elsewhere. Releases are built automatically on Windows by GitHub, see `.github/workflows/release.yml`.
 
 ## Where data is stored
 

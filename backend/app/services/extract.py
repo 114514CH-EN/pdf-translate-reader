@@ -214,7 +214,148 @@ def _normalize_table(tbl, words: list[tuple]) -> tuple[int, int, list[dict]]:
     return len(grid_rows), n_cols, out
 
 
-EXTRACT_VER = 15  # v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+def _page_rules(page: fitz.Page) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+    """Horizontal (y, x0, x1) and vertical (x, y0, y1) rules drawn on the page.
+
+    Collinear pieces (Word draws a border per cell) are joined into one rule.
+    """
+    hs: list[tuple[float, float, float]] = []
+    vs: list[tuple[float, float, float]] = []
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        return [], []
+    for dr in drawings:
+        for it in dr.get("items", []):
+            if it[0] == "l":
+                a, b = it[1], it[2]
+                if abs(a.y - b.y) < 0.8:
+                    hs.append(((a.y + b.y) / 2, min(a.x, b.x), max(a.x, b.x)))
+                elif abs(a.x - b.x) < 0.8:
+                    vs.append(((a.x + b.x) / 2, min(a.y, b.y), max(a.y, b.y)))
+            elif it[0] == "re":
+                r = it[1]
+                if r.height < 2.0 and r.width > 2.0:
+                    hs.append(((r.y0 + r.y1) / 2, r.x0, r.x1))
+                elif r.width < 2.0 and r.height > 2.0:
+                    vs.append(((r.x0 + r.x1) / 2, r.y0, r.y1))
+
+    def join(segs: list[tuple[float, float, float]]) -> list[tuple[float, float, float]]:
+        out: list[list[float]] = []
+        for pos, a, b in sorted(segs, key=lambda t: (round(t[0] * 2) / 2, t[1])):
+            last = out[-1] if out else None
+            if last and abs(last[0] - pos) < 0.8 and a <= last[2] + 2.0:
+                last[2] = max(last[2], b)
+            else:
+                out.append([pos, a, b])
+        return [(o[0], o[1], o[2]) for o in out]
+
+    return join(hs), join(vs)
+
+
+_SENTENCE_END = re.compile(r"[.:;!?。：；！？)\]]\s*$")
+
+
+def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: list[tuple]) -> tuple[int, list[dict]]:
+    """Rejoin table rows that are really the wrapped lines of tall cells.
+
+    Without rules between them, ``find_tables`` turns every text line of a
+    tall Word cell ("Adequate / understanding of / the problem. / …") into a
+    row of its own; translated line by line, the fragments come out broken,
+    shrunk, or left in English. Rows are joined when they sit between the same
+    two horizontal rules, the band is boxed by vertical rules, and the column
+    text clearly runs on from line to line. Data tables with one record per
+    line (no continuation) and booktabs tables (no vertical rules) are left alone.
+    """
+    hs, vs = rules
+    if n_rows < 3 or not hs or not vs:
+        return n_rows, cells
+    tx0 = min(c["bbox"][0] for c in cells)
+    tx1 = max(c["bbox"][2] for c in cells)
+    ty0 = min(c["bbox"][1] for c in cells)
+    ty1 = max(c["bbox"][3] for c in cells)
+    width = tx1 - tx0
+    ys = sorted({round(y, 1) for y, a, b in hs
+                 if ty0 - 40 <= y <= ty1 + 40 and min(b, tx1) - max(a, tx0) >= 0.6 * width})
+    if len(ys) < 2:
+        return n_rows, cells
+    rows: dict[int, list[dict]] = {}
+    for c in cells:
+        rows.setdefault(c["row"], []).append(c)
+    row_y = {r: (min(c["bbox"][1] for c in cs) + max(c["bbox"][3] for c in cs)) / 2 for r, cs in rows.items()}
+
+    def band_of(y: float) -> int | None:
+        for k in range(len(ys) - 1):
+            if ys[k] - 0.5 <= y <= ys[k + 1] + 0.5:
+                return k
+        return None
+
+    bands: dict[int, list[int]] = {}
+    for r in sorted(rows):
+        k = band_of(row_y[r])
+        bands.setdefault(k if k is not None else -1 - r, []).append(r)
+
+    def boxed(k: int) -> bool:
+        y0, y1 = ys[k], ys[k + 1]
+        h = y1 - y0
+        inner = [x for x, a, b in vs if tx0 + 4 < x < tx1 - 4 and min(b, y1) - max(a, y0) >= 0.9 * h]
+        return len(inner) >= 1
+
+    def runs_on(rs: list[int]) -> bool:
+        cont = total = 0
+        for a, b in zip(rs, rs[1:]):
+            by_col_a = {c["col"]: c.get("text", "") for c in rows[a]}
+            for c in rows[b]:
+                prev, nxt = (by_col_a.get(c["col"]) or "").strip(), (c.get("text") or "").strip()
+                if not prev or not nxt:
+                    continue
+                total += 1
+                if nxt[:1].islower() or not _SENTENCE_END.search(prev):
+                    cont += 1
+        return total >= 3 and cont >= 0.6 * total
+
+    for c in cells:  # text is needed to judge continuity
+        if "text" not in c:
+            c["text"] = _words_in_bbox(words, c["bbox"])
+    merge = {k for k, rs in bands.items() if k >= 0 and len(rs) >= 2 and boxed(k) and runs_on(rs)}
+    if not merge:
+        return n_rows, cells
+
+    out: list[dict] = []
+    new_row = 0
+    for k in sorted(bands, key=lambda k: min(row_y[r] for r in bands[k])):
+        rs = bands[k]
+        if k not in merge:
+            for r in rs:
+                for c in rows[r]:
+                    out.append({**c, "row": new_row})
+                new_row += 1
+            continue
+        cols: dict[int, dict] = {}
+        for r in rs:
+            for c in rows[r]:
+                cur = cols.get(c["col"])
+                if cur is None:
+                    cols[c["col"]] = {k2: v for k2, v in c.items() if k2 != "text"}
+                else:
+                    b0, b1 = cur["bbox"], c["bbox"]
+                    cur["bbox"] = [min(b0[0], b1[0]), b0[1], max(b0[2], b1[2]), b0[3]]
+                    if c.get("colspan", 1) > cur.get("colspan", 1):
+                        cur["colspan"] = c["colspan"]
+        for col in sorted(cols):
+            c = cols[col]
+            bb = c["bbox"]
+            # the cell is the whole band between the two rules (inside the border)
+            c["bbox"] = [bb[0], ys[k] + 0.5, bb[2], ys[k + 1] - 0.5]
+            c["row"] = new_row
+            out.append(c)
+        new_row += 1
+    for c in out:
+        c.pop("text", None)
+    return new_row, out
+
+
+EXTRACT_VER = 16  # v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -639,9 +780,11 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
         # with pymupdf_layout installed, runs an ONNX model) — only call it on
         # pages that can contain a table at all
         finder = page.find_tables() if (_has_ruling(page) or _has_columns(raw_blocks)) else None
+        rules = _page_rules(page) if finder and finder.tables else ([], [])
         for tbl in (finder.tables if finder else []):
             try:
                 n_rows, n_cols, cells = _normalize_table(tbl, words)
+                n_rows, cells = _merge_wrapped_rows(cells, n_rows, rules, words)
             except Exception:
                 n_rows, n_cols, cells = 0, 0, []
             if not cells:
@@ -678,7 +821,11 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 continue
             tables.append(
                 {
-                    "bbox": list(tbl.bbox),
+                    # merged rows can reach past what find_tables saw (the last wrapped line)
+                    "bbox": [min(tbl.bbox[0], min(c["bbox"][0] for c in cells)),
+                             min(tbl.bbox[1], min(c["bbox"][1] for c in cells)),
+                             max(tbl.bbox[2], max(c["bbox"][2] for c in cells)),
+                             max(tbl.bbox[3], max(c["bbox"][3] for c in cells))],
                     "n_rows": n_rows,
                     "n_cols": n_cols,
                     "cells": cells,

@@ -30,8 +30,10 @@ HOST, DEFAULT_PORT = "127.0.0.1", 8765
 SPARE_PORTS = range(DEFAULT_PORT + 1, DEFAULT_PORT + 20)
 
 # --pet opens the desktop-pet build (/pet) instead of the classic reader (/).
-# One server, one data folder, two interfaces.
-PET = "--pet" in sys.argv
+# One server, one data folder, two interfaces. The packaged app ships the same
+# exe twice; the copy named PDFTranslate-Pet.exe starts the pet build.
+FROZEN = bool(getattr(sys, "frozen", False))
+PET = "--pet" in sys.argv or (FROZEN and Path(sys.executable).stem.lower().endswith("-pet"))
 PATH = "/pet" if PET else ""
 
 
@@ -65,7 +67,7 @@ def _wait_closed(port: int, seconds: float) -> bool:
 
 
 def _ask_to_quit(port: int) -> bool:
-    """Versions from 2026.11.05-15 on stop themselves when asked."""
+    """Versions from 2026.11.05-15 on (v1.1.0) stop themselves when asked."""
     req = urllib.request.Request(_url(port) + "/api/shutdown", data=b"", method="POST",
                                  headers={"X-PDFTR-Shutdown": "1"})
     try:
@@ -222,7 +224,40 @@ def _pick_port(version: str, base: Path, data_dir: Path) -> int | None:
     return port
 
 
+def _console_title() -> None:
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleTitleW(f"PDF 双语翻译阅读器{'（桌宠版）' if PET else ''}")
+        except Exception:
+            pass
+
+
+def _pause_on_crash() -> None:
+    """The packaged exe has no run.bat around it: keep the window open on an error."""
+    if FROZEN:
+        import traceback
+
+        traceback.print_exc()
+        try:
+            input("启动失败，请把上面的错误信息截图发给开发者。按回车退出")
+        except Exception:
+            pass
+
+
+def _safe_output() -> None:
+    """Chinese messages must not crash an English Windows console or a redirected log."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+
 def main() -> None:
+    _safe_output()
+    _console_title()
     from backend.app.config import APP_VERSION, BASE_DIR, DATA_DIR
 
     port = _pick_port(APP_VERSION, Path(BASE_DIR), Path(DATA_DIR))
@@ -249,4 +284,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:
+        _pause_on_crash()
+        raise

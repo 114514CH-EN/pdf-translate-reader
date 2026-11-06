@@ -1,6 +1,6 @@
 # PDF 双语翻译阅读器
 
-**简体中文** | [English](README.en.md) · [项目主页](https://114514ch-en.github.io/pdf-translate-reader/) · [下载 v1.0.0](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest)
+**简体中文** | [English](README.en.md) · [项目主页](https://114514ch-en.github.io/pdf-translate-reader/) · [下载 Windows 版](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest)
 
 本地运行的 PDF 双语阅读与翻译工具：左边原文、右边保持原版式的译文，两栏同步滚动。公式、表格、图片按原样保留，适合读英文论文、实验手册和教材。
 
@@ -47,24 +47,31 @@
 
 ## 快速开始（Windows）
 
-需要 **Python 3.10+**。仓库里已包含构建好的前端，**不需要 Node.js**。
+### 方式一：下载 exe（推荐，不用装任何东西）
 
-1. 从 [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest) 下载 zip 解压（或克隆本仓库）
-2. 双击 `run.bat`：第一次运行会自动创建虚拟环境并安装依赖，然后打开浏览器 `http://127.0.0.1:8765`
+1. 从 [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest) 下载 **`PDFTranslate-vX.Y.Z-windows.zip`**，解压到任意位置
+2. 双击 **`PDFTranslate.exe`**：浏览器会自动打开 `http://127.0.0.1:8765`；双击 **`PDFTranslate-Pet.exe`** 是桌宠版
 3. 打开 ⚙ 设置：
    - **翻译**：选服务商、填 API Key、点「拉取模型列表」选模型，「保存并测试」
    - **阅读助手**：单独配置（可以点「复制翻译 API 的配置」作为起点）
 4. 把 PDF 拖进窗口，点「翻译全文」。手边没有文档的话，可以先用仓库里的示例 [`docs/demo/fourier-guide.pdf`](docs/demo/fourier-guide.pdf) 试试
 
+文档、译文和设置都存在 exe 旁边的 `data\` 文件夹里。升级时下载新版本，把旧文件夹里的 `data\` 复制过去即可。
+
 > 使用 DeepSeek V4 时，翻译会自动关闭思考模式（更快、更省）。阅读助手可在设置里选择是否开启。
 
-### 桌宠版
+### 方式二：从源码运行
 
-双击 `run_pet.bat`，打开 `http://127.0.0.1:8765/pet`。两个版本共用同一个后端和同一份 `data/`，可以随时切换。
+需要 **Python 3.10+**。仓库里已包含构建好的前端，**不需要 Node.js**。下载源码 zip（或克隆本仓库）后双击 `run.bat`；桌宠版双击 `run_pet.bat`（打开 `http://127.0.0.1:8765/pet`）。第一次运行会自动创建虚拟环境并安装依赖。两个版本共用同一个后端和同一份 `data/`，可以随时切换。
 
-### 打包成 exe
+### 启动和关闭
 
-运行 `build_exe.bat`（需要 Python 和 Node.js），生成 `dist\PDFTranslate\PDFTranslate.exe`，整个文件夹可以复制到别处使用；加 `--pet` 参数启动桌宠版。
+- 关闭：关掉命令行窗口、按 Ctrl+C，或在「设置 → 数据与安全」里点「退出程序」
+- 再次启动时如果旧版本还在运行，会先请它退出；实在关不掉（例如它在别的沙箱里），会自动改用 8766 起的空闲端口启动
+
+### 自己打包 exe
+
+运行 `build_exe.bat`（需要 Python），生成 `dist\PDFTranslate\`（含 `PDFTranslate.exe` 和 `PDFTranslate-Pet.exe`），整个文件夹可以复制到别处使用。发布新版本时 GitHub 会在 Windows 上自动打包，见 `.github/workflows/release.yml`。
 
 ## 数据存放
 
