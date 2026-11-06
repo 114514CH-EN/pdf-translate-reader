@@ -8,6 +8,7 @@ import pymupdf as fitz
 
 from ..db import get_db
 from .export_common import MathImages, block_html, font_archive, math_body, parse_md_table
+from .page_assets import inline_math_rects, remove_math_line_art
 
 
 def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
@@ -53,6 +54,12 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             else:
                 page.add_redact_annot(bbox, fill=False, cross_out=False)
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE, graphics=fitz.PDF_REDACT_LINE_ART_NONE)
+        # fraction bars of inline math would stay at the old place, across the translation
+        try:
+            remove_math_line_art(page, inline_math_rects(
+                [{"type": r["type"], "meta": json.loads(r["meta_json"] or "{}")} for r in rows]))
+        except Exception:
+            pass
         # Math fonts (e.g. Cambria Math) report glyph boxes several lines tall, so the
         # redactions above can delete glyphs of neighbouring formulas / untranslated
         # text. Every region that must stay original is therefore cleared and then

@@ -178,6 +178,7 @@ def reextract_document(doc_id: int) -> int:
         old_notes = db.execute(
             "SELECT id, block_id FROM notes WHERE doc_id=? AND block_id IS NOT NULL", (doc_id,)
         ).fetchall()
+        old_runs = _page_runs(db, doc_id)
 
         _extract_document(doc_id, Path(row["file_path"]), db)
 
@@ -326,8 +327,65 @@ def reextract_document(doc_id: int) -> int:
         for n in old_notes:
             nb = remap.get(n["block_id"]) or remap_notes.get(n["block_id"])
             db.execute("UPDATE notes SET block_id=? WHERE id=?", (nb, n["id"]))
+        _renumber_placeholders(db, doc_id, old_runs, _page_runs(db, doc_id))
         _fix_absorbed_brackets(db, doc_id)
     return kept
+
+
+def _page_runs(db, doc_id: int) -> dict[int, list[dict]]:
+    """page_no → math runs of the stored extraction."""
+    out: dict[int, list[dict]] = {}
+    for pg in db.execute("SELECT page_no, extract_json FROM pages WHERE doc_id=?", (doc_id,)):
+        try:
+            out[pg["page_no"]] = json.loads(pg["extract_json"] or "{}").get("math_runs", []) or []
+        except Exception:
+            out[pg["page_no"]] = []
+    return out
+
+
+def _run_map(old: list[dict], new: list[dict]) -> dict[str, str]:
+    """Old formula id → the new formula at the same place (several old pieces of
+    one formula can now be one run)."""
+    out: dict[str, str] = {}
+    for o in old:
+        ob = o.get("bbox") or [0, 0, 0, 0]
+        cx, cy = (ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2
+        best = None
+        for n in new:
+            nb = n.get("bbox") or [0, 0, 0, 0]
+            if nb[0] - 1 <= cx <= nb[2] + 1 and nb[1] - 1 <= cy <= nb[3] + 1:
+                area = (nb[2] - nb[0]) * (nb[3] - nb[1])
+                if best is None or area < best[0]:
+                    best = (area, n["id"])
+        if best:
+            out[o["id"]] = best[1]
+    return out
+
+
+def _renumber_placeholders(db, doc_id: int, old_runs: dict, new_runs: dict) -> None:
+    """Kept translations still name the formulas by their old ids ({{m18}}); the new
+    extraction may number them differently (pieces of a fraction merged into one)."""
+    maps = {pg: _run_map(old_runs.get(pg, []), runs) for pg, runs in new_runs.items()}
+    if all(all(k == v for k, v in m.items()) and len(m) == len(old_runs.get(pg, [])) for pg, m in maps.items()):
+        return
+    rows = db.execute(
+        "SELECT t.id, t.text, b.page_no FROM translations t JOIN blocks b ON b.id=t.block_id"
+        " WHERE b.doc_id=? AND t.text LIKE '%{{m%'", (doc_id,)
+    ).fetchall()
+    for r in rows:
+        m = maps.get(r["page_no"], {})
+        seen: set[str] = set()
+
+        def sub(mt):
+            rid = m.get(mt.group(1), mt.group(1))
+            if rid in seen:
+                return ""  # a later piece of a formula that is now one picture
+            seen.add(rid)
+            return "{{" + rid + "}}"
+
+        new = re.sub(r"\{\{(m\d+)\}\}", sub, r["text"])
+        if new != r["text"]:
+            db.execute("UPDATE translations SET text=? WHERE id=?", (new, r["id"]))
 
 
 def _fix_absorbed_brackets(db, doc_id: int) -> None:
@@ -350,6 +408,8 @@ def _fix_absorbed_brackets(db, doc_id: int) -> None:
         new = r["text"]
         for rid in set(re.findall(r"\{\{(m\d+)\}\}", new)):
             t = texts.get(rid, "").strip()
+            if not t:
+                continue  # a placeholder of a run that no longer exists ("" is in every string)
             ph = "{{" + rid + "}}"
             if t[-1:] in ")]}|" and ph + t[-1] in new:
                 new = new.replace(ph + t[-1], ph)

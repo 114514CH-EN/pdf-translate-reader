@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pymupdf as fitz
 
-ASSET_VER = 2
+ASSET_VER = 3  # v3: fraction bars of inline math removed from the background
 BG_SCALE = 2.0  # background raster = 2x PDF pt (crisp up to ~200% zoom)
 ORIG_SCALE = 3.0  # full original render (with text): crops for untranslated blocks / formulas
 FIG_DPI = 144
@@ -239,6 +239,40 @@ def text_free_page(pdf: fitz.Document, page_no: int) -> fitz.Page:
     return page
 
 
+def remove_math_line_art(page: fitz.Page, rects) -> None:
+    """Delete vector art lying inside inline-math boxes (fraction bars, roots, brackets).
+
+    Inline formulas in translated text are shown as crops of the original page,
+    placed where they fall in the translated line. The bars of a stacked fraction
+    are line art, not text, so redacting the text leaves them on the page at the
+    old position, where they cross the translated text. Only art fully inside a box
+    goes; table rules or frames that merely touch it stay.
+    """
+    rects = [fitz.Rect(r) + (-1, -1, 1, 1) for r in rects or []]
+    rects = [r for r in rects if not r.is_empty]
+    if not rects:
+        return
+    for r in rects:
+        page.add_redact_annot(r, fill=False, cross_out=False)
+    page.apply_redactions(
+        images=fitz.PDF_REDACT_IMAGE_NONE,
+        graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
+        text=fitz.PDF_REDACT_TEXT_NONE,
+    )
+
+
+def inline_math_rects(blocks: list[dict]) -> list[list[float]]:
+    """Boxes of inline math in text blocks (``meta`` dicts with ``math`` runs)."""
+    out = []
+    for b in blocks:
+        if b.get("type") not in ("paragraph", "list", "heading"):
+            continue
+        for m in (b.get("meta") or {}).get("math") or []:
+            if m.get("bbox"):
+                out.append(m["bbox"])
+    return out
+
+
 def _tmp_for(out: Path) -> Path:
     import uuid
 
@@ -260,12 +294,18 @@ def _publish(tmp: Path, out: Path) -> None:
             pass
 
 
-def render_background(doc_dir: Path, pdf_path: Path, page_no: int) -> Path:
+def render_background(doc_dir: Path, pdf_path: Path, page_no: int, math_rects=None) -> Path:
+    """``math_rects``: inline-math boxes of text blocks, whose line art is dropped too."""
     out = bg_path(doc_dir, page_no)
     if out.exists():
         return out
     with fitz.open(pdf_path) as pdf:
         page = text_free_page(pdf, page_no)
+        if math_rects:
+            try:
+                remove_math_line_art(page, math_rects)
+            except Exception:
+                pass  # an older PyMuPDF without line-art redaction: keep the plain background
         pix = page.get_pixmap(matrix=fitz.Matrix(BG_SCALE, BG_SCALE), alpha=False, annots=False)
         tmp = _tmp_for(out)
         pix.save(str(tmp))

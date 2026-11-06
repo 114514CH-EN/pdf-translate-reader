@@ -172,8 +172,30 @@ interface BlockViewProps {
   failed: boolean;
   hasBackground: boolean;
   page: PageImage;
+  /** formula blocks: the crop (padding included), trimmed where it reaches into translated text */
+  cropBox?: [number, number, number, number];
   onHover: (id: string | null) => void;
   onSave: (id: string, text: string) => void;
+}
+
+/**
+ * A formula's crop of the original page can reach into the line above or below
+ * (tall glyph boxes of braces and fractions); there it would show the bottoms or
+ * tops of the *English* letters next to the translation. Trim it at the edges of
+ * translated text blocks it overlaps horizontally.
+ */
+function trimmedCrop(block: Block, blocks: Block[], pad = 1.5): [number, number, number, number] {
+  const [bx0, by0, bx1, by1] = block.bbox;
+  let [x0, y0, x1, y1] = [bx0 - pad, by0 - pad, bx1 + pad, by1 + pad];
+  const cy = (by0 + by1) / 2;
+  for (const o of blocks) {
+    if (o === block || !o.translation || o.type === 'formula' || o.type === 'image') continue;
+    const [ox0, oy0, ox1, oy1] = o.bbox;
+    if (ox1 <= x0 || ox0 >= x1) continue;
+    if (oy1 > y0 && oy0 < y0 && oy1 < cy) y0 = Math.max(y0, oy1); // text above reaches into the crop
+    if (oy0 < y1 && oy1 > y1 && oy0 > cy) y1 = Math.min(y1, oy0); // text below
+  }
+  return [x0, y0, x1, y1];
 }
 
 /** Translation already carries a bullet / number → don't prepend the source marker again. */
@@ -211,8 +233,20 @@ function hangItems(text: string, fallbackMarker: string | null | undefined): { m
   return items.length ? items : null;
 }
 
-function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackground, page, onHover, onSave }: BlockViewProps) {
-  const [x0, y0, x1, y1] = block.bbox;
+/** Text blocks reach as far up/down as their inline formulas (tall fractions, braces). */
+function blockBox(block: Block): [number, number, number, number] {
+  let [x0, y0, x1, y1] = block.bbox;
+  if (block.type === 'paragraph' || block.type === 'list' || block.type === 'heading') {
+    for (const m of block.meta?.math ?? []) {
+      y0 = Math.min(y0, m.bbox[1]);
+      y1 = Math.max(y1, m.bbox[3]);
+    }
+  }
+  return [x0, y0, x1, y1];
+}
+
+function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackground, page, cropBox, onHover, onSave }: BlockViewProps) {
+  const [x0, y0, x1, y1] = blockBox(block);
   const boxW = (x1 - x0) * zoom;
   const boxH = (y1 - y0) * zoom;
   const style = block.style ?? { size: 12 };
@@ -319,7 +353,12 @@ function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackgroun
   if (page.url && (block.type === 'formula' || !hasTranslation)) {
     return (
       <>
-        <OrigCrop page={page} bbox={block.bbox} zoom={zoom} pad={block.type === 'table' ? 1 : 1.5} />
+        <OrigCrop
+          page={page}
+          bbox={block.type === 'formula' && cropBox ? cropBox : block.bbox}
+          zoom={zoom}
+          pad={block.type === 'table' ? 1 : block.type === 'formula' && cropBox ? 0 : 1.5}
+        />
         <div
           className={cls(['orig', block.type === 'formula' ? '' : 'untranslated'])}
           data-block-id={block.id}
@@ -548,6 +587,7 @@ function AbsolutePage({
           editMode={editMode}
           hasBackground={!!bg}
           page={img}
+          cropBox={b.type === 'formula' ? trimmedCrop(b, page.blocks) : undefined}
           hovered={hoverId === b.id}
           failed={failedIds.has(String(b.id))}
           onHover={onHover}

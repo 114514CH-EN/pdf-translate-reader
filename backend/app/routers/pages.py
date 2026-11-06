@@ -110,7 +110,12 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
 def get_page_background(doc_id: int, page_no: int):
     doc_dir, pdf_path = _doc_paths(doc_id)
     try:
-        path = page_assets.render_background(doc_dir, pdf_path, page_no)
+        with get_db() as db:
+            rows = db.execute(
+                "SELECT type, meta_json FROM blocks WHERE doc_id=? AND page_no=?", (doc_id, page_no)
+            ).fetchall()
+        blocks = [{"type": r["type"], "meta": json.loads(r["meta_json"] or "{}")} for r in rows]
+        path = page_assets.render_background(doc_dir, pdf_path, page_no, page_assets.inline_math_rects(blocks))
     except (ValueError, IndexError) as e:
         raise HTTPException(404, "页面不存在") from e
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
