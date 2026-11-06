@@ -27,3 +27,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 *.log
+
+# the packaged Windows app, when unpacked into the project folder
+/_internal/
+/PDFTranslate*.exe
+/PDFTranslate-*-windows.zip
+/使用说明.txt
