@@ -32,6 +32,8 @@ def build_translation_messages(
         "Translate ONLY the text content; do not add, drop or reorder items. Keep math symbols, code and numbers as-is.",
         "Tokens like {{m3}} are FORMULA PLACEHOLDERS: copy each one verbatim exactly once, at the grammatically "
         "correct position in the translation; never translate, alter, drop or invent them.",
+        "Variables, symbols and units written in the text (x, y, A, R1, Vin, f_c, kΩ, dB, Hz, 10 nF) and labels of "
+        "figures or circuits that are names (R, C, Q1, DSP) stay exactly as written — never translate or spell them out.",
         "Some blocks are given as numbered sentences ([1], [2], …, marked sentences=N). For those, return "
         '"sentences": an array of exactly N strings where item i translates source sentence [i] — keep the 1:1 '
         "alignment, never merge or split sentences, and do not include the [i] labels. Keep item numbers/bullets "

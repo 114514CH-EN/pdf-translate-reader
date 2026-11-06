@@ -116,6 +116,19 @@ _EN_RUN = re.compile(r"(?:\b[A-Za-z][A-Za-z'’-]*\b[ ,;:]+){4,}\b[A-Za-z][A-Za-
 _NOISE = re.compile(r"\{\{m\d+\}\}|https?://\S+|\S+@\S+|`[^`]*`")
 
 
+_LETTER = re.compile(r"[A-Za-z\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def has_words(src: str) -> bool:
+    """Any letters outside formula placeholders (a lone "(1)", "+" or "{{m3}}" has none)."""
+    return bool(_LETTER.search(PH_RE.sub(" ", src or "")))
+
+
+def placeholders_wrong(src: str, tgt: str) -> bool:
+    """The translation lost, invented or repeated a formula placeholder."""
+    return sorted(PH_RE.findall(src or "")) != sorted(PH_RE.findall(tgt or ""))
+
+
 def _is_cjk_target(lang: str) -> bool:
     return (lang or "").lower().startswith(("zh", "ja", "ko"))
 
@@ -266,6 +279,11 @@ async def run_translate_job(job_id: int, doc_id: int, params: dict) -> None:
         _store_translation(b, b["text"], target_lang, model, glossary_rev)
         todo.remove(b)
         done_count += 1
+    # nothing to translate: "(1)", "+", "10", a formula on its own — kept exactly, no model call
+    for b in [b for b in todo if b["type"] != "code" and not has_words(b["src"])]:
+        _store_translation(b, b["src"], target_lang, model, glossary_rev)
+        todo.remove(b)
+        done_count += 1
     for b in todo:
         if b["type"] in ("paragraph", "list"):
             units = sentence_units(b["src"])
@@ -366,16 +384,32 @@ async def _translate_batch(
             content = await chat_completion(cfg, messages, temperature=0.0)
         parsed = prompts.parse_translation_items(content, ids)
 
-    # items the model (partly) left in English get one more, explicit try
-    stale = [b for b in batch if b["type"] != "code" and _item_left_english(b, parsed.get(b["id"]), target_lang)]
+    # items the model (partly) left in English, or whose formula placeholders it lost,
+    # moved into the wrong count or invented, get one more, explicit try
+    def _bad(b, item):
+        return _item_left_english(b, item, target_lang) or _item_ph_wrong(b, item)
+
+    stale = [b for b in batch if b["type"] != "code" and _bad(b, parsed.get(b["id"]))]
     if stale:
         names = ", ".join(str(b["id"]) for b in stale)
+        eng = [str(b["id"]) for b in stale if _item_left_english(b, parsed.get(b["id"]), target_lang)]
+        phs = [b for b in stale if _item_ph_wrong(b, parsed.get(b["id"]))]
+        notes = []
+        if eng:
+            notes.append(
+                f"Blocks {', '.join(eng)} still contain untranslated English. Translate them COMPLETELY into "
+                f"{prompts.TARGET_NAMES.get(target_lang, target_lang)} — every sentence, including short trailing "
+                "phrases — keeping numbers and code as they are."
+            )
+        for b in phs:
+            want = " ".join(PH_RE.findall(b["src"]))
+            notes.append(
+                f"Block {b['id']} must contain exactly these formula placeholders, each once, where the formula "
+                f"belongs in the sentence: {want}. Do not drop, repeat or invent any."
+            )
         messages.append({"role": "assistant", "content": content})
         messages.append({"role": "user", "content": (
-            f"Blocks {names} still contain untranslated English. Translate them COMPLETELY into "
-            f"{prompts.TARGET_NAMES.get(target_lang, target_lang)} — every sentence, including short trailing "
-            "phrases — keeping placeholders, numbers and code as they are. Reply with the same JSON format, "
-            "containing only these ids."
+            " ".join(notes) + f" Reply with the same JSON format, containing only ids {names}."
         )})
         try:
             async with SEM:
@@ -383,10 +417,10 @@ async def _translate_batch(
             fixed = prompts.parse_translation_items(again, [b["id"] for b in stale])
             for b in stale:
                 item = fixed.get(b["id"])
-                if item and not _item_left_english(b, item, target_lang):
+                if item and not _bad(b, item):
                     parsed[b["id"]] = item
         except Exception:
-            pass  # keep the first answer
+            pass  # keep the first answer (placeholders are then repaired below)
 
     out: dict[int, tuple[str, list[tuple[str, str]] | None]] = {}
     for b in batch:
@@ -415,6 +449,19 @@ async def _translate_batch(
             pairs = [(b["single_unit"], text.strip())] if b.get("single_unit") else None
             out[b["id"]] = (text, pairs)
     return out
+
+
+def _item_ph_wrong(b: dict, item: dict | None) -> bool:
+    if not item or "{{m" not in (b.get("src") or ""):
+        return False
+    sents = item.get("sentences")
+    units = b.get("units")
+    if sents and units and len(sents) == len(units):
+        return any(placeholders_wrong(u, str(x)) for u, x in zip(units, sents))
+    text = item.get("translation")
+    if text is None and sents:
+        text = " ".join(str(x) for x in sents)
+    return placeholders_wrong(b["src"], text or "")
 
 
 def _item_left_english(b: dict, item: dict | None, lang: str) -> bool:

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.06-2';
+const EXPECTED_BACKEND = '2026.11.06-3';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PdfPane } from './components/PdfPane';
@@ -245,8 +245,8 @@ export default function App() {
 
         {backendStale && (
           <div className="stale-banner" role="alert">
-            后台服务还是旧版本（{backendStale}），新功能（公式原样显示、页面背景、润色等）不可用。请关闭旧的服务窗口（黑色命令行窗口）后重新运行
-            run.bat。
+            后台服务还是旧版本（{backendStale}），和这个页面不配套。如果刚更新过，先按 F5 刷新；还在的话，关闭旧的服务窗口（黑色命令行窗口）后
+            重新打开程序（PDFTranslate.exe，或源码版的 run.bat）。
           </div>
         )}
         {job && activeId && <JobsProgressBanner docId={activeId} />}

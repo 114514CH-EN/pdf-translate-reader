@@ -82,6 +82,8 @@ export interface PageFigure {
 export interface BlockMeta {
   /** source text with formula placeholders {{mN}} */
   ph?: string;
+  /** formula blocks: the crop of the original page (padding included), short of the text lines around it */
+  crop?: [number, number, number, number];
   math?: MathRun[];
   cells?: TableCell[];
   n_rows?: number;

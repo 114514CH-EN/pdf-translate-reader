@@ -364,6 +364,12 @@ def _same_row(a: list[float], b: list[float]) -> bool:
     return overlap >= 0.6 * h and b[0] >= a[2] - 1
 
 
+def _same_row_any(a: list[float], b: list[float]) -> bool:
+    """a and b share a visual line (≥60% vertical overlap), in either order."""
+    h = min(a[3] - a[1], b[3] - b[1])
+    return h > 0 and min(a[3], b[3]) - max(a[1], b[1]) >= 0.6 * h
+
+
 def _split_tab_segments(raw_blocks: list[dict]) -> list[dict]:
     """Detach short right-hand tab-stop segments into blocks of their own.
 
@@ -375,21 +381,22 @@ def _split_tab_segments(raw_blocks: list[dict]) -> list[dict]:
     out: list[dict] = []
     for rb in raw_blocks:
         lines = rb.get("lines", [])
-        if len(lines) < 2:
+        if len(lines) < 2 or rb.get("display"):  # a display formula is one picture
             out.append(rb)
             continue
         keep: list[dict] = []
         for ln in lines:
             text = "".join(sp.get("text", "") for sp in ln.get("spans", [])).strip()
-            prev = keep[-1] if keep else None
             size = max((sp.get("size", 0) for sp in ln.get("spans", [])), default=0) or 10
-            if (
-                prev is not None
-                and text
-                and len(text) <= 24
-                and _same_row(prev["bbox"], ln["bbox"])
-                and ln["bbox"][0] - prev["bbox"][2] >= max(24.0, 2.0 * size)
-            ):
+            far = max(24.0, 2.0 * size)
+            # a short segment far from a line on the same row: a right-hand tab stop, or a
+            # label of its own (diagram boxes "Anti-alias" … "Sampler" come in any order)
+            apart = text and len(text) <= 24 and any(
+                _same_row_any(k["bbox"], ln["bbox"])
+                and max(ln["bbox"][0] - k["bbox"][2], k["bbox"][0] - ln["bbox"][2]) >= far
+                for k in keep
+            )
+            if apart:
                 out.append({"type": 0, "bbox": list(ln["bbox"]), "lines": [ln]})
                 continue
             keep.append(ln)
@@ -693,6 +700,12 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
         if it["type"] in ("formula", "code"):
             it["level"] = 0
             continue
+        if not _LETTER.search(_PH_RE.sub(" ", it.get("ph") or it["text"])) and it["text"].strip():
+            # nothing to translate — an equation number "(1)", a "+" in a circuit, a page
+            # number: shown as the original rendering, like a formula
+            it["type"] = "formula"
+            it["level"] = 0
+            continue
         if it["list_marker"]:
             it["type"] = "list"
             it["level"] = 0
@@ -721,6 +734,7 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
             c["level"] = level_of_size.get(c["style"]["size"], 3)
 
     text_items = _merge_paragraphs(text_items)
+    _formula_crops(text_items)
     # re-apply list level from indent after merge
     if text_items:
         base_x = min(b["bbox"][0] for b in text_items)
@@ -811,6 +825,41 @@ def _item_gaps(geo: list[tuple], size: float | None = None) -> list[float] | Non
     return gaps if any(g > 1.0 for g in gaps) else None
 
 
+_LETTER = re.compile(r"[A-Za-z\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def _formula_crops(items: list[dict]) -> None:
+    """Crop of a formula block, short of the text lines above and below it.
+
+    A formula's box (tall glyph boxes, padding) can reach into the neighbouring line;
+    its crop would then show the bottoms / tops of the English letters next to the
+    translation. Trimmed per text *line* (a paragraph's box is wider than its lines).
+    """
+    lines = []
+    for it in items:
+        if it["type"] in ("formula", "code"):
+            continue
+        for g in it.get("geo") or []:
+            lines.append(g[1])
+        if not it.get("geo"):
+            lines.append(it["bbox"])
+    for it in items:
+        if it["type"] != "formula":
+            continue
+        x0, y0, x1, y1 = it["bbox"]
+        top, bot = y0 - 1.5, y1 + 1.5
+        cy = (y0 + y1) / 2
+        for b in lines:
+            if b[2] <= x0 or b[0] >= x1:
+                continue
+            if b[1] < top < b[3] <= cy:
+                top = b[3]
+            if cy <= b[1] < bot < b[3]:
+                bot = b[1]
+        if top > y0 - 1.5 or bot < y1 + 1.5:
+            it["crop"] = [round(x0 - 1.5, 2), round(top, 2), round(x1 + 1.5, 2), round(bot, 2)]
+
+
 def _with_math(it: dict) -> dict:
     meta = dict(it.get("meta") or {})
     if it.get("type") in ("paragraph", "list"):
@@ -821,6 +870,8 @@ def _with_math(it: dict) -> dict:
             meta["item_gaps"] = gaps
     if it.get("type") == "code" and it.get("code"):
         meta["code"] = it["code"]
+    if it.get("crop"):
+        meta["crop"] = it["crop"]
     if it.get("math") and it.get("ph") and "{{m" in it["ph"]:
         meta["ph"] = it["ph"]
         meta["math"] = [{k: m[k] for k in ("id", "bbox", "baseline", "size")} for m in it["math"]]

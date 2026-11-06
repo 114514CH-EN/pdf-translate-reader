@@ -345,7 +345,7 @@ def _page_runs(db, doc_id: int) -> dict[int, list[dict]]:
 
 def _run_map(old: list[dict], new: list[dict]) -> dict[str, str]:
     """Old formula id → the new formula at the same place (several old pieces of
-    one formula can now be one run)."""
+    one formula can now be one run). ``new``: the candidates (e.g. the runs of one block)."""
     out: dict[str, str] = {}
     for o in old:
         ob = o.get("bbox") or [0, 0, 0, 0]
@@ -353,37 +353,59 @@ def _run_map(old: list[dict], new: list[dict]) -> dict[str, str]:
         best = None
         for n in new:
             nb = n.get("bbox") or [0, 0, 0, 0]
-            if nb[0] - 1 <= cx <= nb[2] + 1 and nb[1] - 1 <= cy <= nb[3] + 1:
-                area = (nb[2] - nb[0]) * (nb[3] - nb[1])
-                if best is None or area < best[0]:
-                    best = (area, n["id"])
-        if best:
+            inside = nb[0] - 1 <= cx <= nb[2] + 1 and nb[1] - 1 <= cy <= nb[3] + 1
+            ncx, ncy = (nb[0] + nb[2]) / 2, (nb[1] + nb[3]) / 2
+            # inside a box first (smallest box wins), else the nearest box
+            key = (0, (nb[2] - nb[0]) * (nb[3] - nb[1])) if inside else (1, (ncx - cx) ** 2 + (ncy - cy) ** 2)
+            if best is None or key < best[0]:
+                best = (key, n["id"])
+        if best and (best[0][0] == 0 or best[0][1] < 60 ** 2):
             out[o["id"]] = best[1]
     return out
 
 
 def _renumber_placeholders(db, doc_id: int, old_runs: dict, new_runs: dict) -> None:
     """Kept translations still name the formulas by their old ids ({{m18}}); the new
-    extraction may number them differently (pieces of a fraction merged into one)."""
-    maps = {pg: _run_map(old_runs.get(pg, []), runs) for pg, runs in new_runs.items()}
-    if all(all(k == v for k, v in m.items()) and len(m) == len(old_runs.get(pg, [])) for pg, m in maps.items()):
+    extraction may number them differently (pieces of a fraction merged into one, or
+    one old run that really was two formulas). Each translation is matched against the
+    formulas of its *own* block."""
+    same = all(
+        [(r["id"], r.get("bbox")) for r in old_runs.get(pg, [])] == [(r["id"], r.get("bbox")) for r in runs]
+        for pg, runs in new_runs.items()
+    )
+    if same:
         return
     rows = db.execute(
-        "SELECT t.id, t.text, b.page_no FROM translations t JOIN blocks b ON b.id=t.block_id"
+        "SELECT t.id, t.text, b.page_no, b.meta_json FROM translations t JOIN blocks b ON b.id=t.block_id"
         " WHERE b.doc_id=? AND t.text LIKE '%{{m%'", (doc_id,)
     ).fetchall()
     for r in rows:
-        m = maps.get(r["page_no"], {})
+        try:
+            ph = json.loads(r["meta_json"] or "{}").get("ph") or ""
+        except Exception:
+            ph = ""
+        want = re.findall(r"\{\{(m\d+)\}\}", ph)
+        have = re.findall(r"\{\{(m\d+)\}\}", r["text"])
+        if sorted(want) == sorted(have):
+            continue
+        olds = {o["id"]: o for o in old_runs.get(r["page_no"], [])}
+        news = [n for n in new_runs.get(r["page_no"], []) if n["id"] in want]
+        m = _run_map([olds[h] for h in have if h in olds], news)
+        if len(have) == len(want) and len(set(m.get(h) for h in have)) < len(want):
+            m = dict(zip(have, want))  # same count, ambiguous places: keep the order
         seen: set[str] = set()
 
         def sub(mt):
-            rid = m.get(mt.group(1), mt.group(1))
-            if rid in seen:
-                return ""  # a later piece of a formula that is now one picture
+            rid = m.get(mt.group(1))
+            if rid is None or rid in seen:
+                return ""  # a piece of a formula that is now one picture, or gone
             seen.add(rid)
             return "{{" + rid + "}}"
 
         new = re.sub(r"\{\{(m\d+)\}\}", sub, r["text"])
+        missing = [w for w in want if w not in seen]
+        if missing:  # a formula the old translation did not have (merged in now)
+            new = new.rstrip() + " " + " ".join("{{" + w + "}}" for w in missing)
         if new != r["text"]:
             db.execute("UPDATE translations SET text=? WHERE id=?", (new, r["id"]))
 

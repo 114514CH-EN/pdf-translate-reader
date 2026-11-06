@@ -355,7 +355,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 17  # v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 18  # v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -507,89 +507,227 @@ def _is_math_span(sp: dict) -> bool:
     return n_math > 0 and n_math >= 0.5 * len(t.replace(" ", ""))
 
 
-def _merge_math_rows(raw_blocks: list[dict]) -> list[dict]:
-    """Rejoin one visual line that the PDF split into several blocks around math.
+# function names typeset upright in the text font (LaTeX \\sin, \\arctan, …): not prose words
+_OP_NAMES = {
+    "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh",
+    "coth", "log", "ln", "lg", "exp", "lim", "liminf", "limsup", "max", "min", "sup", "inf", "det",
+    "dim", "ker", "arg", "deg", "mod", "gcd", "lcm", "hom", "tr", "rank", "sgn", "sign", "sinc",
+    "rect", "tri", "erf", "erfc", "re", "im", "var", "cov", "diag", "span", "rem", "dx", "dt", "ds",
+    "dy", "dz", "dB", "db",
+}
+_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+_BULLET_CHARS = set("•·▪‣●○◦■□◆◇–—-*➢➤✓✔❖")
+_CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 
-    Word equations (stacked fractions, piecewise "cases", limits) are often written
-    as separate text blocks: "the gain is G(s) =" | "K" | "s + p" | "for s > 0".
-    As separate blocks the translation of each part is placed on its own and the
-    pieces overlap or leave gaps. Short (one-row) blocks that sit on the same row,
-    touch each other and include math become one block with one line, spans in
-    reading order (left to right).
-    """
-    def info(rb):
-        spans = [sp for ln in rb["lines"] for sp in ln["spans"] if (sp.get("text") or "").strip()]
-        size = max((sp["size"] for sp in spans), default=0)
-        return spans, size
 
-    cand: list[int] = []
-    for i, rb in enumerate(raw_blocks):
-        spans, size = info(rb)
-        if not spans or size <= 0:
+def _small_bridge(sp: dict, body: float) -> bool:
+    """Digits / operators set smaller than the text: a numerator, an exponent, a limit."""
+    t = (sp.get("text") or "").strip()
+    return bool(t) and sp.get("size", 0) <= 0.85 * body and bool(_BRIDGE_RE.match(t))
+
+
+def _has_words(spans: list[dict], body: float) -> bool:
+    for sp in spans:
+        t = sp.get("text") or ""
+        if not t.strip() or _is_math_span(sp) or _small_bridge(sp, body):
             continue
-        x0, y0, x1, y1 = rb["bbox"]
-        if y1 - y0 > 3.2 * size and not all(_is_math_span(sp) for sp in spans):
-            continue  # a paragraph, not a row fragment (a tall all-math block — the rows
-            # of a "cases" brace, a matrix — still joins the "f(t) = {" beside it)
-        if any(_MONO_RE.search(sp.get("font") or "") for sp in spans):
-            continue  # code listings keep their own lines
-        cand.append(i)
-    if len(cand) < 2:
+        if _CJK_RE.search(t) or any(w.lower() not in _OP_NAMES for w in _WORD_RE.findall(t)):
+            return True
+    return False
+
+
+def _merge_math_rows(raw_blocks: list[dict]) -> list[dict]:
+    """Rebuild text lines that the PDF split up around math.
+
+    Word equations and LaTeX inline fractions are often written as separate pieces:
+    "the gain is G(s) =" | "K" | "s + p" | "for s > 0" — a numerator in another
+    block, a denominator on its own "line", a cases brace beside its rows. Placed one
+    by one, the translation of each part overlaps the others or leaves gaps, and a
+    numerator left in the text gets translated as a word.
+
+    Lines are looked at one by one:
+      * a *text line* has real words (not only function names like sin, arctan);
+      * a *math fragment* has no words but has math (math fonts, or digits and
+        operators set smaller than the text);
+      * touching fragments form a cluster (a fraction's numerator over its
+        denominator, a brace with its rows, a matrix);
+      * a cluster sitting on a text line's math axis and next to it joins that
+        line, and text lines of different blocks on that row join through it;
+      * a cluster that joins no text line is a display formula of its own.
+    Each joined row becomes one line (spans left to right, ``row_base`` = the text
+    baseline); the blocks it touches become one block. Pages without math are
+    returned unchanged.
+    """
+    sizes = sorted(sp["size"] for rb in raw_blocks for ln in rb["lines"] for sp in ln["spans"]
+                   if (sp.get("text") or "").strip())
+    if not sizes:
         return raw_blocks
+    body = sizes[len(sizes) // 2] or 10.0
 
-    sizes = sorted(sp["size"] for rb in raw_blocks for sp in info(rb)[0])
-    body = sizes[len(sizes) // 2] if sizes else 0.0
+    recs: list[dict] = []  # one per non-empty line of a non-code block
+    for bi, rb in enumerate(raw_blocks):
+        if any(_MONO_RE.search(sp.get("font") or "") for ln in rb["lines"] for sp in ln["spans"]):
+            continue  # code listings keep their own lines
+        for li, ln in enumerate(rb["lines"]):
+            spans = [sp for sp in ln["spans"] if (sp.get("text") or "").strip()]
+            if not spans:
+                continue
+            words = _has_words(spans, body)
+            mathy = any(_is_math_span(sp) or _small_bridge(sp, body) for sp in spans)
+            kind = "text" if words else "frag" if mathy else "other"
+            if kind == "other" and all(set((sp.get("text") or "").strip()) <= _BULLET_CHARS for sp in spans):
+                kind = "bullet"  # list bullets never become part of a formula
+            prose = [sp for sp in spans if not (_is_math_span(sp) or _small_bridge(sp, body))] or spans
+            top = max(prose, key=lambda sp: sp["size"])
+            recs.append({"bi": bi, "li": li, "kind": kind, "bbox": _union([sp["bbox"] for sp in spans]),
+                         "size": max(sp["size"] for sp in spans), "base": top["origin"][1]})
+    if not any(r["kind"] == "frag" for r in recs):
+        return raw_blocks
+    # wordless lines in the text font (a display fraction's "1", a matrix entry "0")
+    # may join a cluster, but never form one on their own
+    frags = [r for r in recs if r["kind"] in ("frag", "other")]
 
-    def script_math(i):
-        """All math, set smaller than the body text: a numerator, denominator or limit."""
-        spans, size = info(raw_blocks[i])
-        return size <= 0.85 * body and all(_is_math_span(sp) for sp in spans)
-
-    parent = {i: i for i in cand}
+    # --- fragment clusters: pieces that touch -------------------------------------
+    par = list(range(len(frags)))
 
     def find(a):
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
         return a
 
-    for n, a in enumerate(cand):
-        ba = raw_blocks[a]["bbox"]
-        sa = info(raw_blocks[a])[1]
-        for b in cand[n + 1:]:
-            bb = raw_blocks[b]["bbox"]
-            sb = info(raw_blocks[b])[1]
-            short, tall = (ba, bb) if ba[3] - ba[1] <= bb[3] - bb[1] else (bb, ba)
-            cy = (short[1] + short[3]) / 2
-            tol = 0.15 * max(sa, sb)
-            gap = max(bb[0] - ba[2], ba[0] - bb[2])
-            if tall[1] - tol <= cy <= tall[3] + tol:
-                if gap <= 3.0 * max(sa, sb):
-                    parent[find(b)] = find(a)
-                continue
-            # stacked: a fraction's numerator over its denominator
-            x_overlap = min(ba[2], bb[2]) - max(ba[0], bb[0])
-            v_gap = max(ba[1], bb[1]) - min(ba[3], bb[3])
-            narrow = min(ba[2] - ba[0], bb[2] - bb[0])
-            if (x_overlap >= 0.5 * narrow and v_gap <= 0.35 * max(sa, sb)
-                    and script_math(a) and script_math(b)):
-                parent[find(b)] = find(a)
+    for i, a in enumerate(frags):
+        for j in range(i + 1, len(frags)):
+            b = frags[j]
+            xo = min(a["bbox"][2], b["bbox"][2]) - max(a["bbox"][0], b["bbox"][0])
+            yo = min(a["bbox"][3], b["bbox"][3]) - max(a["bbox"][1], b["bbox"][1])
+            # side by side (matrix columns, a brace and its rows) or stacked close
+            if xo >= -1.1 * body and yo >= -0.4 * body:
+                par[find(j)] = find(i)
+    clusters: dict[int, list[dict]] = {}
+    for i, r in enumerate(frags):
+        clusters.setdefault(find(i), []).append(r)
+    clusters_l = [{"lines": c, "bbox": _union([r["bbox"] for r in c])} for c in clusters.values()
+                  if any(r["kind"] == "frag" for r in c)]
 
-    groups: dict[int, list[int]] = {}
-    for i in cand:
-        groups.setdefault(find(i), []).append(i)
-    merged: dict[int, dict] = {}
-    drop: set[int] = set()
-    for members in groups.values():
-        if len(members) < 2:
+    # a word or two inside a tall formula ("0, otherwise" in a cases brace, "if", "for")
+    # belongs to the formula, not to the text
+    for r in recs:
+        if r["kind"] != "text":
             continue
-        spans = [sp for i in members for sp in info(raw_blocks[i])[0]]
-        if not any(_is_math_span(sp) for sp in spans):
+        line = raw_blocks[r["bi"]]["lines"][r["li"]]
+        words = [w for sp in line["spans"] if not _is_math_span(sp)
+                 for w in _WORD_RE.findall(sp.get("text") or "") if w.lower() not in _OP_NAMES]
+        if len(words) > 3:
             continue
+        cx, cy = (r["bbox"][0] + r["bbox"][2]) / 2, (r["bbox"][1] + r["bbox"][3]) / 2
+        for c in clusters_l:
+            x0, y0, x1, y1 = c["bbox"]
+            if y1 - y0 >= 2.2 * r["size"] and x0 <= cx <= x1 and y0 <= cy <= y1:
+                r["kind"] = "frag"
+                c["lines"].append(r)
+                c["bbox"] = _union([c["bbox"], r["bbox"]])
+                break
+
+    # --- rows: text lines, with the clusters that sit on them ----------------------
+    rows = [{"text": [r], "frags": [], "bbox": list(r["bbox"]), "base": r["base"], "size": r["size"]}
+            for r in recs if r["kind"] == "text"]
+    for c in clusters_l:
+        cx0, cy0, cx1, cy1 = c["bbox"]
+        cy = (cy0 + cy1) / 2
+        best = None
+        for row in rows:
+            s_ = row["size"]
+            dist = abs(cy - (row["base"] - 0.25 * s_))
+            x0, _, x1, _ = row["bbox"]
+            hgap = max(cx0 - x1, x0 - cx1, 0.0)
+            if dist <= 0.9 * s_ and hgap <= 1.5 * s_:
+                key = (dist + hgap * 0.1, hgap)
+                if best is None or key < best[0]:
+                    best = (key, row)
+        if best is None:
+            c["row"] = None
+            continue
+        row = best[1]
+        c["row"] = row
+        row["frags"].append(c)
+        row["bbox"] = _union([row["bbox"], c["bbox"]])
+    # text lines of different blocks on one row, bridged by a formula between them
+    merged = True
+    while merged:
+        merged = False
+        for i, a in enumerate(rows):
+            for b in rows[i + 1:]:
+                s_ = max(a["size"], b["size"])
+                # bridged by a formula, or simply touching (one line the PDF cut in two)
+                reach = 1.0 * s_ if (a["frags"] or b["frags"]) else 0.3 * s_
+                if abs(a["base"] - b["base"]) > 0.3 * s_:
+                    continue
+                if {r["bi"] for r in a["text"]} & {r["bi"] for r in b["text"]}:
+                    continue  # same block: its own line handling (tab stops) applies
+                gap = max(b["bbox"][0] - a["bbox"][2], a["bbox"][0] - b["bbox"][2])
+                if gap <= reach:
+                    a["text"] += b["text"]
+                    a["frags"] += b["frags"]
+                    a["bbox"] = _union([a["bbox"], b["bbox"]])
+                    rows.remove(b)
+                    merged = True
+                    break
+            if merged:
+                break
+    changed = [r for r in rows if r["frags"] or len({t["bi"] for t in r["text"]}) > 1]
+    # display formulas: clusters on no text line that sit over each other across a
+    # fraction bar (numerator / denominator, limits) are one formula
+    loose = [c for c in clusters_l if c.get("row") is None]
+    joined = True
+    while joined:
+        joined = False
+        for i, a in enumerate(loose):
+            for b in loose[i + 1:]:
+                xo = min(a["bbox"][2], b["bbox"][2]) - max(a["bbox"][0], b["bbox"][0])
+                yo = min(a["bbox"][3], b["bbox"][3]) - max(a["bbox"][1], b["bbox"][1])
+                if xo > 0 and yo >= -0.75 * body:
+                    a["lines"] += b["lines"]
+                    a["bbox"] = _union([a["bbox"], b["bbox"]])
+                    loose.remove(b)
+                    joined = True
+                    break
+            if joined:
+                break
+    if not changed and not any(len({r["bi"] for r in c["lines"]}) > 1 or
+                               len(c["lines"]) < len([x for x in recs if x["bi"] == c["lines"][0]["bi"]])
+                               for c in loose):
+        return raw_blocks
+
+    def line_of(r):
+        return raw_blocks[r["bi"]]["lines"][r["li"]]
+
+    def forced(ln):
+        return [dict(sp, force_m=True) if (sp.get("text") or "").strip() else dict(sp) for sp in ln["spans"]]
+
+    moved: set[tuple[int, int]] = set()
+    new_lines: dict[int, list[dict]] = {}  # owner block → replacement lines
+    bpar = {i: i for i in range(len(raw_blocks))}
+
+    def bfind(a):
+        while bpar[a] != a:
+            bpar[a] = bpar[bpar[a]]
+            a = bpar[a]
+        return a
+
+    for row in changed:
+        spans: list[dict] = []
+        for t in row["text"]:
+            spans += [dict(sp) for sp in line_of(t)["spans"]]
+            moved.add((t["bi"], t["li"]))
+        for c in row["frags"]:
+            for f in c["lines"]:
+                spans += forced(line_of(f))
+                moved.add((f["bi"], f["li"]))
+        spans = [sp for sp in spans if (sp.get("text") or "").strip() or sp.get("text")]
         spans.sort(key=lambda sp: (round(sp["bbox"][0], 1), sp["bbox"][1]))
         out: list[dict] = []
         for sp in spans:
-            sp = dict(sp)
             if out:
                 prev = out[-1]
                 t0, t1 = prev.get("text") or "", sp.get("text") or ""
@@ -597,19 +735,48 @@ def _merge_math_rows(raw_blocks: list[dict]) -> list[dict]:
                 if gap > 0.2 * max(sp["size"], prev["size"]) and not t0.endswith(" ") and not t1.startswith(" "):
                     prev["text"] = t0 + " "
             out.append(sp)
-        box = _union([raw_blocks[i]["bbox"] for i in members])
-        first = min(members)
-        merged[first] = {"type": 0, "bbox": box, "lines": [{"bbox": box, "spans": out}]}
-        # the row's text baseline: formulas in it are aligned to it, not to their own
-        # lowest line ("0  t<0" of a cases formula)
-        bases = sorted(sp["origin"][1] for sp in out
-                       if (sp.get("text") or "").strip() and not _is_math_span(sp))
-        if bases:
-            merged[first]["baseline"] = bases[len(bases) // 2]
-        drop.update(m for m in members if m != first)
-    if not merged:
-        return raw_blocks
-    return [merged.get(i, rb) for i, rb in enumerate(raw_blocks) if i not in drop]
+        box = _union([sp["bbox"] for sp in out if (sp.get("text") or "").strip()])
+        owner = min(t["bi"] for t in row["text"])
+        for t in row["text"]:
+            bpar[bfind(t["bi"])] = bfind(owner)
+        new_lines.setdefault(owner, []).append({"bbox": box, "spans": out, "row_base": row["base"]})
+
+    extra: dict[int, list[dict]] = {}  # display formulas made of loose clusters, after block bi
+    for c in loose:
+        bis = {r["bi"] for r in c["lines"]}
+        whole = len(c["lines"]) == len([x for x in recs if x["bi"] in bis]) and len(bis) == 1
+        if whole:
+            continue  # already a block of its own
+        lines = []
+        for f in sorted(c["lines"], key=lambda r: (r["bbox"][1], r["bbox"][0])):
+            ln = line_of(f)
+            lines.append({"bbox": list(ln["bbox"]), "spans": forced(ln)})
+            moved.add((f["bi"], f["li"]))
+        extra.setdefault(min(bis), []).append({"type": 0, "bbox": c["bbox"], "lines": lines, "display": True})
+
+    groups: dict[int, list[int]] = {}
+    for i in range(len(raw_blocks)):
+        groups.setdefault(bfind(i), []).append(i)
+    first_of = {min(m): m for m in groups.values()}
+    result: list[dict] = []
+    for i, rb in enumerate(raw_blocks):
+        if i in first_of:
+            members = first_of[i]
+            lines = []
+            for m in members:
+                lines += [ln for li, ln in enumerate(raw_blocks[m]["lines"]) if (m, li) not in moved]
+                lines += new_lines.get(m, [])
+            touched = len(members) > 1 or i in new_lines or any((i, li) in moved for li in range(len(rb["lines"])))
+            if not touched:
+                result.append(rb)
+            else:
+                lines = [ln for ln in lines if any((sp.get("text") or "").strip() for sp in ln["spans"])]
+                if lines:
+                    lines.sort(key=lambda ln: (ln.get("row_base", ln["bbox"][3]), ln["bbox"][0]))
+                    box = _union([ln["bbox"] for ln in lines])
+                    result.append({"type": 0, "bbox": box, "lines": lines})
+        result.extend(extra.get(i, []))
+    return result
 
 
 def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
@@ -629,6 +796,11 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
         is_m = [_is_math_span(sp) for _, _, sp in flat]
         if not any(is_m):
             continue
+        # numerators / exponents / limits set in the text font (LaTeX digits are CMR)
+        for k, (li, si, sp) in enumerate(flat):
+            t = (sp.get("text") or "").strip()
+            if not is_m[k] and t and _BRIDGE_RE.match(t) and sp["size"] < 0.82 * (line_size[li] or sp["size"]):
+                is_m[k] = True
         # bridge operators/spaces/sub-scripts between or next to math spans on the same line
         for k, (li, si, sp) in enumerate(flat):
             if is_m[k]:
@@ -658,9 +830,22 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
                 tol = 0.55 * max(sa, sb)
                 h_gap = max(bb[0] - ba[2], ba[0] - bb[2])
                 v_ok = min(ba[3], bb[3]) - max(ba[1], bb[1]) > -0.3 * max(sa, sb)
-                if not v_ok and h_gap < 0 and len(blk["lines"]) == 1:
+                if (not v_ok and h_gap < 0 and flat[a][0] == flat[b][0]
+                        and "row_base" in blk["lines"][flat[a][0]]):
                     # one visual line: pieces stacked above each other are a fraction or limits
                     v_ok = True
+                if v_ok and flat[a][0] != flat[b][0]:
+                    # pieces on different lines: a sub/superscript the PDF put on a line of its
+                    # own, or overlapping glyphs — not the end of one text line and the start
+                    # of the next ("… signal x(t)" / "x[n] = …" would become one formula)
+                    ha, hb = ba[3] - ba[1], bb[3] - bb[1]
+                    ov = min(ba[3], bb[3]) - max(ba[1], bb[1])
+                    # a script sits beside its base (x^2, e^{-at}), it does not overlap it
+                    # horizontally — a piece above/below is a different line of text
+                    narrow = min(ba[2] - ba[0], bb[2] - bb[0])
+                    beside = h_gap >= -0.3 * max(narrow, 0.1)
+                    script = min(sa, sb) < 0.85 * max(sa, sb) and beside and ov > 0
+                    v_ok = script or ov >= 0.5 * max(min(ha, hb), 0.1)
                 if h_gap <= tol and v_ok:
                     parent[find(b)] = find(a)
         groups: dict[int, list[int]] = {}
@@ -689,7 +874,7 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
             if not boxes:
                 continue
             x0, y0, x1, y1 = _union(boxes)
-            row_base = blk.get("baseline")
+            row_base = blk["lines"][flat[min(members)][0]].get("row_base")
             if row_base is not None and y0 < row_base < y1:
                 base = row_base
             pad = 0.12 * size
@@ -701,6 +886,144 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
                 "text": text.strip(),
             })
     return runs
+
+
+def _refine_run_boxes(page: fitz.Page, raw_blocks: list[dict], runs: list[dict]) -> None:
+    """Grow formula boxes to everything that belongs to the formula on the page.
+
+    The box of a formula comes from its text glyphs, but
+      * PowerPoint (and some Word exports) draw parentheses, brackets, radicals
+        and fraction bars as vector paths — outside the box the crop loses the
+        closing ")" while the background keeps it at the old place;
+      * tall glyphs (∫, big braces) are trimmed by ``_span_box`` to a normal line
+        height, so the crop cuts the integral sign.
+    Paths touching the box are added, then the box is extended up and down while
+    the rendered page keeps showing ink right above / below it (stopping at the
+    first blank row, and never into other text).
+    """
+    if not runs:
+        return
+    by_id = {r["id"]: r for r in runs}
+    others: list[tuple[str | None, list[float]]] = []  # (run id or None, box) of all text
+    for blk in raw_blocks:
+        for ln in blk["lines"]:
+            for sp in ln["spans"]:
+                if (sp.get("text") or "").strip():
+                    others.append((sp.get("m"), sp["bbox"]))
+    page_area = page.rect.width * page.rect.height
+    paths = []
+    for d in page.get_drawings():
+        r = d.get("rect")
+        if r is None or r.is_empty or r.width * r.height > 0.25 * page_area:
+            continue
+        paths.append([r.x0, r.y0, r.x1, r.y1])
+
+    def overlaps_text(box, rid):
+        area = max((box[2] - box[0]) * (box[3] - box[1]), 1e-6)
+        for m, b in others:
+            if m == rid:
+                continue
+            w = min(box[2], b[2]) - max(box[0], b[0])
+            h = min(box[3], b[3]) - max(box[1], b[1])
+            if w > 0 and h > 0 and w * h > 0.2 * area:
+                return True
+        return False
+
+    for run in runs:
+        size = run.get("size") or 10
+        box = list(run["bbox"])
+        grown = True
+        while grown:
+            grown = False
+            for pb in paths:
+                if pb[0] >= box[0] and pb[1] >= box[1] and pb[2] <= box[2] and pb[3] <= box[3]:
+                    continue  # already inside
+                ph, pw = pb[3] - pb[1], pb[2] - pb[0]
+                if ph > 3.2 * size or pw > 12 * size:
+                    continue  # a frame, a table rule, a figure
+                xo = min(box[2], pb[2]) - max(box[0], pb[0])
+                yo = min(box[3], pb[3]) - max(box[1], pb[1])
+                if xo < -0.25 * size or yo < 0.4 * min(ph, box[3] - box[1]):
+                    continue
+                if ph < 0.5 * size and not (pb[0] >= box[0] - 1 and pb[2] <= box[2] + 1):
+                    continue  # a thin line beyond the formula: an underline, a rule
+                if overlaps_text(pb, run["id"]):
+                    continue
+                box = [min(box[0], pb[0]), min(box[1], pb[1]), max(box[2], pb[2]), max(box[3], pb[3])]
+                grown = True
+        run["bbox"] = [round(v, 2) for v in box]
+
+    # ink right above / below the box (tall integral signs, braces)
+    scale = 2.0
+    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csGRAY, alpha=False, annots=False)
+    W, H, data = pix.width, pix.height, pix.samples
+    for run in runs:
+        size = run.get("size") or 10
+        x0, y0, x1, y1 = run["bbox"]
+        px0, px1 = max(0, int(x0 * scale)), min(W, int(x1 * scale) + 1)
+        if px1 - px0 < 2:
+            continue
+        # columns covered by other text right next to the box must not pull it in
+        blocked = [(int(b[0] * scale), int(b[1] * scale), int(b[2] * scale) + 1, int(b[3] * scale) + 1)
+                   for m, b in others if m != run["id"]]
+        blocked += [(int(o["bbox"][0] * scale), int(o["bbox"][1] * scale), int(o["bbox"][2] * scale) + 1,
+                     int(o["bbox"][3] * scale) + 1) for o in runs if o is not run]
+
+        def ink(row: int) -> bool:
+            if row < 0 or row >= H:
+                return False
+            line = data[row * W + px0: row * W + px1]
+            if min(line) >= 170:
+                return False
+            cut = [(bx0, bx1) for bx0, by0, bx1, by1 in blocked if by0 <= row < by1 and bx0 < px1 and bx1 > px0]
+            if not cut:
+                return True
+            # reaching into other text or another formula: only ink outside it counts
+            keep = [v for i, v in enumerate(line) if not any(a <= px0 + i < b for a, b in cut)]
+            return bool(keep) and min(keep) < 170
+
+        limit = int(0.8 * size * scale)
+        top = int(y0 * scale)
+        n = 0
+        while n < limit and ink(top - 1):
+            top -= 1
+            n += 1
+        bot = int(y1 * scale)
+        n = 0
+        while n < limit and ink(bot):
+            bot += 1
+            n += 1
+        ny0, ny1 = min(y0, top / scale - 0.5), max(y1, bot / scale + 0.5)
+        run["bbox"] = [x0, round(ny0, 2), x1, round(ny1, 2)]
+
+    # a box reaching into the line above / below (tight slide spacing, padded boxes)
+    # stops at the blank pixel row between the two
+    def blank(row: int, c0: int, c1: int) -> bool:
+        if row < 0 or row >= H or c1 <= c0:
+            return True
+        return min(data[row * W + c0: row * W + c1]) >= 170
+
+    for run in runs:
+        x0, y0, x1, y1 = run["bbox"]
+        cy = (y0 + y1) / 2
+        for m, b in others + [(o["id"], o["bbox"]) for o in runs if o is not run]:
+            if m == run["id"]:
+                continue
+            c0, c1 = int(max(x0, b[0]) * scale), int(min(x1, b[2]) * scale)
+            if c1 - c0 < 2 or b[3] <= y0 or b[1] >= y1:
+                continue
+            ocy = (b[1] + b[3]) / 2
+            if ocy < cy and b[3] < cy:  # the other one sits above: band [y0, its bottom]
+                for row in range(int(b[3] * scale), int(y0 * scale) - 1, -1):
+                    if blank(row, c0, c1):
+                        y0 = max(y0, row / scale)
+                        break
+            elif ocy > cy and b[1] > cy:  # below: band [its top, y1]
+                for row in range(int(b[1] * scale), int(y1 * scale) + 1):
+                    if blank(row, c0, c1):
+                        y1 = min(y1, (row + 1) / scale)
+                        break
+        run["bbox"] = [x0, round(y0, 2), x1, round(y1, 2)]
 
 
 def _span_box(sp: dict) -> list[float]:
@@ -876,6 +1199,10 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
 
     raw_blocks = _merge_math_rows(raw_blocks)
     math_runs = _assign_math_runs(raw_blocks, [0])
+    try:
+        _refine_run_boxes(page, raw_blocks, math_runs)
+    except Exception:
+        pass  # keep the text-based boxes
     math_spans = [
         (sp["bbox"], len((sp.get("text") or "").replace(" ", "")), bool(sp.get("m")))
         for blk in raw_blocks for ln in blk["lines"] for sp in ln["spans"] if (sp.get("text") or "").strip()

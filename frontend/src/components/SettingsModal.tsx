@@ -896,7 +896,7 @@ function DataSettings() {
     document.body.innerHTML =
       '<div style="font:15px/1.7 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 16px;color:#334">' +
       '<h2 style="margin:0 0 8px">已退出</h2><p>后台服务已关闭，可以关掉这个页面了。</p>' +
-      '<p style="color:#778">下次双击 run.bat（桌宠版：run_pet.bat）即可重新打开。</p></div>';
+      '<p style="color:#778">下次双击 PDFTranslate.exe（桌宠版：PDFTranslate-Pet.exe；源码版是 run.bat / run_pet.bat）即可重新打开。</p></div>';
   };
   return (
     <>
@@ -904,7 +904,7 @@ function DataSettings() {
         <legend>自动备份</legend>
         <p className="fieldset-hint">
           每次启动时自动备份文档库（译文、笔记、高亮、术语、设置；最多一小时一次），保留最近 {info?.keep ?? 10} 份。
-          恢复方法：关闭程序，用备份文件替换 data\pdf_translate.db 后重新运行 run.bat。
+          恢复方法：关闭程序，用备份文件替换 data\pdf_translate.db 后重新打开程序。
         </p>
         {info && <div className="backup-dir" title="备份文件夹">{info.dir}</div>}
         <div className="backup-list">
@@ -928,7 +928,7 @@ function DataSettings() {
       <fieldset className="fieldset">
         <legend>退出程序</legend>
         <p className="fieldset-hint">
-          关闭后台服务（和关掉启动时的命令行窗口一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 run.bat 或 run_pet.bat 即可重新打开。
+          关闭后台服务（和关掉启动时的命令行窗口一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 PDFTranslate.exe（源码版是 run.bat）即可重新打开。
         </p>
         <div className="card-actions">
           <button type="button" className="btn btn-sm btn-danger" onClick={() => void quitApp()}>

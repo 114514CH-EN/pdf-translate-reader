@@ -172,30 +172,10 @@ interface BlockViewProps {
   failed: boolean;
   hasBackground: boolean;
   page: PageImage;
-  /** formula blocks: the crop (padding included), trimmed where it reaches into translated text */
+  /** formula blocks: the crop (padding included), short of the text lines around it (meta.crop) */
   cropBox?: [number, number, number, number];
   onHover: (id: string | null) => void;
   onSave: (id: string, text: string) => void;
-}
-
-/**
- * A formula's crop of the original page can reach into the line above or below
- * (tall glyph boxes of braces and fractions); there it would show the bottoms or
- * tops of the *English* letters next to the translation. Trim it at the edges of
- * translated text blocks it overlaps horizontally.
- */
-function trimmedCrop(block: Block, blocks: Block[], pad = 1.5): [number, number, number, number] {
-  const [bx0, by0, bx1, by1] = block.bbox;
-  let [x0, y0, x1, y1] = [bx0 - pad, by0 - pad, bx1 + pad, by1 + pad];
-  const cy = (by0 + by1) / 2;
-  for (const o of blocks) {
-    if (o === block || !o.translation || o.type === 'formula' || o.type === 'image') continue;
-    const [ox0, oy0, ox1, oy1] = o.bbox;
-    if (ox1 <= x0 || ox0 >= x1) continue;
-    if (oy1 > y0 && oy0 < y0 && oy1 < cy) y0 = Math.max(y0, oy1); // text above reaches into the crop
-    if (oy0 < y1 && oy1 > y1 && oy0 > cy) y1 = Math.min(y1, oy0); // text below
-  }
-  return [x0, y0, x1, y1];
 }
 
 /** Translation already carries a bullet / number → don't prepend the source marker again. */
@@ -205,8 +185,10 @@ function startsWithMarker(text: string, marker: string): boolean {
   return /^([•·▪●○■□◦➢➤✓✔❖\-–*]|o(?=\s)|\(?\d{1,3}[.)、]|\(?[a-zA-Z][.)]|[ivxIVX]{1,4}[.)])\s*/.test(t);
 }
 
+// a bullet glyph may be glued to the text ("•若…": Chinese translations often drop the space);
+// numbers and letters need the space ("1.5 V" is not an item)
 const HANG_MARKER =
-  /^\s*((?:[•·▪‣●○◆◇■□◦➢➤✓✔❖–—*-])|o(?=\s)|\(?\d{1,3}(?:\.\d{1,3})*[.)、]|\(\d{1,3}\)|\(?[a-zA-Z][.)]|[ivxIVX]{1,5}[.)])(?:\s+|$)(.*)$/;
+  /^\s*(?:([•·▪‣●○◆◇■□◦➢➤✓✔❖])\s*|((?:[–—*-])|o(?=\s)|\(?\d{1,3}(?:\.\d{1,3})*[.)、]|\(\d{1,3}\)|\(?[a-zA-Z][.)]|[ivxIVX]{1,5}[.)])(?:\s+|$))(.*)$/;
 
 /**
  * Numbered / bulleted text → [{marker, body}] items, so the marker can sit in a
@@ -221,7 +203,7 @@ function hangItems(text: string, fallbackMarker: string | null | undefined): { m
     if (!line) continue;
     const m = HANG_MARKER.exec(line);
     if (m) {
-      items.push({ marker: m[1], body: m[2] });
+      items.push({ marker: m[1] ?? m[2], body: m[3] });
     } else if (items.length === 0) {
       if (!fallbackMarker) return null;
       items.push({ marker: fallbackMarker, body: line });
@@ -587,7 +569,7 @@ function AbsolutePage({
           editMode={editMode}
           hasBackground={!!bg}
           page={img}
-          cropBox={b.type === 'formula' ? trimmedCrop(b, page.blocks) : undefined}
+          cropBox={b.type === 'formula' ? b.meta?.crop : undefined}
           hovered={hoverId === b.id}
           failed={failedIds.has(String(b.id))}
           onHover={onHover}

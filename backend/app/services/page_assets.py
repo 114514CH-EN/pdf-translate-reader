@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pymupdf as fitz
 
-ASSET_VER = 3  # v3: fraction bars of inline math removed from the background
+ASSET_VER = 4  # v4: formula boxes include vector brackets; v3: fraction bars of inline math removed from the background
 BG_SCALE = 2.0  # background raster = 2x PDF pt (crisp up to ~200% zoom)
 ORIG_SCALE = 3.0  # full original render (with text): crops for untranslated blocks / formulas
 FIG_DPI = 144
