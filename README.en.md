@@ -36,6 +36,7 @@ The interface is in Chinese, and the default translation direction is English �
 - A second interface for the same app: the reading assistant becomes a small pet that sits on the bottom edge of the window and opens a chat bubble when clicked. It wanders, can be dragged around, and pops up when you ask about selected text
 - Change its look with an image URL (GIFs work) or a local file. Backgrounds are removed on import, frame by frame for animations, so the animation is kept. Walking, thinking, talking, listening and sleeping can each have their own picture
 - It turns to face the way it walks, dozes off when nothing happens for a while, perks up when you select text, and hops to tell you an answer finished while the bubble was closed
+- Physics (Settings → 界面 → 桌宠, each can be turned off): let go of it up high and it falls and bounces; fling it and it keeps the speed of your hand and bounces off the window edges
 - Right-click menu: summarise the page, quiz, change look, quiet mode, tuck into the corner (comes out only when you ask about selected text)
 - After you stay on a page for a few seconds, it offers to explain the formulas, tables or long passages it sees there (can be turned off)
 - The default look is 小页, a folded sheet of paper drawn for this project

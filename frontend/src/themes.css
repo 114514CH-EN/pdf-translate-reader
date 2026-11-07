@@ -269,13 +269,16 @@
 :root[data-theme='glass'] {
   --radius-sm: 8px;
   --bg: transparent;
-  --panel: rgba(255, 255, 255, 0.14);
-  --panel-2: rgba(255, 255, 255, 0.1);
+  /* a violet tint, not white: white text stays readable over the light end of the gradient */
+  --panel: rgba(46, 18, 92, 0.26);
+  --panel-2: rgba(46, 18, 92, 0.18);
+  /* things that float over the (white) PDF pages: dialogs, menus, the pet's bubble */
+  --glass-float: rgba(56, 28, 102, 0.93);
   --border: rgba(255, 255, 255, 0.32);
   --border-soft: rgba(255, 255, 255, 0.18);
   --text: #ffffff;
   --text-dim: rgba(255, 255, 255, 0.8);
-  --text-faint: rgba(255, 255, 255, 0.58);
+  --text-faint: rgba(255, 255, 255, 0.68);
   --accent: #ffd2f7;
   --accent-hover: #ffffff;
   --accent-ink: #4a1d6b;
@@ -299,7 +302,8 @@
 }
 
 :root[data-theme='glass'] body {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) fixed;
+  /* deeper than the classic #667eea → #f093fb so white text keeps its contrast at the pink end */
+  background: linear-gradient(135deg, #5a67d8 0%, #6b3fa0 50%, #b84fc4 100%) fixed;
 }
 
 :root[data-theme='glass'] .topbar,
@@ -310,13 +314,6 @@
 :root[data-theme='glass'] .statusbar {
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
-}
-
-:root[data-theme='glass'] .menu,
-:root[data-theme='glass'] .modal {
-  background: rgba(72, 40, 120, 0.72);
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
 }
 
 :root[data-theme='glass'] .btn-primary {
@@ -348,6 +345,47 @@
 
 :root[data-theme='glass'] select option {
   color: #222;
+}
+
+:root[data-theme='glass'] .menu,
+:root[data-theme='glass'] .modal,
+:root[data-theme='glass'] .lib-dropdown,
+:root[data-theme='glass'] .sel-bar,
+:root[data-theme='glass'] .sel-panel,
+:root[data-theme='glass'] .search-bar,
+:root[data-theme='glass'] .search-results,
+:root[data-theme='glass'] .toast,
+:root[data-theme='glass'] .drop-overlay-card,
+:root[data-theme='glass'] .pet-bubble,
+:root[data-theme='glass'] .pet-menu,
+:root[data-theme='glass'] .pet-tip,
+:root[data-theme='glass'] .pet-tail {
+  background: var(--glass-float);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+}
+:root[data-theme='glass'] .modal-backdrop {
+  background: rgba(24, 8, 52, 0.45);
+}
+/* menus opened from the toolbar (theme picker, export, translate options) must stay
+   above the sidebar: backdrop-filter gives every panel its own stacking layer */
+:root[data-theme='glass'] .topbar,
+:root[data-theme='glass'] .toolbar {
+  position: relative;
+  z-index: 30;
+}
+:root[data-theme='glass'] .theme-item:hover,
+:root[data-theme='glass'] .menu-item:hover:not(:disabled),
+:root[data-theme='glass'] .pet-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+:root[data-theme='glass'] .theme-item.current {
+  background: rgba(255, 255, 255, 0.22);
+}
+:root[data-theme='glass'] .theme-item small {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 /* ---------- #07 OLED 深色 ----------

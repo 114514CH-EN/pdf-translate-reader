@@ -4,6 +4,8 @@ import { KEYLESS_PROVIDERS, MODEL_SUGGESTIONS, PROVIDER_PRESETS, useSettingsStor
 import { useViewStore, type SettingsTab } from '../stores/view';
 import type { ApiProvider, AssistantApiSettings, BackupInfo, PricingSettings, ThinkingLevel, UsageSummary } from '../types';
 import { THEMES } from '../lib/theme';
+import { isPetMode } from '../pet/mode';
+import { loadPhysics, savePhysics } from '../pet/physics';
 import {
   DEFAULT_SHORTCUTS,
   SHORTCUT_LABELS,
@@ -833,10 +835,39 @@ function UsageSettings() {
   );
 }
 
+function PetPhysicsSettings() {
+  const [ph, setPh] = useState(() => loadPhysics());
+  const set = (patch: Partial<typeof ph>) => {
+    const next = { ...ph, ...patch };
+    setPh(next);
+    savePhysics(next);
+  };
+  return (
+    <fieldset className="fieldset">
+      <legend>桌宠</legend>
+      <div className="form-row">
+        <label className="inline-check">
+          <input type="checkbox" checked={ph.bounce} onChange={(e) => set({ bounce: e.target.checked })} />
+          弹跳：拖到高处松手，小页会掉下来，在底边和窗口两侧弹几下
+        </label>
+      </div>
+      <div className="form-row">
+        <label className="inline-check">
+          <input type="checkbox" checked={ph.inertia} onChange={(e) => set({ inertia: e.target.checked })} />
+          惯性：拖着甩出去再松手，小页会顺着甩的方向飞出去，落地后滑一段停下
+        </label>
+      </div>
+      <p className="fieldset-hint">两个都关掉就是原来的样子：松手后直接落回底边。右键小页的「物理效果」可以一起开关。</p>
+    </fieldset>
+  );
+}
+
 function UiSettingsPane() {
   const settings = useSettingsStore((s) => s.settings);
   const patchLocal = useSettingsStore((s) => s.patchLocal);
   return (
+    <>
+    {isPetMode() && <PetPhysicsSettings />}
     <fieldset className="fieldset">
       <legend>界面</legend>
       <div className="form-row">
@@ -861,6 +892,7 @@ function UiSettingsPane() {
         />
       </div>
     </fieldset>
+    </>
   );
 }
 

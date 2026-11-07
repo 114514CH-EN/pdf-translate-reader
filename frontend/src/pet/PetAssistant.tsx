@@ -31,6 +31,7 @@ import {
   type PoseSlot,
 } from './appearance';
 import { PET_SUMMON_EVENT } from './mode';
+import { loadPhysics, PHYSICS_EVENT, savePhysics, step, VelocityTracker, type Body, type PhysicsSettings } from './physics';
 import './pet.css';
 
 /** distance of the pet's feet from the bottom of the window — above the status bar */
@@ -195,6 +196,19 @@ export function PetAssistant() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<(TipOffer & { page: number }) | null>(null);
   const [settling, setSettling] = useState(false);
+  /** thrown / falling under the physics simulation (see physics.ts) */
+  const [flying, setFlying] = useState(false);
+  const [tilt, setTilt] = useState(0);
+  /** landing squash: alternates a/b so the animation restarts on every bounce */
+  const [landing, setLanding] = useState<'' | 'a' | 'b'>('');
+  const [physics, setPhysicsState] = useState<PhysicsSettings>(() => loadPhysics());
+  const physicsRef = useRef(physics);
+  physicsRef.current = physics;
+  useEffect(() => {
+    const on = (e: Event) => setPhysicsState((e as CustomEvent<PhysicsSettings>).detail ?? loadPhysics());
+    window.addEventListener(PHYSICS_EVENT, on);
+    return () => window.removeEventListener(PHYSICS_EVENT, on);
+  }, []);
 
   const setOpen = useCallback((next: boolean | ((o: boolean) => boolean)) => {
     setOpenState((o) => {
@@ -368,6 +382,13 @@ export function PetAssistant() {
   const [vh, setVh] = useState(() => window.innerHeight);
   const bodyRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ offX: number; offY: number; startX: number; startY: number; lastX: number; moved: boolean } | null>(null);
+  const tracker = useRef(new VelocityTracker());
+  const simRef = useRef(0); // requestAnimationFrame id of the running simulation
+  const stopSim = useCallback(() => {
+    if (simRef.current) cancelAnimationFrame(simRef.current);
+    simRef.current = 0;
+  }, []);
+  useEffect(() => stopSim, [stopSim]);
 
   // ---- where the pet stands ----
   useEffect(() => {
@@ -397,6 +418,15 @@ export function PetAssistant() {
     e.preventDefault();
     setMenu(null);
     e.currentTarget.setPointerCapture(e.pointerId);
+    if (simRef.current) {
+      // caught in mid-air
+      stopSim();
+      setFlying(false);
+      setTilt(0);
+      setLanding('');
+    }
+    tracker.current.reset();
+    tracker.current.add(e.clientX, e.clientY);
     const rect = e.currentTarget.getBoundingClientRect();
     dragRef.current = {
       offX: e.clientX - rect.left,
@@ -423,6 +453,7 @@ export function PetAssistant() {
       }
     }
     if (!d.moved) return;
+    tracker.current.add(e.clientX, e.clientY);
     const dx = e.clientX - d.lastX;
     if (Math.abs(dx) > 2) {
       setHeading(dx < 0 ? 'left' : 'right');
@@ -446,12 +477,73 @@ export function PetAssistant() {
       return;
     }
     const limit = maxX();
+    const ph = physicsRef.current;
+    if (ph.bounce || ph.inertia) {
+      const v = ph.inertia ? tracker.current.velocity() : { vx: 0, vy: 0 };
+      throwPet(v.vx, v.vy);
+      return;
+    }
     writeStore(POS_KEY, JSON.stringify({ ratio: limit > 0 ? posRef.current.x / limit : 0 }));
     if (posRef.current.y > GROUND + 2) {
       setDropping(true);
       place({ x: posRef.current.x, y: GROUND });
       window.setTimeout(() => setDropping(false), 520);
     }
+  };
+
+  /** let go: gravity, bounces and the speed of the hand (physics.ts) */
+  const throwPet = (vx: number, vy: number) => {
+    const body: Body = { x: posRef.current.x, y: posRef.current.y, vx, vy };
+    if (body.y <= GROUND + 1 && Math.hypot(vx, vy) < 40) {
+      place({ x: body.x, y: GROUND });
+      savePos();
+      return;
+    }
+    stopSim();
+    setFlying(true);
+    let last = performance.now();
+    let flip: 'a' | 'b' = 'a';
+    const frame = (now: number) => {
+      const world = {
+        minX: 8,
+        maxX: maxX(),
+        ground: GROUND,
+        ceiling: Math.max(GROUND, window.innerHeight - sizeRef.current - 8),
+      };
+      let dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      let res = { landed: 0, done: false };
+      // small fixed steps: a fast fall never tunnels through the floor
+      while (dt > 0) {
+        const h = Math.min(dt, 1 / 120);
+        const r = step(body, world, h, physicsRef.current);
+        res = { landed: Math.max(res.landed, r.landed), done: r.done };
+        dt -= h;
+        if (r.done) break;
+      }
+      if (Math.abs(body.vx) > 60) setHeading(body.vx < 0 ? 'left' : 'right');
+      setTilt(body.y > GROUND + 1 ? Math.max(-16, Math.min(16, body.vx / 90)) : 0);
+      if (res.landed > 260) {
+        flip = flip === 'a' ? 'b' : 'a';
+        setLanding(flip);
+      }
+      place({ x: body.x, y: body.y });
+      if (res.done) {
+        simRef.current = 0;
+        setFlying(false);
+        setTilt(0);
+        window.setTimeout(() => setLanding(''), 300);
+        savePos();
+        return;
+      }
+      simRef.current = requestAnimationFrame(frame);
+    };
+    simRef.current = requestAnimationFrame(frame);
+  };
+
+  const savePos = () => {
+    const limit = maxX();
+    writeStore(POS_KEY, JSON.stringify({ ratio: limit > 0 ? posRef.current.x / limit : 0 }));
   };
 
   // ---- wandering along the bottom edge ----
@@ -468,7 +560,7 @@ export function PetAssistant() {
     window.setTimeout(() => setWalking(false), 2450);
   }, [place, maxX]);
 
-  const canWander = placed && !open && !dragging && !dropping && !menu && !tip && presence === 'normal' && !sleep;
+  const canWander = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep;
   useEffect(() => {
     if (!canWander) return;
     let timer = 0;
@@ -679,7 +771,7 @@ export function PetAssistant() {
   }, [tucked]);
   const shown = tucked ? { x: maxX(), y: -Math.round(size * 0.48) } : pos;
 
-  const mood: PetMood = dragging || dropping
+  const mood: PetMood = dragging || dropping || flying
     ? 'idle'
     : streaming
       ? streamingText
@@ -770,13 +862,22 @@ export function PetAssistant() {
           walking ? 'is-walking' : '',
           dragging ? 'is-dragging' : '',
           dropping ? 'is-dropping' : '',
+          flying ? 'is-flying' : '',
+          landing ? `is-land-${landing}` : '',
           presence === 'quiet' && !open ? 'is-quiet' : '',
           tucked ? 'is-tucked' : '',
           settling && !tucked ? 'is-untucking' : '',
         ]
           .filter(Boolean)
           .join(' ')}
-        style={{ left: shown.x, bottom: shown.y, width: size, height: size, visibility: placed ? 'visible' : 'hidden' }}
+        style={{
+          left: shown.x,
+          bottom: shown.y,
+          width: size,
+          height: size,
+          visibility: placed ? 'visible' : 'hidden',
+          transform: tilt ? `rotate(${tilt.toFixed(1)}deg)` : undefined,
+        }}
       >
         <div
           ref={hitRef}
@@ -812,7 +913,7 @@ export function PetAssistant() {
             poseSrc={poseSrc}
             preload={preload}
             mood={mood}
-            dragging={dragging}
+            dragging={dragging || (flying && !landing)}
             dropping={dropping}
             badge={badge}
             flip={flip}
@@ -923,6 +1024,21 @@ export function PetAssistant() {
           >
             <span className="pet-menu-check">{tipsOn ? '✓' : ''}</span>
             主动提示
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={physics.bounce || physics.inertia}
+            className="pet-menu-item"
+            title="拖到高处松手会掉下来弹几下，甩出去有惯性（设置 → 界面 → 桌宠 可以分开开关）"
+            onClick={menuAction(() => {
+              const on = !(physics.bounce || physics.inertia);
+              savePhysics({ bounce: on, inertia: on });
+            })}
+          >
+            <span className="pet-menu-check">{physics.bounce || physics.inertia ? '✓' : ''}</span>
+            物理效果
+            <span className="pet-menu-note">弹跳、惯性</span>
           </button>
           <button
             type="button"
