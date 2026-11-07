@@ -355,7 +355,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 18  # v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 19  # v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -888,6 +888,61 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
     return runs
 
 
+def _hidden_spans(page: fitz.Page) -> dict[tuple, int]:
+    """Text painted over later by an opaque shape or picture, keyed (text, origin) → count.
+
+    Slides often keep an old chart under a new one: the new chart's white
+    background covers the old title and axis labels. Invisible on the page, they
+    would still be extracted and their translations would overlap the visible ones.
+    """
+    try:
+        trace = page.get_texttrace()
+    except Exception:
+        return {}
+    covers: list[tuple[int, fitz.Rect]] = []
+    for d in page.get_drawings():
+        if d.get("fill") is None or (d.get("fill_opacity") if d.get("fill_opacity") is not None else 1) < 0.98:
+            continue
+        r = d.get("rect")
+        if r is None or r.is_empty:
+            continue
+        items = d.get("items") or []
+        boxy = items and all(it[0] in ("re", "qu") for it in items)
+        if not boxy and items and all(it[0] == "l" for it in items):
+            # a rectangle drawn as four lines: every point on its border
+            pts = [pt for it in items for pt in it[1:3]]
+            boxy = all(min(abs(pt.x - r.x0), abs(pt.x - r.x1)) < 0.6 or min(abs(pt.y - r.y0), abs(pt.y - r.y1)) < 0.6
+                       for pt in pts)
+        if boxy:
+            covers.append((d.get("seqno", -1), r))
+    try:
+        opaque = [fitz.Rect(i["bbox"]) for i in page.get_image_info() if not i.get("has-mask")]
+        for seq, (kind, rect) in enumerate(page.get_bboxlog()):
+            if kind == "fill-image":
+                r = fitz.Rect(rect)
+                if any(abs(r.x0 - o.x0) < 1 and abs(r.y0 - o.y0) < 1 and abs(r.x1 - o.x1) < 1 and abs(r.y1 - o.y1) < 1
+                       for o in opaque):
+                    covers.append((seq, r))
+    except Exception:
+        pass
+    if not covers:
+        return {}
+    hidden: dict[tuple, int] = {}
+    for sp in trace:
+        chars = sp.get("chars") or []
+        text = "".join(chr(c[0]) for c in chars).strip()
+        if not text:
+            continue
+        box = fitz.Rect(sp["bbox"])
+        seq = sp.get("seqno", -1)
+        if any(cs > seq and r.x0 - 0.5 <= box.x0 and r.y0 - 0.5 <= box.y0 and box.x1 <= r.x1 + 0.5 and box.y1 <= r.y1 + 0.5
+               for cs, r in covers):
+            ox, oy = chars[0][2]
+            key = (text, round(ox), round(oy))
+            hidden[key] = hidden.get(key, 0) + 1
+    return hidden
+
+
 def _refine_run_boxes(page: fitz.Page, raw_blocks: list[dict], runs: list[dict]) -> None:
     """Grow formula boxes to everything that belongs to the formula on the page.
 
@@ -1145,12 +1200,19 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
     raw_blocks: list[dict] = []
     images: list[dict] = []
     img_idx = 0
+    hidden = _hidden_spans(page)
     for blk in raw.get("blocks", []):
         if blk.get("type") == 0:
             lines = []
             for ln in blk.get("lines", []):
                 spans = []
                 for sp in ln.get("spans", []):
+                    if hidden:
+                        o = sp.get("origin", (0, 0))
+                        key = ((sp.get("text") or "").strip(), round(o[0]), round(o[1]))
+                        if hidden.get(key):
+                            hidden[key] -= 1
+                            continue  # painted over: not visible on the page
                     spans.append(
                         {
                             "text": _fix_bullets(_fix_text(sp.get("text", ""), dedupe_spans), sp.get("font", "")),
@@ -1163,9 +1225,13 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                         }
                     )
                 spans = _absorb_brackets(spans)
-                boxes = [_span_box(sp) for sp in ln.get("spans", []) if (sp.get("text") or "").strip()]
+                if not spans:
+                    continue
+                boxes = [sp["bbox"] for sp in spans if (sp.get("text") or "").strip()]
                 lines.append({"bbox": _union(boxes) if boxes else list(ln["bbox"]), "spans": spans})
             line_boxes = [ln["bbox"] for ln in lines if ln["spans"]]
+            if not lines:
+                continue
             raw_blocks.append({"type": 0, "bbox": _union(line_boxes) if line_boxes else list(blk["bbox"]), "lines": lines})
         elif blk.get("type") == 1:
             data = blk.get("image") or b""

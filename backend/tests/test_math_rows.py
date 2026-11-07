@@ -185,3 +185,25 @@ def test_diagram_labels_in_one_block_are_split():
     anti = {"bbox": [91, 247, 130, 256], "spans": [_span("Anti-alias", 91, 247, 130, 256, size=9)]}
     out = _split_tab_segments([{"type": 0, "bbox": [91, 246, 210, 256], "lines": [sampler, anti]}])
     assert len(out) == 2
+
+
+def test_text_painted_over_is_not_extracted():
+    """An old chart kept under a new one: its title is covered by the new chart's white
+    background and must not be translated (it would overlap the visible title)."""
+    from app.services.extract import extract_page
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((100, 120), "Old chart title", fontname="helv", fontsize=14)
+    page.insert_text((100, 150), "Voltage", fontname="helv", fontsize=11)
+    page.draw_rect(fitz.Rect(90, 100, 400, 300), color=None, fill=(1, 1, 1))  # the new chart's background
+    page.insert_text((100, 125), "New chart title", fontname="helv", fontsize=14)
+    page.insert_text((100, 152), "Voltage", fontname="helv", fontsize=11)
+    page.insert_text((100, 450), "Under a highlight", fontname="helv", fontsize=11)
+    page.draw_rect(fitz.Rect(90, 400, 400, 500), color=None, fill=(1, 1, 0), fill_opacity=0.4)  # see-through
+    page.insert_text((100, 390), "Kept above", fontname="helv", fontsize=11)
+    texts = [sp["text"] for rb in extract_page(page, None)["raw_blocks"] for ln in rb["lines"] for sp in ln["spans"]]
+    joined = " ".join(texts)
+    assert "Old chart title" not in joined and "New chart title" in joined
+    assert texts.count("Voltage") == 1
+    assert "Kept above" in joined and "Under a highlight" in joined
