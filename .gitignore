@@ -33,3 +33,7 @@ Thumbs.db
 /PDFTranslate*.exe
 /PDFTranslate-*-windows.zip
 /使用说明.txt
+
+# server version (deploy/): secrets and the data volume
+/deploy/.env
+/deploy/data/

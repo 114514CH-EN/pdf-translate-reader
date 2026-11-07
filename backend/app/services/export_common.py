@@ -14,6 +14,10 @@ CJK_CANDIDATES = [
     Path("C:/Windows/Fonts/msyhbd.ttc"),
     Path("C:/Windows/Fonts/simhei.ttf"),
     Path("C:/Windows/Fonts/simsun.ttc"),
+    # Linux (the server version's Docker image installs WenQuanYi Micro Hei)
+    Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
+    Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+    Path("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"),
 ]
 
 CSS_TMPL = """
@@ -23,7 +27,7 @@ CSS_TMPL = """
 
 
 def font_archive() -> tuple[fitz.Archive | None, str]:
-    """Return (archive, css) using the first available CJK font on Windows."""
+    """Return (archive, css) using the first available CJK font (Windows, or the Linux paths)."""
     FONT_DIR.mkdir(parents=True, exist_ok=True)
     for src in CJK_CANDIDATES:
         if src.exists():

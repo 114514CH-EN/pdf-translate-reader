@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import App from '../App';
+import AuthGate from '../components/AuthGate';
 // same typefaces as the main entry, bundled so the app works fully offline
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
@@ -32,4 +33,8 @@ useViewStore.setState({ sidebarTab: 'notes' });
 const container = document.getElementById('root');
 if (!container) throw new Error('root 元素不存在');
 
-createRoot(container).render(<App />);
+createRoot(container).render(
+  <AuthGate>
+    <App />
+  </AuthGate>,
+);

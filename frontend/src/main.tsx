@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import AuthGate from './components/AuthGate';
 // typefaces of the interface styles, bundled so the app works fully offline
 // (latin subsets only — CJK text falls back to the system fonts)
 import '@fontsource/inter/latin-400.css';
@@ -26,4 +27,8 @@ import './themes.css';
 const container = document.getElementById('root');
 if (!container) throw new Error('root 元素不存在');
 
-createRoot(container).render(<App />);
+createRoot(container).render(
+  <AuthGate>
+    <App />
+  </AuthGate>,
+);

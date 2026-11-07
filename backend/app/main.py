@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import cloud
 from .config import APP_VERSION, BASE_DIR, FRONTEND_DIST
 from .db import init_db
 from .routers import assistant, documents, export, glossary, notes, pages, pet, reading, settings, translate
@@ -21,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# cloud mode (PDFTR_AUTH_URL set): login + session check on every API call; a no-op locally
+app.middleware("http")(cloud.guard)
+app.include_router(cloud.router)
 
 def _backup_first() -> None:
     """Back up the library before any migration below touches it."""
@@ -93,8 +97,10 @@ app.include_router(pet.router)
 @app.get("/api/health")
 def health():
     # pid / base_dir let the launcher recognise (and stop) an older copy of itself
+    if cloud.enabled():  # no process ids or paths for the outside world
+        return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "cloud": True}
     return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "pid": os.getpid(),
-            "base_dir": str(BASE_DIR)}
+            "base_dir": str(BASE_DIR), "cloud": False}
 
 
 SHUTDOWN_HEADER = "x-pdftr-shutdown"
@@ -119,6 +125,8 @@ def shutdown(request: Request):
     makes browsers send a CORS preflight first, which other sites do not pass,
     so a web page cannot close the app behind the reader's back.
     """
+    if cloud.enabled():
+        raise HTTPException(404, "服务器版不能从网页关闭")
     if request.headers.get(SHUTDOWN_HEADER) != "1":
         raise HTTPException(403, "缺少确认头")
     host = request.client.host if request.client else ""

@@ -276,6 +276,17 @@
 - 幻灯片里新图表叠在旧图表上（新图表的白色背景盖住旧图表）：旧图表的标题、坐标轴文字在页面上看不见，但仍在 PDF 里，被提取、翻译后和看得见的标题叠在一起。`_hidden_spans`：用 `get_texttrace()` 的绘制序号和 `get_drawings()` / `get_bboxlog()` 比先后——被**之后**画上的不透明（填充不透明度 ≥ 0.98）矩形或不带透明通道的图片完全盖住的文字，按（文字, 起笔点）跳过；半透明高亮、只盖住一部分的不算
 - `EXTRACT_VER` → 19，`APP_VERSION` → `2026.11.07-2`，`VERSION` → 1.1.4；新增测试 1 项——共 **71 passed**
 
+### M26 服务器版：前端 Vercel + 后台 Docker + workspace 账号登录 + v1.2.0（2026-11-07）✅
+仿照 student-workspace 的结构（Vercel 前端 + 自己服务器上的 files-server 经 Cloudflare Tunnel）：
+- **云端模式**（`backend/app/cloud.py`，设了 `PDFTR_AUTH_URL` 才开启；exe / run.bat 不受影响）：`/api/login` 把账号密码交给 workspace 的 `/api/auth`（action=login）验证，只放行 `PDFTR_ALLOWED_USERS`；会话是 HMAC 签名的 HttpOnly + SameSite=Lax cookie（`PDFTR_SESSION_SECRET`，默认 30 天，删掉用户名后旧 cookie 立即失效）；中间件让除 health / session / login / logout 外的 `/api/*` 一律要求登录（401「请先登录」）；`/api/*` 响应改成 `Cache-Control: private`；`/api/shutdown` 关闭；health 不再暴露 pid / 路径；按 IP 限流（8 次 / 5 分钟）
+- **防误开放**：Docker 镜像带 `PDFTR_REQUIRE_AUTH=1`，`.env` 没配登录时后台拒绝全部 API（503）
+- **API Key**：Linux 上原来按主机名混淆，容器重建就解不开 → `PDFTR_SECRET_KEY` 派生密钥（SHA-256 计数器流 + HMAC 校验，`enc:key:`）
+- **前端**：`AuthGate` 包住经典版和桌宠版——先问 `/api/session`，服务器版未登录显示登录卡片；全局 fetch 钩子遇到 401「请先登录」弹出重新登录（之后刷新）；设置 → 数据里服务器版显示「退出登录」、隐藏「退出程序」
+- **Vercel**：`frontend/vercel.json`：Vite 构建，`/api/:path*` 转发到 `https://pdf-api.miku-api.com`，并关掉转发响应的 CDN 缓存（2026-04 之后新建项目默认按源站缓存头缓存），`/pet` → `pet.html`；外部转发首字节等待 120 秒、之后可流式
+- **Docker**：`deploy/Dockerfile`（python:3.12-slim + 文泉驿微米黑供导出 PDF 用，uvicorn 单进程，健康检查）、`docker-compose.yml`（只绑定 127.0.0.1:8003，`deploy/data` 持久化）、`.env.example`、中文部署说明 `deploy/README.md`；导出 PDF 的中文字体加了 Linux 路径
+- 验证：模拟 workspace 登录服务 + 模拟 Vercel 转发的本地代理，Playwright 走完：登录页 → 错误密码 / 非白名单账号被拒 → 登录 → 打开文档、页面图和公式截图经 cookie 加载 → 桌宠版共用登录 → 清掉 cookie 后弹出重新登录 → 设置里退出登录；按镜像目录结构单独起后台验证（这台机器没有 Docker 守护进程，镜像本身没有实际构建）
+- 新增 `tests/test_cloud.py`（10 项）——共 **81 passed**；`APP_VERSION` → `2026.11.07-3`，`VERSION` → 1.2.0
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

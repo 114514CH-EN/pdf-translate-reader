@@ -76,6 +76,10 @@ Requires **Python 3.10+**. The repository includes the built frontend, so **Node
 
 Run `build_exe.bat` (needs Python). It produces `dist\PDFTranslate\` with `PDFTranslate.exe` and `PDFTranslate-Pet.exe`; the whole folder can be copied elsewhere. Releases are built automatically on Windows by GitHub, see `.github/workflows/release.yml`.
 
+### Server version (Vercel + your own server)
+
+The app can also run as a website: the page on Vercel, the backend in Docker on your own server (reached through a Cloudflare Tunnel), with a login checked by an existing account service and limited to listed users. See [deploy/README.md](deploy/README.md) (Chinese).
+
 ## Where data is stored
 
 | Location | Contents |

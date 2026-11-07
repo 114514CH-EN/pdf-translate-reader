@@ -74,6 +74,10 @@
 
 运行 `build_exe.bat`（需要 Python），生成 `dist\PDFTranslate\`（含 `PDFTranslate.exe` 和 `PDFTranslate-Pet.exe`），整个文件夹可以复制到别处使用。发布新版本时 GitHub 会在 Windows 上自动打包，见 `.github/workflows/release.yml`。
 
+### 服务器版（Vercel + 自己的服务器）
+
+也可以部署成网站在任何设备上用：前端放 Vercel，后台用 Docker 跑在自己的服务器上（经 Cloudflare Tunnel 接入），用 workspace 账号登录、只允许指定用户。步骤见 [deploy/README.md](deploy/README.md)。
+
 ## 数据存放
 
 | 位置 | 内容 |

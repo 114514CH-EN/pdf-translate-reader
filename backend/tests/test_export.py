@@ -64,5 +64,6 @@ def test_inplace_export(tmp_path):
     assert hits, "inserted text not found"
     h = hits[0]
     assert abs(h.x0 - title["bbox"][0]) < 2
-    assert abs(h.y0 - title["bbox"][1]) < 2
+    # a CJK font's line box starts higher than its glyphs (Noto CJK ascent ≈ 1.16 em)
+    assert abs(h.y0 - title["bbox"][1]) < 5
     assert pdf.page_count == 1

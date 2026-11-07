@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
+import os
 import sys
 
 PREFIX = "enc:"
@@ -62,10 +64,43 @@ def is_encrypted(value: str | None) -> bool:
     return bool(value) and str(value).startswith(PREFIX)
 
 
+def _env_key() -> bytes | None:
+    """PDFTR_SECRET_KEY (the server version): a stable key that survives container rebuilds."""
+    k = os.environ.get("PDFTR_SECRET_KEY", "")
+    return hashlib.sha256(("pdftr-secret|" + k).encode()).digest() if len(k) >= 16 else None
+
+
+def _stream(key: bytes, nonce: bytes, n: int) -> bytes:
+    out = bytearray()
+    counter = 0
+    while len(out) < n:
+        out += hashlib.sha256(key + nonce + counter.to_bytes(8, "big")).digest()
+        counter += 1
+    return bytes(out[:n])
+
+
+def _seal(raw: bytes, key: bytes) -> str:
+    nonce = os.urandom(16)
+    body = bytes(a ^ b for a, b in zip(raw, _stream(key, nonce, len(raw))))
+    tag = hmac.new(key, nonce + body, hashlib.sha256).digest()[:16]
+    return base64.b64encode(nonce + tag + body).decode()
+
+
+def _open(payload: str, key: bytes) -> bytes:
+    data = base64.b64decode(payload)
+    nonce, tag, body = data[:16], data[16:32], data[32:]
+    if not hmac.compare_digest(tag, hmac.new(key, nonce + body, hashlib.sha256).digest()[:16]):
+        raise ValueError("wrong key")
+    return bytes(a ^ b for a, b in zip(body, _stream(key, nonce, len(body))))
+
+
 def encrypt(value: str | None) -> str | None:
     if not value or is_encrypted(value):
         return value
     raw = value.encode("utf-8")
+    key = _env_key()
+    if key is not None:
+        return PREFIX + "key:" + _seal(raw, key)
     if sys.platform == "win32":
         try:
             blob = _dpapi(raw, True)
@@ -83,6 +118,9 @@ def decrypt(value: str | None) -> str | None:
     try:
         _, scheme, payload = value.split(":", 2)
         data = base64.b64decode(payload)
+        if scheme == "key":
+            key = _env_key()
+            return _open(payload, key).decode("utf-8") if key else None
         if scheme == "dpapi":
             return _dpapi(data, False).decode("utf-8")
         if scheme == "obf":

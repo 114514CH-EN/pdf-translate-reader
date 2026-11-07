@@ -6,6 +6,7 @@ import type { ApiProvider, AssistantApiSettings, BackupInfo, PricingSettings, Th
 import { THEMES } from '../lib/theme';
 import { isPetMode } from '../pet/mode';
 import { loadPhysics, savePhysics } from '../pet/physics';
+import { fetchSession, logout, type SessionInfo } from './AuthGate';
 import {
   DEFAULT_SHORTCUTS,
   SHORTCUT_LABELS,
@@ -915,6 +916,10 @@ function DataSettings() {
       setBusy(false);
     }
   };
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  useEffect(() => {
+    void fetchSession().then(setSession);
+  }, []);
   const quitApp = async () => {
     if (!window.confirm('退出 PDF 双语翻译阅读器？正在进行的翻译会中断。')) return;
     try {
@@ -957,6 +962,20 @@ function DataSettings() {
           </button>
         </div>
       </fieldset>
+      {session?.cloud && (
+        <fieldset className="fieldset">
+          <legend>账号</legend>
+          <p className="fieldset-hint">
+            已用 workspace 账号 <b>{session.user}</b> 登录（服务器版）。退出后这台设备上需要重新登录。
+          </p>
+          <div className="card-actions">
+            <button type="button" className="btn btn-sm" onClick={() => void logout()}>
+              退出登录
+            </button>
+          </div>
+        </fieldset>
+      )}
+      {session && !session.cloud && (
       <fieldset className="fieldset">
         <legend>退出程序</legend>
         <p className="fieldset-hint">
@@ -968,6 +987,7 @@ function DataSettings() {
           </button>
         </div>
       </fieldset>
+      )}
       <fieldset className="fieldset">
         <legend>API Key 安全</legend>
         <p className="fieldset-hint">
