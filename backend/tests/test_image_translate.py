@@ -46,7 +46,7 @@ def test_reads_the_lines_of_a_picture():
     lines = {ln.text: ln for ln in ocr.recognize(_picture())}
     assert "Output voltage" in lines and "Time (s)" in lines
     x0, y0, x1, y1 = lines["Output voltage"].box
-    assert 215 < x0 < 240 and 0 <= y0 < 16 and 390 < x1 < 430 and y1 < 44
+    assert 210 < x0 < 245 and 0 <= y0 < 18 and 370 < x1 < 440 and y1 < 46  # Arial and DejaVu differ a little
 
 
 def test_numbers_and_translated_text_are_left_alone():
