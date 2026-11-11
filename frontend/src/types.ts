@@ -126,6 +126,15 @@ export interface Block {
   translation_edited: 0 | 1 | boolean;
   translated: boolean;
   sentences?: SentencePair[] | null;
+  /** image blocks: the copy with its text translated, when the reader asked for one */
+  image_tr?: ImageTranslation | null;
+}
+
+export interface ImageTranslation {
+  /** null: nothing in the picture needed translating */
+  url: string | null;
+  found: number;
+  translated: number;
 }
 
 export interface PageBlocks {

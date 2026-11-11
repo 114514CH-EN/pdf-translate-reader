@@ -462,6 +462,24 @@ function TranslateSettings() {
           DeepSeek V4 默认开启思考模式，会多花不少时间和输出 token；翻译、术语抽取、润色和划词查询默认把它关掉。其他服务商忽略此项。
         </p>
       </fieldset>
+      <fieldset className="fieldset">
+        <legend>图片里的文字</legend>
+        <div className="form-row">
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={settings.ui?.imageTranslate === true}
+              onChange={(e) => patchLocal({ ui: { ...settings.ui, imageTranslate: e.target.checked } })}
+            />
+            翻译图片文字（图表、截图、示意图里的文字）
+          </label>
+        </div>
+        <p className="fieldset-hint">
+          打开后，在译文页把鼠标移到一张图片上会出现「翻译图片文字」按钮——翻哪张由你决定，不会自动翻译所有图片。
+          文字识别在本机完成，只把识别出的文字发给翻译 API；译文按原来的位置、字号、颜色和方向画回图片，数字和符号保持原样。
+          译好的图片可以随时「看原图」对比、「重新翻译」或「恢复原图」，导出「原位替换」PDF 时也会带上。
+        </p>
+      </fieldset>
     </>
   );
 }

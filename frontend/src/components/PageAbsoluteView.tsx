@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { api } from '../api/client';
+import ImageBlock from './ImageBlock';
 import { useFitBox } from '../hooks/useFitBox';
 import { scrollPageIntoView } from '../hooks/useSyncScroll';
 import { useTranslationStore, type PageData } from '../stores/translation';
@@ -167,6 +167,7 @@ interface BlockViewProps {
   block: Block;
   zoom: number;
   docId: string;
+  pageNo: number;
   editMode: boolean;
   hovered: boolean;
   failed: boolean;
@@ -227,7 +228,7 @@ function blockBox(block: Block): [number, number, number, number] {
   return [x0, y0, x1, y1];
 }
 
-function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackground, page, cropBox, onHover, onSave }: BlockViewProps) {
+function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasBackground, page, cropBox, onHover, onSave }: BlockViewProps) {
   const [x0, y0, x1, y1] = blockBox(block);
   const boxW = (x1 - x0) * zoom;
   const boxH = (y1 - y0) * zoom;
@@ -251,18 +252,19 @@ function BlockView({ block, zoom, docId, editMode, hovered, failed, hasBackgroun
     onMouseLeave: () => onHover(null),
   };
 
-  // Image block — the page background already contains the image.
+  // Image block — the page background already contains the image; ImageBlock adds
+  // the optional copy with its text translated (设置 → 翻译 → 翻译图片文字).
   if (block.type === 'image') {
     return (
-      <div className={cls([])} data-block-id={block.id} style={box} {...hover}>
-        {!hasBackground && block.meta?.file && (
-          <img
-            src={api.imageUrl(docId, block.meta.file)}
-            alt="插图"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          />
-        )}
-      </div>
+      <ImageBlock
+        block={block}
+        docId={docId}
+        pageNo={pageNo}
+        className={cls([])}
+        style={box}
+        hasBackground={hasBackground}
+        {...hover}
+      />
     );
   }
 
@@ -566,6 +568,7 @@ function AbsolutePage({
           block={b}
           zoom={zoom}
           docId={docId}
+          pageNo={page.pageNo}
           editMode={editMode}
           hasBackground={!!bg}
           page={img}

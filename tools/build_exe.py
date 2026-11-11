@@ -56,6 +56,8 @@ def build() -> Path:
         "--add-data", f"{ROOT / 'frontend' / 'dist'}{sep}frontend/dist",
         "--add-data", f"{ROOT / 'backend' / 'app' / 'schema.sql'}{sep}backend/app",
         "--add-data", f"{ROOT / 'VERSION'}{sep}.",
+        "--add-data", f"{ROOT / 'backend' / 'app' / 'ocr_models'}{sep}backend/app/ocr_models",
+        "--hidden-import", "onnxruntime",
         "--collect-submodules", "uvicorn",
         "--collect-submodules", "backend",
         "--collect-all", "pymupdf",

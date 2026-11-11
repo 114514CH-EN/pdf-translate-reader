@@ -3,6 +3,7 @@ import type {
   BackupInfo,
   Highlight,
   HighlightColor,
+  ImageTranslation,
   PageProgress,
   SearchHit,
   TranslateEstimate,
@@ -100,6 +101,19 @@ export const api = {
 
   imageUrl(docId: string, fname: string): string {
     return `${BASE}/documents/${encodeURIComponent(docId)}/images/${encodeURIComponent(fname)}`;
+  },
+
+  /** 「翻译图片文字」 for one picture of a page */
+  translateImage(docId: string, pageNo: number, blockId: string): Promise<ImageTranslation | null> {
+    return request<ImageTranslation | null>(
+      `/documents/${encodeURIComponent(docId)}/pages/${pageNo}/images/${encodeURIComponent(blockId)}/translate`,
+      { method: 'POST' },
+    );
+  },
+  deleteImageTranslation(docId: string, pageNo: number, blockId: string): Promise<{ ok: boolean }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/images/${encodeURIComponent(blockId)}/translation`, {
+      method: 'DELETE',
+    });
   },
 
   getPageBlocks(id: string, pageNo: number, lang?: string): Promise<PageBlocks> {

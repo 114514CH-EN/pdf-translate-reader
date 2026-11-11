@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from ..config import UPLOAD_DIR
 from ..db import get_db
-from ..services import page_assets
+from ..services import image_translate, page_assets
 
 router = APIRouter(prefix="/api/documents/{doc_id}/pages", tags=["pages"])
 
@@ -87,6 +87,13 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
         d["translated"] = bool(d.get("translation"))
         out.append(d)
 
+    # pictures whose text has been translated (「翻译图片文字」): the painted copy lies over the original
+    doc_dir = UPLOAD_DIR / str(doc_id)
+    if (doc_dir / "imgtr").is_dir():
+        for d in out:
+            if d["type"] == "image" and len(d["bbox"]) == 4:
+                d["image_tr"] = _image_tr(doc_id, doc_dir, page_no, d["bbox"])
+
     _attach_sentences(out)
     meta = _page_meta(doc_id, page_no, out)
     v = page_assets.ASSET_VER
@@ -139,3 +146,75 @@ def get_page_figure(doc_id: int, page_no: int, idx: int):
         raise HTTPException(404, "图形不存在")
     path = page_assets.render_figure(doc_dir, pdf_path, page_no, idx, figs[idx])
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
+
+# ------------------------------------------------------- text inside pictures
+
+def _image_tr(doc_id: int, doc_dir: Path, page_no: int, bbox) -> dict | None:
+    key = image_translate.image_key(bbox)
+    info = image_translate.load_info(doc_dir, page_no, key)
+    if info is None:
+        return None
+    png = image_translate.png_path(doc_dir, page_no, key)
+    url = None
+    if png.exists():
+        url = f"/api/documents/{doc_id}/pages/{page_no}/image-translations/{key}.png?v={int(png.stat().st_mtime)}"
+    return {"url": url, "found": info.get("found", 0), "translated": info.get("translated", 0)}
+
+
+def _image_block(doc_id: int, page_no: int, block_id: int) -> list[float]:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT type, bbox_json FROM blocks WHERE id=? AND doc_id=? AND page_no=?", (block_id, doc_id, page_no)
+        ).fetchone()
+    if row is None or row["type"] != "image":
+        raise HTTPException(404, "图片不存在")
+    bbox = json.loads(row["bbox_json"] or "[]")
+    if len(bbox) != 4:
+        raise HTTPException(404, "图片不存在")
+    return bbox
+
+
+@router.post("/{page_no}/images/{block_id}/translate")
+async def translate_image(doc_id: int, page_no: int, block_id: int):
+    """Read the text in one picture, translate it and paint it back in place."""
+    from ..services import ocr
+    from ..services.llm_client import has_credentials
+    from ..services.settings_store import load_settings
+
+    doc_dir, pdf_path = _doc_paths(doc_id)
+    bbox = _image_block(doc_id, page_no, block_id)
+    if not ocr.available():
+        raise HTTPException(503, "这个安装里没有文字识别模型，无法翻译图片")
+    cfg = {**load_settings(), "_purpose": "translate", "_doc_id": doc_id}
+    if not has_credentials(cfg):
+        raise HTTPException(400, "请先在 ⚙ 设置里填写翻译 API")
+    with get_db() as db:
+        doc = db.execute("SELECT title, target_lang FROM documents WHERE id=?", (doc_id,)).fetchone()
+    target = (doc["target_lang"] if doc else None) or cfg.get("target_lang") or "zh"
+    try:
+        await image_translate.translate_image(doc_dir, pdf_path, page_no, bbox, target, cfg,
+                                              doc_title=(doc["title"] if doc else "") or "")
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001 — the reader sees why (no network, wrong key, …)
+        raise HTTPException(502, f"翻译图片失败：{str(e)[:200] or e.__class__.__name__}") from e
+    return _image_tr(doc_id, doc_dir, page_no, bbox)
+
+
+@router.delete("/{page_no}/images/{block_id}/translation")
+def delete_image_translation(doc_id: int, page_no: int, block_id: int):
+    doc_dir, _ = _doc_paths(doc_id)
+    image_translate.remove(doc_dir, page_no, image_translate.image_key(_image_block(doc_id, page_no, block_id)))
+    return {"ok": True}
+
+
+@router.get("/{page_no}/image-translations/{key}.png")
+def get_image_translation(doc_id: int, page_no: int, key: str):
+    if not key.isalnum():
+        raise HTTPException(404, "图片不存在")
+    doc_dir, _ = _doc_paths(doc_id)
+    png = image_translate.png_path(doc_dir, page_no, key)
+    if not png.exists():
+        raise HTTPException(404, "图片不存在")
+    return FileResponse(png, media_type="image/png", headers={"Cache-Control": "max-age=86400"})

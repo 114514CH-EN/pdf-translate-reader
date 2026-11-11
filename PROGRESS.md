@@ -297,6 +297,16 @@
 - **桌宠**：拖动和飞行时直接写 DOM（`moveFast`，不再每帧触发 React 渲染）；摸头冒爱心、重摔 / 撞墙眼冒金星、翻译完成跳一下并提示、连续阅读 45 分钟提醒休息；它说话的小气泡居中在头顶
 - 新增 `tests/test_update.py`（10 项）、`test_math_rows.py` +2——共 **93 passed**；`APP_VERSION` → `2026.11.11-1`，`VERSION` → 1.3.0
 
+### M28 翻译图片里的文字 + v1.4.0（2026-11-11）✅
+- **开关 + 逐张决定**：设置 → 翻译 →「翻译图片文字」（`ui.imageTranslate`，默认关）。打开后译文页的图片块悬停出现按钮：翻译图片文字 / 看原图·看译图 / 重新翻译 / 恢复原图（`ImageBlock.tsx`）。不会自动翻译所有图片
+- **本机 OCR**（`services/ocr.py`）：PP-OCRv4 检测 + 识别模型（`backend/app/ocr_models/`，共 15 MB，Apache 2.0，来自 PaddleOCR / RapidOCR），用已有的 onnxruntime + numpy + Pillow 跑——**没有新增 OpenCV 依赖**：检测概率图用 numpy 的行程连通域转成水平框，被词间距切开的片段再接回一行；又高又窄的框按旋转 90° 的两种方向各读一次取高分（纵轴标签）
+- **翻译**（`services/image_translate.py`）：只把需要翻译的行（含字母、不是纯数字 / 单位 / 已是目标语言）编号后一次发给翻译 API，按编号取回；一行对一行，保持版式
+- **画回去**：每行量出背景色、文字颜色和墨迹范围 → 先盖掉原文字（纯色背景用背景色，照片 / 渐变背景用模糊补丁）→ 按原字号（由墨迹高度估算）、原颜色、原方向写译文；对齐方式先看与其他行是否共边，再看行两侧的空白（贴左 / 贴右 / 居中）；没翻译的行（刻度数字等）像素不变
+- **存储**：`uploads/<doc>/imgtr/p<页>_<bbox 哈希>.png + .json`，用位置哈希而不是块 id，重新提取版面后仍然对得上；图片区域取自去文字的页面渲染，尺寸和位置与原图一致
+- **接口**：`POST /pages/{n}/images/{block}/translate`、`DELETE …/translation`、`GET …/image-translations/{key}.png`；blocks 响应里图片块带 `image_tr`。「原位替换」导出 PDF 时把译图贴在原图上
+- 发布流程的 exe 冒烟测试加了「图片翻译接口在没配 Key 时返回 400 而不是 503」（确认模型打进了安装包）
+- 新增 `tests/test_image_translate.py`（5 项）——共 **98 passed**；`APP_VERSION` → `2026.11.11-2`，`VERSION` → 1.4.0
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

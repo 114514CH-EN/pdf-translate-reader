@@ -111,6 +111,11 @@ jobs:
           $blocks = Invoke-RestMethod "http://127.0.0.1:8765/api/documents/$($up.doc_id)/pages/1/blocks"
           $list = if ($blocks.blocks) { $blocks.blocks } else { $blocks }
           if (-not ($list | Where-Object { $_.type -eq 'table' })) { throw "no table found: the pruned build lost a model" }
+          # picture text: without an API key the answer must be "configure the API" (400), not "no OCR models" (503)
+          $img = $list | Where-Object { $_.type -eq 'image' } | Select-Object -First 1
+          if (-not $img) { throw "no image block in the test page" }
+          $code = curl.exe -s -o NUL -w "%{http_code}" -X POST "http://127.0.0.1:8765/api/documents/$($up.doc_id)/pages/1/images/$($img.id)/translate"
+          if ($code -ne "400") { throw "image translation is not ready in the exe (HTTP $code)" }
           Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/shutdown -Headers @{ 'X-PDFTR-Shutdown' = '1' } | Out-Null
           $p.WaitForExit(15000) | Out-Null
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; throw "exe did not exit" }

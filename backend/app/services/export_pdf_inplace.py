@@ -36,6 +36,27 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
         if r["translation"] and r["type"] not in ("image", "formula"):
             by_page.setdefault(r["page_no"], []).append(r)
 
+    # pictures whose text was translated (「翻译图片文字」): the painted copy goes over the original,
+    # before any translated text of the page is written on top
+    from . import image_translate
+    from ..config import UPLOAD_DIR
+
+    doc_dir = UPLOAD_DIR / str(doc_id)
+    if (doc_dir / "imgtr").is_dir():
+        for r in blocks:
+            if r["type"] != "image":
+                continue
+            bbox = json.loads(r["bbox_json"] or "[]")
+            if len(bbox) != 4:
+                continue
+            png = image_translate.png_path(doc_dir, r["page_no"], image_translate.image_key(bbox))
+            if png.exists():
+                page = pdf.load_page(r["page_no"] - 1)
+                try:
+                    page.insert_image(fitz.Rect(bbox) & page.rect, filename=str(png), overlay=True)
+                except Exception:
+                    pass  # the export still works with the original picture
+
     for page_no, rows in by_page.items():
         page = pdf.load_page(page_no - 1)
         # 1) remove ALL source text under translated blocks. fill=False: nothing is

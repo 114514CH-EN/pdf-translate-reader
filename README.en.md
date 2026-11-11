@@ -15,6 +15,7 @@ The interface is in Chinese, and the default translation direction is English �
 **Translation**
 - Page view: the translation keeps the original's positions, font sizes and colours (headings, numbered-list indents and table cell alignment follow the source). A sentence-by-sentence view lets you edit each sentence
 - Formulas are never re-typeset: inline and display math are cropped from the rendered page, so subscripts and superscripts match the original
+- Text inside pictures can be translated too (Settings → 翻译 → 翻译图片文字, off by default): each picture gets its own button, text is recognised locally and painted back at the same place, size, colour and rotation
 - Glossary (global and per document) that can be extracted from the document automatically; consistency polishing
 - Estimates of tokens, cost and time before translating; a progress strip with one cell per page (click to jump)
 - Export: translation-only PDF, side-by-side or alternating-page PDF, bilingual PDF, Markdown (with highlights and notes)
