@@ -136,7 +136,19 @@ def _merge_paragraphs(items: list[dict]) -> list[dict]:
             and abs(cur["style"]["size"] - nxt["style"]["size"]) < 0.5
             and cur["style"]["bold"] == nxt["style"]["bold"]
         )
-        if same_col and same_style and -0.4 * lh <= gap < 1.5 * lh:
+        # a centred heading or chart label wrapped over two lines: same centre, different left
+        # edges, set tight — and the upper line doesn't end a sentence
+        centred = (
+            not same_col
+            and abs((cur["bbox"][0] + cur["bbox"][2]) - (nxt["bbox"][0] + nxt["bbox"][2])) < 6
+            and gap < 0.6 * lh
+            and not cur["text"].rstrip().endswith((".", "。", ":", "：", "?", "!", ";"))
+            and len(nxt["text"]) < 120 and len(cur["text"]) < 240
+            and not cur.get("display") and not nxt.get("display")
+        )
+        if centred and same_style and -0.4 * lh <= gap:
+            cur["style"] = {**cur["style"], "align": "center"}
+        if (same_col or centred) and same_style and -0.4 * lh <= gap < 1.5 * lh:
             if cur.get("ph") or nxt.get("ph"):
                 cur["ph"] = (cur.get("ph") or cur["text"]).rstrip() + "\n" + (nxt.get("ph") or nxt["text"]).lstrip()
                 cur["math"] = (cur.get("math") or []) + (nxt.get("math") or [])

@@ -287,6 +287,16 @@
 - 验证：模拟 workspace 登录服务 + 模拟 Vercel 转发的本地代理，Playwright 走完：登录页 → 错误密码 / 非白名单账号被拒 → 登录 → 打开文档、页面图和公式截图经 cookie 加载 → 桌宠版共用登录 → 清掉 cookie 后弹出重新登录 → 设置里退出登录；按镜像目录结构单独起后台验证（这台机器没有 Docker 守护进程，镜像本身没有实际构建）
 - 新增 `tests/test_cloud.py`（10 项）——共 **81 passed**；`APP_VERSION` → `2026.11.07-3`，`VERSION` → 1.2.0
 
+### M27 优化：速度 / 版面 / 一键更新 / 安装包瘦身 / 桌宠互动 + v1.3.0（2026-11-11）✅
+- **打开速度**：主包 927 KB → 264 KB——KaTeX（258 KB）、PdfPane（pdf.js，369 KB）、设置面板改为按需加载（`React.lazy` / 动态 import）
+- **启动不再卡住**：更新后旧文档的版面重新整理改到后台线程（`documents.upgrade_old_documents(background=True)`），`/api/health` 报告 `upgrading`，页面顶部显示进度条幅，完成后自动刷新
+- **版面**（`EXTRACT_VER` 20）：LaTeX 粗体向量（`\mathbf`，用的是正文粗体字体）经运算符和真正的数学字体连在一起时并入同一个公式（`F = ma`、`ẋ = Ax + b` 不再被拆成碎片），导数上的点跟着字母走；居中的两行标题 / 图表标签（左边界不同、中心相同、行距紧）合并成一个居中段落
+- **一键更新**（`routers/update.py` + `UpdateCard.tsx`）：设置 → 数据与安全 → 软件更新。后台查 GitHub 最新 release；exe 版下载 zip（只认本仓库的 release 地址，校验大小和 GitHub 给的 SHA-256，解压时拒绝越界路径、跳过 `data/`）→ 写 `_update\apply_update.bat` → 退出 → 脚本等进程结束、把 `_internal` 换成新的、重启（失败则恢复旧文件）。`X-PDFTR-Update` 头 + 仅本机，其他网页触发不了；服务器版不提供；源码版给下载链接。每天最多静默检查一次，有新版本时提示
+- **安装包瘦身**（139 MB → 约 90 MB）：`tools/build_exe.py` 构建前探测 PyMuPDF 表格识别实际加载的 ONNX 模型（19 个里只用 3 个），删掉其余的和 `mupdf-devel`；不再附带 `PDFTranslate-Pet.exe`（同一个程序的 16 MB 副本）——改为 `启动桌宠版.bat`，启动器首次运行时自己复制一份
+- **发布流程**：Windows 冒烟测试新增「上传带表格的 PDF 必须识别出表格」（验证删模型后功能还在）和「解压一份安装包 → 触发应用内更新 → 进程换了、旧文件被替换、`data\` 没动」
+- **桌宠**：拖动和飞行时直接写 DOM（`moveFast`，不再每帧触发 React 渲染）；摸头冒爱心、重摔 / 撞墙眼冒金星、翻译完成跳一下并提示、连续阅读 45 分钟提醒休息；它说话的小气泡居中在头顶
+- 新增 `tests/test_update.py`（10 项）、`test_math_rows.py` +2——共 **93 passed**；`APP_VERSION` → `2026.11.11-1`，`VERSION` → 1.3.0
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

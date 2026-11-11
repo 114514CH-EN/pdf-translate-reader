@@ -441,8 +441,11 @@ def _fix_absorbed_brackets(db, doc_id: int) -> None:
             db.execute("UPDATE translations SET text=? WHERE id=?", (new, r["id"]))
 
 
-def upgrade_old_documents() -> None:
-    """Called at startup: re-parse docs extracted by an older extractor version."""
+UPGRADE = {"left": 0}  # documents still waiting for the new extractor (shown by /api/health)
+
+
+def stale_documents() -> list[int]:
+    """Documents extracted by an older extractor version."""
     with get_db() as db:
         docs = db.execute("SELECT id FROM documents WHERE status='ready'").fetchall()
         stale = []
@@ -456,12 +459,38 @@ def upgrade_old_documents() -> None:
                 ver = 1
             if ver < EXTRACT_VER:
                 stale.append(d["id"])
-    for doc_id in stale:
+    return stale
+
+
+def upgrade_old_documents(background: bool = False) -> None:
+    """Startup: re-parse docs extracted by an older extractor version.
+
+    ``background``: in a thread, so a big library does not hold up the start of the
+    app after an update — the page shows a notice until ``UPGRADE["left"]`` is 0.
+    """
+    stale = stale_documents()
+    UPGRADE["left"] = len(stale)
+
+    def run() -> None:
+        for doc_id in stale:
+            try:
+                kept = reextract_document(doc_id)
+                print(f"[upgrade] re-extracted document {doc_id} (kept {kept} translations)")
+            except Exception as e:  # never block startup
+                print(f"[upgrade] document {doc_id} failed: {e}")
+            UPGRADE["left"] = max(0, UPGRADE["left"] - 1)
         try:
-            kept = reextract_document(doc_id)
-            print(f"[upgrade] re-extracted document {doc_id} (kept {kept} translations)")
-        except Exception as e:  # never block startup
-            print(f"[upgrade] document {doc_id} failed: {e}")
+            migrate_formula_placeholders()
+        except Exception as e:
+            print(f"[upgrade] placeholder migration failed: {e}")
+        UPGRADE["left"] = 0
+
+    if background and stale:
+        import threading
+
+        threading.Thread(target=run, name="upgrade-documents", daemon=True).start()
+    else:
+        run()
 
 
 def migrate_formula_placeholders() -> int:

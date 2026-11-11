@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.07-3';
+const EXPECTED_BACKEND = '2026.11.11-1';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
-import { PdfPane } from './components/PdfPane';
 import { PageAbsoluteView } from './components/PageAbsoluteView';
 import { FlowTranslationPane } from './components/FlowTranslationPane';
 import { Sidebar } from './components/Sidebar';
@@ -12,7 +11,6 @@ import { ProgressStrip } from './components/ProgressStrip';
 import { SearchBar } from './components/SearchBar';
 import { SelectionToolbar } from './components/SelectionToolbar';
 import { useReadingPosition } from './hooks/useReadingPosition';
-import { SettingsModal } from './components/SettingsModal';
 import { JobsProgressBanner } from './components/JobsProgressBanner';
 import { UploadDropZone } from './components/UploadDropZone';
 import { useSyncScroll } from './hooks/useSyncScroll';
@@ -26,6 +24,9 @@ import { applyTheme, nextTheme, type ThemeMode } from './lib/theme';
 import { isPetMode } from './pet/mode';
 
 /** Only the pet build downloads this — the classic reader never fetches it. */
+// loaded when first needed: the PDF engine (pdf.js, ≈400 KB) and the settings window
+const PdfPane = lazy(() => import('./components/PdfPane').then((m) => ({ default: m.PdfPane })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 const PetAssistant = lazy(() =>
   import('./pet/PetAssistant').then((m) => ({ default: m.PetAssistant })),
 );
@@ -103,13 +104,57 @@ export default function App() {
 
   // detect an old backend process still serving this (new) page
   const [backendStale, setBackendStale] = useState<string | null>(null);
+  // after an update the backend re-parses old documents in the background
+  const [upgrading, setUpgrading] = useState(0);
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((h: { version?: string }) => {
-        if (h.version !== EXPECTED_BACKEND) setBackendStale(h.version ?? '旧版本');
-      })
-      .catch(() => undefined);
+    let timer = 0;
+    let seen = false;
+    const check = () => {
+      fetch('/api/health')
+        .then((r) => r.json())
+        .then((h: { version?: string; upgrading?: number }) => {
+          if (h.version !== EXPECTED_BACKEND) setBackendStale(h.version ?? '旧版本');
+          const left = h.upgrading ?? 0;
+          setUpgrading(left);
+          if (left > 0) {
+            seen = true;
+            timer = window.setTimeout(check, 1500);
+          } else if (seen) {
+            window.location.reload(); // show the documents with their new layout
+          }
+        })
+        .catch(() => undefined);
+    };
+    check();
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // a quiet look for a new release, at most once a day (local app only)
+  useEffect(() => {
+    const KEY = 'pdftr.update.checked';
+    const timer = window.setTimeout(() => {
+      try {
+        if (Date.now() - Number(localStorage.getItem(KEY) || 0) < 20 * 3600 * 1000) return;
+      } catch {
+        return;
+      }
+      fetch('/api/health')
+        .then((r) => r.json())
+        .then((h: { cloud?: boolean }) => (h.cloud ? null : fetch('/api/update/check').then((r) => (r.ok ? r.json() : null))))
+        .then((u: { newer?: boolean; latest?: string } | null) => {
+          if (!u) return;
+          try {
+            localStorage.setItem(KEY, String(Date.now()));
+          } catch {
+            /* private mode */
+          }
+          if (u.newer) {
+            useViewStore.getState().toast(`有新版本 v${u.latest}：在 ⚙ 设置 → 数据与安全 里可以一键更新`, 'success');
+          }
+        })
+        .catch(() => undefined);
+    }, 8000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // settings (theme + shortcuts) are needed app-wide, not only in the modal
@@ -249,6 +294,11 @@ export default function App() {
             重新打开程序（PDFTranslate.exe，或源码版的 run.bat）。
           </div>
         )}
+        {upgrading > 0 && !backendStale && (
+          <div className="stale-banner is-info" role="status">
+            刚更新过：正在按新版本重新整理 {upgrading} 份文档的版面，已有译文会保留。完成后页面会自动刷新。
+          </div>
+        )}
         {job && activeId && <JobsProgressBanner docId={activeId} />}
 
         <Toolbar />
@@ -258,10 +308,9 @@ export default function App() {
           <SearchBar />
           <div className="split">
           <section className="pane pane-left" style={{ width: `${leftPanePct}%` }}>
-            <PdfPane
-              scrollRef={leftRef}
-              docId={activeId}
-            />
+            <Suspense fallback={null}>
+              <PdfPane scrollRef={leftRef} docId={activeId} />
+            </Suspense>
           </section>
           <div
             ref={dividerRef}
@@ -304,7 +353,9 @@ export default function App() {
           </span>
         </footer>
 
-        <SettingsModal />
+        <Suspense fallback={null}>
+          <SettingsModal />
+        </Suspense>
         <SelectionToolbar />
         {isPetMode() && (
           <Suspense fallback={null}>

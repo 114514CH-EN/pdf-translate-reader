@@ -35,6 +35,7 @@
 - 形象可换：图片网址（gif 也行）或本地文件，导入时自动去背景（动图逐帧处理，保留动画）；走路 / 思考 / 说话 / 倾听 / 睡觉还能各配一张动作图
 - 会按方向转身、闲着太久会睡着、你划词时竖起耳朵；气泡关着时答完了会跳一跳提醒
 - 物理效果（设置 → 界面 → 桌宠，可分别关掉）：拖到高处松手会掉下来弹几下，甩出去有惯性、撞到窗口边会弹回来
+- 会互动：鼠标在它身上来回蹭是摸头（冒爱心），摔重了或撞墙会眼冒金星；翻译完成时跳一下告诉你，连续读 45 分钟提醒你歇一会儿（跟随「主动提示」开关）
 - 右键菜单：总结本页、自测、换装、安静模式、藏到角落（划词时才出来）
 - 在一页停留一会儿，看到公式、表格或大段文字时会问你要不要讲讲（可关）
 - 默认形象是为本项目画的「小页」：一张折了角的纸
@@ -51,7 +52,7 @@
 ### 方式一：下载 exe（推荐，不用装任何东西）
 
 1. 从 [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest) 下载 **`PDFTranslate-vX.Y.Z-windows.zip`**，解压到任意位置
-2. 双击 **`PDFTranslate.exe`**：浏览器会自动打开 `http://127.0.0.1:8765`；双击 **`PDFTranslate-Pet.exe`** 是桌宠版
+2. 双击 **`PDFTranslate.exe`**：浏览器会自动打开 `http://127.0.0.1:8765`；双击 **`启动桌宠版.bat`** 是桌宠版（运行过一次后旁边会多出 `PDFTranslate-Pet.exe`，也可以直接双击它）。以后升级在 ⚙ 设置 → 数据与安全 → **检查更新** 里一键完成
 3. 打开 ⚙ 设置：
    - **翻译**：选服务商、填 API Key、点「拉取模型列表」选模型，「保存并测试」
    - **阅读助手**：单独配置（可以点「复制翻译 API 的配置」作为起点）
@@ -72,7 +73,7 @@
 
 ### 自己打包 exe
 
-运行 `build_exe.bat`（需要 Python），生成 `dist\PDFTranslate\`（含 `PDFTranslate.exe` 和 `PDFTranslate-Pet.exe`），整个文件夹可以复制到别处使用。发布新版本时 GitHub 会在 Windows 上自动打包，见 `.github/workflows/release.yml`。
+运行 `build_exe.bat`（需要 Python），生成 `dist\PDFTranslate\`（含 `PDFTranslate.exe` 和 `启动桌宠版.bat`），整个文件夹可以复制到别处使用。发布新版本时 GitHub 会在 Windows 上自动打包，见 `.github/workflows/release.yml`。
 
 ### 服务器版（Vercel + 自己的服务器）
 

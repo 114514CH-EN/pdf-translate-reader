@@ -935,3 +935,84 @@
     transform: none;
   }
 }
+
+/* ---------- says something by itself, hearts and stars ---------- */
+
+.pet-say {
+  width: max-content;
+  padding: 6px 11px;
+  pointer-events: none;
+  transform: translateX(-50%); /* centred over its head */
+  animation: pet-say-in 0.2s ease-out;
+}
+@keyframes pet-say-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+.pet {
+  will-change: left, bottom;
+}
+.pet-fx {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.pet-fx span {
+  position: absolute;
+  left: calc((var(--i) - 1) * 16px - 6px);
+  bottom: 0;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+}
+.pet-fx.is-hearts span {
+  color: #ff6b9a;
+  animation: pet-heart 1.3s ease-out calc(var(--i) * 0.16s) forwards;
+}
+.pet-fx.is-stars span {
+  color: #f5b93a;
+  animation: pet-star 1.6s linear calc(var(--i) * 0.1s) forwards;
+}
+@keyframes pet-heart {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.5);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.9);
+  }
+}
+@keyframes pet-star {
+  0% {
+    opacity: 0;
+    transform: rotate(0deg) translateX(12px) rotate(0deg);
+  }
+  15%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(540deg) translateX(12px) rotate(-540deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-fx span {
+    animation: none;
+    opacity: 1;
+  }
+}

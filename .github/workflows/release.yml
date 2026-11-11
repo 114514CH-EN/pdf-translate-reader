@@ -101,21 +101,72 @@ jobs:
             try { $h = Invoke-RestMethod http://127.0.0.1:8765/api/health } catch { Start-Sleep 1 }
           }
           if (-not $h.ok) { throw "PDFTranslate.exe did not start" }
-          Write-Host "running $($h.version)"
+          Write-Host "running $($h.version), release $($h.release)"
+          if ($h.release -ne (Get-Content VERSION -Raw).Trim()) { throw "VERSION is not bundled" }
           $page = Invoke-WebRequest http://127.0.0.1:8765/pet -UseBasicParsing
           if ($page.StatusCode -ne 200) { throw "pet page missing" }
+          # the table finder still works with the unused ONNX models removed
+          python tools/make_table_pdf.py table.pdf
+          $up = curl.exe -s -F "file=@table.pdf" http://127.0.0.1:8765/api/documents | ConvertFrom-Json
+          $blocks = Invoke-RestMethod "http://127.0.0.1:8765/api/documents/$($up.doc_id)/pages/1/blocks"
+          $list = if ($blocks.blocks) { $blocks.blocks } else { $blocks }
+          if (-not ($list | Where-Object { $_.type -eq 'table' })) { throw "no table found: the pruned build lost a model" }
           Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/shutdown -Headers @{ 'X-PDFTR-Shutdown' = '1' } | Out-Null
           $p.WaitForExit(15000) | Out-Null
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; throw "exe did not exit" }
 
-      - name: Pack and upload
+      - name: Pack
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           # the smoke test created dist\PDFTranslate\data — never ship it
           Remove-Item -Recurse -Force dist\PDFTranslate\data -ErrorAction SilentlyContinue
-          $zip = "PDFTranslate-$env:TAG-windows.zip"
-          python tools/build_exe.py --pack-only --zip $zip
-          gh release upload $env:TAG $zip --clobber
+          python tools/build_exe.py --pack-only --zip "PDFTranslate-$env:TAG-windows.zip"
+
+      - name: Test the in-app update (swap files, restart)
+        shell: pwsh
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          # an installed copy updates itself from the zip that was just packed
+          Expand-Archive "PDFTranslate-$env:TAG-windows.zip" -DestinationPath installed
+          $app = Resolve-Path installed\PDFTranslate
+          Set-Content "$app\_internal\stale-file.txt" "left over from the old version"
+          $env:PDFTR_UPDATE_ZIP = (Resolve-Path "PDFTranslate-$env:TAG-windows.zip").Path
+          Start-Process -FilePath "$app\PDFTranslate.exe" -ArgumentList '--no-browser'
+          $h = $null
+          for ($i = 0; $i -lt 90 -and -not $h; $i++) {
+            try { $h = Invoke-RestMethod http://127.0.0.1:8765/api/health } catch { Start-Sleep 1 }
+          }
+          if (-not $h.ok) { throw "installed copy did not start" }
+          $old = $h.pid
+          New-Item -ItemType Directory -Force "$app\data\keep" | Out-Null
+          Set-Content "$app\data\keep\note.txt" "the library must survive"
+          Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/update/install -Headers @{ 'X-PDFTR-Update' = '1' } | Out-Null
+          $new = $null
+          for ($i = 0; $i -lt 120 -and -not $new; $i++) {
+            Start-Sleep 1
+            try { $r = Invoke-RestMethod http://127.0.0.1:8765/api/health; if ($r.pid -ne $old) { $new = $r } } catch { }
+          }
+          if (-not $new) {
+            try { Invoke-RestMethod http://127.0.0.1:8765/api/update/status | ConvertTo-Json | Write-Host } catch { }
+            Get-ChildItem $app | Format-Table Name | Out-String | Write-Host
+            throw "the app did not come back after the update"
+          }
+          Write-Host "restarted: pid $old -> $($new.pid), release $($new.release)"
+          Start-Sleep 3
+          if (Test-Path "$app\_internal\stale-file.txt") { throw "old program files were not replaced" }
+          if (Test-Path "$app\_internal.old") { throw "_internal.old left behind" }
+          if (Test-Path "$app\_update") { throw "_update left behind" }
+          if (-not (Test-Path "$app\PDFTranslate-Pet.exe")) { throw "PDFTranslate-Pet.exe missing after the update" }
+          if (-not (Test-Path "$app\data\keep\note.txt")) { throw "data folder was touched" }
+          Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/shutdown -Headers @{ 'X-PDFTR-Shutdown' = '1' } | Out-Null
+          Start-Sleep 3
+
+      - name: Upload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh release upload $env:TAG "PDFTranslate-$env:TAG-windows.zip" --clobber

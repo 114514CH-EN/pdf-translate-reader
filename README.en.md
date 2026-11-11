@@ -37,6 +37,7 @@ The interface is in Chinese, and the default translation direction is English �
 - Change its look with an image URL (GIFs work) or a local file. Backgrounds are removed on import, frame by frame for animations, so the animation is kept. Walking, thinking, talking, listening and sleeping can each have their own picture
 - It turns to face the way it walks, dozes off when nothing happens for a while, perks up when you select text, and hops to tell you an answer finished while the bubble was closed
 - Physics (Settings → 界面 → 桌宠, each can be turned off): let go of it up high and it falls and bounces; fling it and it keeps the speed of your hand and bounces off the window edges
+- It reacts: rub the pointer back and forth over it to pet it (hearts), a hard landing leaves it seeing stars; it hops when a translation finishes and suggests a break after 45 minutes of reading
 - Right-click menu: summarise the page, quiz, change look, quiet mode, tuck into the corner (comes out only when you ask about selected text)
 - After you stay on a page for a few seconds, it offers to explain the formulas, tables or long passages it sees there (can be turned off)
 - The default look is 小页, a folded sheet of paper drawn for this project
@@ -53,7 +54,7 @@ The interface is in Chinese, and the default translation direction is English �
 ### Option 1: download the exe (recommended, nothing to install)
 
 1. From [Releases](https://github.com/114514CH-EN/pdf-translate-reader/releases/latest), download **`PDFTranslate-vX.Y.Z-windows.zip`** and extract it anywhere
-2. Double-click **`PDFTranslate.exe`**; your browser opens `http://127.0.0.1:8765`. **`PDFTranslate-Pet.exe`** starts the desktop pet edition
+2. Double-click **`PDFTranslate.exe`**; your browser opens `http://127.0.0.1:8765`. **`启动桌宠版.bat`** starts the desktop pet edition (after the first run a `PDFTranslate-Pet.exe` appears next to it). Later versions install from ⚙ Settings → Data & security → **Check for updates**
 3. Open ⚙ Settings:
    - **翻译 (Translation)**: choose a provider, enter the API key, click "拉取模型列表" (fetch models) to pick a model, then "保存并测试" (save and test)
    - **阅读助手 (Reading assistant)**: configured separately (click "复制翻译 API 的配置" to start from the translation settings)
@@ -74,7 +75,7 @@ Requires **Python 3.10+**. The repository includes the built frontend, so **Node
 
 ### Build the exe yourself
 
-Run `build_exe.bat` (needs Python). It produces `dist\PDFTranslate\` with `PDFTranslate.exe` and `PDFTranslate-Pet.exe`; the whole folder can be copied elsewhere. Releases are built automatically on Windows by GitHub, see `.github/workflows/release.yml`.
+Run `build_exe.bat` (needs Python). It produces `dist\PDFTranslate\` with `PDFTranslate.exe` and `启动桌宠版.bat`; the whole folder can be copied elsewhere. Releases are built automatically on Windows by GitHub, see `.github/workflows/release.yml`.
 
 ### Server version (Vercel + your own server)
 

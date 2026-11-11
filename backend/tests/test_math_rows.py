@@ -207,3 +207,32 @@ def test_text_painted_over_is_not_extracted():
     assert "Old chart title" not in joined and "New chart title" in joined
     assert texts.count("Voltage") == 1
     assert "Kept above" in joined and "Under a highlight" in joined
+
+
+def test_bold_vectors_join_their_formula():
+    """"force F = ma acts": F and a are \\mathbf (bold text font), only m is in a math font."""
+    def bold(text, x0, x1):
+        sp = _span(text, x0, 100, x1, 112)
+        sp["font"] = "CMBX10"
+        return sp
+    line = _block(_span("The force ", 72, 100, 120, 112), bold("F", 120, 128), _span(" = ", 128, 100, 140, 112),
+                  _span("m", 140, 100, 149, 112, math=True), bold("a", 149, 155),
+                  _span(" acts, and ", 155, 100, 210, 112), bold("A", 210, 218), _span(" bold label", 218, 100, 280, 112))
+    runs = _assign_math_runs([line], [0])
+    assert len(runs) == 1
+    marked = [sp["text"].strip() for sp in line["lines"][0]["spans"] if sp.get("m")]
+    assert marked == ["F", "=", "m", "a"]  # the lone bold "A" in the sentence stays text
+
+
+def test_centred_title_on_two_lines_is_one_paragraph():
+    from app.services.structure import _merge_paragraphs
+
+    def para(text, x0, y0, x1, y1):
+        return {"type": "paragraph", "text": text, "bbox": [x0, y0, x1, y1], "line_height": 26,
+                "style": {"size": 22.0, "bold": False}}
+    out = _merge_paragraphs([para("A long chart title that wraps onto", 229, 143, 669, 172),
+                             para("a second line", 357, 168, 541, 197),
+                             para("Left text far below", 100, 400, 300, 426)])
+    assert len(out) == 2
+    assert out[0]["text"] == "A long chart title that wraps onto\na second line"
+    assert out[0]["style"]["align"] == "center"

@@ -97,6 +97,11 @@ const short = (t: string, n = 18) => (t.length > n ? `${t.slice(0, n - 1)}…` :
 const isSvg = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
 
 /** What the pet offers for a page, decided from the blocks already loaded for it. */
+const DIZZY = ['晕……', '轻一点嘛', '哎哟！', '转、转起来了……'];
+const PURR = ['嘿嘿', '好舒服～', '再摸摸', '(*ˊᗜˋ*)'];
+/** minutes of reading before it suggests a break */
+const BREAK_AFTER_MIN = 45;
+
 interface TipOffer {
   text: string;
   ask: string;
@@ -198,7 +203,28 @@ export function PetAssistant() {
   const [settling, setSettling] = useState(false);
   /** thrown / falling under the physics simulation (see physics.ts) */
   const [flying, setFlying] = useState(false);
-  const [tilt, setTilt] = useState(0);
+  /** the pet's element: while dragged or flying its position is written straight to the DOM */
+  const rootRef = useRef<HTMLDivElement>(null);
+  /** a short line the pet says by itself (no buttons), gone after a few seconds */
+  const [say, setSay] = useState<string | null>(null);
+  const sayTimer = useRef(0);
+  const speak = useCallback((text: string, ms = 4200) => {
+    window.clearTimeout(sayTimer.current);
+    setSay(text);
+    sayTimer.current = window.setTimeout(() => setSay(null), ms);
+  }, []);
+  /** little effects over its head: hearts when stroked, stars when it hits something hard */
+  const [fx, setFx] = useState<{ kind: 'hearts' | 'stars'; n: number } | null>(null);
+  const fxTimer = useRef(0);
+  const burst = useCallback((kind: 'hearts' | 'stars', ms = 1500) => {
+    window.clearTimeout(fxTimer.current);
+    setFx((f) => ({ kind, n: (f?.n ?? 0) + 1 }));
+    fxTimer.current = window.setTimeout(() => setFx(null), ms);
+  }, []);
+  useEffect(() => () => {
+    window.clearTimeout(sayTimer.current);
+    window.clearTimeout(fxTimer.current);
+  }, []);
   /** landing squash: alternates a/b so the animation restarts on every bounce */
   const [landing, setLanding] = useState<'' | 'a' | 'b'>('');
   const [physics, setPhysicsState] = useState<PhysicsSettings>(() => loadPhysics());
@@ -239,6 +265,20 @@ export function PetAssistant() {
   const place = useCallback((next: { x: number; y: number }) => {
     posRef.current = next;
     setPos(next);
+  }, []);
+
+  /**
+   * Move without a React render: 60 moves a second while dragged or flying would
+   * re-render the whole assistant (chat history included) every frame. The state
+   * catches up with `place` when the movement ends; renders in between read posRef.
+   */
+  const moveFast = useCallback((next: { x: number; y: number }, tilt = 0) => {
+    posRef.current = next;
+    const el = rootRef.current;
+    if (!el) return;
+    el.style.left = `${next.x}px`;
+    el.style.bottom = `${next.y}px`;
+    el.style.transform = tilt ? `rotate(${tilt.toFixed(1)}deg)` : '';
   }, []);
 
   // growing the pet near the right edge would push it off screen
@@ -422,7 +462,8 @@ export function PetAssistant() {
       // caught in mid-air
       stopSim();
       setFlying(false);
-      setTilt(0);
+      place(posRef.current);
+      if (rootRef.current) rootRef.current.style.transform = '';
       setLanding('');
     }
     tracker.current.reset();
@@ -461,7 +502,7 @@ export function PetAssistant() {
     }
     const x = clamp(e.clientX - d.offX, 8, maxX());
     const top = clamp(e.clientY - d.offY, 8, window.innerHeight - sizeRef.current - GROUND);
-    place({ x, y: window.innerHeight - sizeRef.current - top });
+    moveFast({ x, y: window.innerHeight - sizeRef.current - top });
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -478,6 +519,7 @@ export function PetAssistant() {
     }
     const limit = maxX();
     const ph = physicsRef.current;
+    place(posRef.current); // the drag moved the element directly: let the state catch up
     if (ph.bounce || ph.inertia) {
       const v = ph.inertia ? tracker.current.velocity() : { vx: 0, vy: 0 };
       throwPet(v.vx, v.vy);
@@ -512,26 +554,32 @@ export function PetAssistant() {
       };
       let dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      let res = { landed: 0, done: false };
+      let res = { landed: 0, wall: 0, done: false };
       // small fixed steps: a fast fall never tunnels through the floor
       while (dt > 0) {
         const h = Math.min(dt, 1 / 120);
         const r = step(body, world, h, physicsRef.current);
-        res = { landed: Math.max(res.landed, r.landed), done: r.done };
+        res = { landed: Math.max(res.landed, r.landed), wall: Math.max(res.wall, r.wall), done: r.done };
         dt -= h;
         if (r.done) break;
       }
       if (Math.abs(body.vx) > 60) setHeading(body.vx < 0 ? 'left' : 'right');
-      setTilt(body.y > GROUND + 1 ? Math.max(-16, Math.min(16, body.vx / 90)) : 0);
       if (res.landed > 260) {
         flip = flip === 'a' ? 'b' : 'a';
         setLanding(flip);
       }
-      place({ x: body.x, y: body.y });
+      if (res.landed > 1500 || res.wall > 1100) {
+        // a really hard landing or a wall at full speed: seeing stars
+        burst('stars', 1800);
+        speak(DIZZY[Math.floor(Math.random() * DIZZY.length)], 2200);
+      }
+      const airborne = body.y > GROUND + 1;
+      moveFast({ x: body.x, y: body.y }, airborne ? Math.max(-16, Math.min(16, body.vx / 90)) : 0);
       if (res.done) {
         simRef.current = 0;
+        place({ x: body.x, y: body.y });
+        if (rootRef.current) rootRef.current.style.transform = '';
         setFlying(false);
-        setTilt(0);
         window.setTimeout(() => setLanding(''), 300);
         savePos();
         return;
@@ -572,8 +620,73 @@ export function PetAssistant() {
     return () => window.clearTimeout(timer);
   }, [canWander, wander]);
 
-  // ---- dozing off when nothing happens, waking on any activity ----
   const lastActivity = useRef(Date.now());
+  const tipsOnRef = useRef(tipsOn);
+  tipsOnRef.current = tipsOn;
+
+  // ---- stroking: rub the pointer back and forth over it (no button pressed) ----
+  const stroke = useRef({ x: 0, dir: 0, flips: 0, t0: 0, cool: 0 });
+  const onStroke = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.buttons !== 0 || dragRef.current || simRef.current || presenceRef.current !== 'normal') return;
+    const st = stroke.current;
+    const now = performance.now();
+    if (now < st.cool) return;
+    if (now - st.t0 > 1400) {
+      st.flips = 0;
+      st.dir = 0;
+      st.t0 = now;
+      st.x = e.clientX;
+      return;
+    }
+    const dx = e.clientX - st.x;
+    if (Math.abs(dx) < 6) return;
+    const dir = dx > 0 ? 1 : -1;
+    if (st.dir && dir !== st.dir) st.flips += 1;
+    st.dir = dir;
+    st.x = e.clientX;
+    if (st.flips >= 3) {
+      st.flips = 0;
+      st.cool = now + 3500;
+      wake();
+      burst('hearts');
+      if (!openRef.current) speak(PURR[Math.floor(Math.random() * PURR.length)], 1800);
+    }
+  };
+
+  // ---- a translation that finishes: it tells you (when its bubble is closed) ----
+  const job = useTranslationStore((st) => st.job);
+  const lastJob = useRef<{ id: string; status: string } | null>(null);
+  useEffect(() => {
+    const prev = lastJob.current;
+    lastJob.current = job ? { id: job.id, status: job.status } : null;
+    if (!prev || (prev.status !== 'running' && prev.status !== 'pending')) return;
+    const finished = !job || job.id !== prev.id || job.status === 'done';
+    if (!finished || (job && job.id === prev.id && job.status !== 'done')) return;
+    if (presenceRef.current === 'hidden' || openRef.current) return;
+    wake();
+    setLanding((l) => (l === 'a' ? 'b' : 'a')); // a little hop-squash
+    window.setTimeout(() => setLanding(''), 320);
+    if (presenceRef.current === 'normal') speak('翻译好了，可以看啦 ✓');
+  }, [job, speak, wake]);
+
+  // ---- a long stretch of reading: suggest a break (part of 主动提示) ----
+  const readingSince = useRef(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivity.current > 5 * 60_000) {
+        readingSince.current = now; // away for a while: that was the break
+        return;
+      }
+      if (now - readingSince.current < BREAK_AFTER_MIN * 60_000) return;
+      readingSince.current = now;
+      if (!tipsOnRef.current || presenceRef.current !== 'normal' || openRef.current || sleepRef.current) return;
+      speak(`已经读了 ${BREAK_AFTER_MIN} 分钟了，起来活动一下、看看远处吧`, 9000);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [speak]);
+
+  // ---- dozing off when nothing happens, waking on any activity ----
   useEffect(() => {
     let last = 0;
     const onActivity = () => {
@@ -769,7 +882,11 @@ export function PetAssistant() {
     const t = window.setTimeout(() => setSettling(false), 480);
     return () => window.clearTimeout(t);
   }, [tucked]);
-  const shown = tucked ? { x: maxX(), y: -Math.round(size * 0.48) } : pos;
+  const shown = tucked
+    ? { x: maxX(), y: -Math.round(size * 0.48) }
+    : dragging || flying
+      ? posRef.current // moved directly in the DOM (moveFast): never render an older position over it
+      : pos;
 
   const mood: PetMood = dragging || dropping || flying
     ? 'idle'
@@ -876,9 +993,19 @@ export function PetAssistant() {
           width: size,
           height: size,
           visibility: placed ? 'visible' : 'hidden',
-          transform: tilt ? `rotate(${tilt.toFixed(1)}deg)` : undefined,
         }}
+        ref={rootRef}
+        onPointerMove={onStroke}
       >
+        {fx && (
+          <div className={`pet-fx is-${fx.kind}`} key={fx.n} aria-hidden="true">
+            {(fx.kind === 'hearts' ? ['♥', '♥', '♥'] : ['✦', '✧', '✦']).map((c, i) => (
+              <span key={i} style={{ ['--i' as string]: i }}>
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
         <div
           ref={hitRef}
           className="pet-hit"
@@ -921,7 +1048,13 @@ export function PetAssistant() {
         </div>
       </div>
 
-      {tip && !open && (
+      {say && !open && !tucked && (
+        <div className="pet-tip pet-say" role="status" style={{ left: clamp(shown.x + size / 2, 70, Math.max(70, vw - 70)), bottom: tipBottom, maxWidth: tipW }}>
+          {say}
+        </div>
+      )}
+
+      {tip && !say && !open && (
         <div className="pet-tip" role="status" style={{ left: tipLeft, bottom: tipBottom, width: tipW }}>
           <div>{tip.text}</div>
           <div className="pet-tip-actions">

@@ -7,6 +7,7 @@ import { THEMES } from '../lib/theme';
 import { isPetMode } from '../pet/mode';
 import { loadPhysics, savePhysics } from '../pet/physics';
 import { fetchSession, logout, type SessionInfo } from './AuthGate';
+import UpdateCard from './UpdateCard';
 import {
   DEFAULT_SHORTCUTS,
   SHORTCUT_LABELS,
@@ -933,10 +934,11 @@ function DataSettings() {
     document.body.innerHTML =
       '<div style="font:15px/1.7 system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 16px;color:#334">' +
       '<h2 style="margin:0 0 8px">已退出</h2><p>后台服务已关闭，可以关掉这个页面了。</p>' +
-      '<p style="color:#778">下次双击 PDFTranslate.exe（桌宠版：PDFTranslate-Pet.exe；源码版是 run.bat / run_pet.bat）即可重新打开。</p></div>';
+      '<p style="color:#778">下次双击 PDFTranslate.exe（桌宠版：启动桌宠版.bat；源码版是 run.bat / run_pet.bat）即可重新打开。</p></div>';
   };
   return (
     <>
+      {session && !session.cloud && <UpdateCard />}
       <fieldset className="fieldset">
         <legend>自动备份</legend>
         <p className="fieldset-hint">

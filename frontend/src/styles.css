@@ -2078,6 +2078,11 @@ textarea {
   font-size: 12.5px;
 }
 
+.stale-banner.is-info {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border-bottom-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
 /* ---- assistant ---- */
 .form-row .inline-check,
 .inline-check {
@@ -3068,4 +3073,44 @@ textarea {
 .auth-submit {
   margin-top: 6px;
   justify-content: center;
+}
+
+/* 设置 → 软件更新 */
+.update-notes {
+  margin: 6px 0 10px;
+  font-size: 13px;
+}
+.update-notes summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.update-notes pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.6;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.update-progress {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 10px;
+  font-size: 13px;
+}
+.update-bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.update-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.4s ease;
 }

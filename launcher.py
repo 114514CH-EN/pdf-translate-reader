@@ -224,6 +224,29 @@ def _pick_port(version: str, base: Path, data_dir: Path) -> int | None:
     return port
 
 
+def _pet_copy() -> None:
+    """PDFTranslate-Pet.exe is this same program under another name. The download ships
+    one exe (half the size); the twin is made here, and remade after every update."""
+    if not FROZEN or os.name != "nt":
+        return
+    me = Path(sys.executable)
+    if me.stem.lower().endswith("-pet"):
+        return
+    twin = me.with_name(me.stem + "-Pet.exe")
+    try:
+        a = me.stat()
+        if twin.exists():
+            b = twin.stat()
+            if b.st_size == a.st_size and int(b.st_mtime) == int(a.st_mtime):
+                return
+            twin.unlink()
+        import shutil
+
+        shutil.copy2(me, twin)
+    except Exception:
+        pass  # in use, or a read-only folder: 启动桌宠版.bat still works
+
+
 def _console_title() -> None:
     if os.name == "nt":
         try:
@@ -258,6 +281,7 @@ def _safe_output() -> None:
 def main() -> None:
     _safe_output()
     _console_title()
+    _pet_copy()
     from backend.app.config import APP_VERSION, BASE_DIR, DATA_DIR
 
     port = _pick_port(APP_VERSION, Path(BASE_DIR), Path(DATA_DIR))

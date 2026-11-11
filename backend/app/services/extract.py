@@ -355,7 +355,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 19  # v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 20  # v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -373,6 +373,15 @@ _MONO_RE = re.compile(r"courier|consola|mono|menlo|lucidaconsole", re.I)
 MATH_CHAR_RE = re.compile("[\U0001D400-\U0001D7FF\u2200-\u22FF\u2190-\u21FF\u27F0-\u27FF\u2A00-\u2AFF\u0391-\u03C9\u221A\u2202\u2207]")
 _BRIDGE_RE = re.compile(r"^[\s=+\-−±×·∙/()\[\]{}|,.:;<>^_'′″0-9]*$")
 PH_RE = re.compile(r"\{\{m\d+\}\}")
+_ACCENTS = "˙¨ˆ˜¯ˇ˘´`⃗"
+_CHAIN_RE = re.compile(r"^[\s=+\-−±×·∙/()\[\]|<>˙¨ˆ˜¯ˇ˘´`⃗]*$")
+
+
+def _bold_letter(sp: dict) -> bool:
+    t = (sp.get("text") or "").strip()
+    return len(t) == 1 and t.isalpha() and t.isascii() and (
+        bool(sp.get("flags", 0) & 16) or bool(re.search(r"CMBX|Bold|-BX", sp.get("font") or ""))
+    )
 
 
 def restore_placeholders(translation: str, runs: list[dict]) -> str | None:
@@ -801,6 +810,29 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
             t = (sp.get("text") or "").strip()
             if not is_m[k] and t and _BRIDGE_RE.match(t) and sp["size"] < 0.82 * (line_size[li] or sp["size"]):
                 is_m[k] = True
+        # bold vectors (\mathbf: the bold TEXT font): a single bold letter chained to real
+        # math through operators only — "F = ma", "y = Ax + b" — is part of that formula
+        k = 0
+        while k < len(flat):
+            li = flat[k][0]
+            j = k
+            while j < len(flat) and flat[j][0] == li and (
+                is_m[j] or _bold_letter(flat[j][2]) or _CHAIN_RE.match(flat[j][2].get("text") or "")
+            ):
+                j += 1
+            core = [q for q in range(k, j) if is_m[q] or _bold_letter(flat[q][2])]
+            if core and any(is_m[q] for q in core) and any(not is_m[q] for q in core):
+                a, b = core[0], core[-1]
+                txt = lambda q: (flat[q][2].get("text") or "").strip()  # noqa: E731
+                if a > k and txt(a - 1) and all(c in _ACCENTS for c in txt(a - 1)):
+                    a -= 1  # the dot of a time derivative sits in the text font, before its letter
+                inside = "".join(txt(q) for q in range(a, b + 1))
+                if b + 1 < j and txt(b + 1) in (")", "]") and \
+                        inside.count("(") + inside.count("[") > inside.count(")") + inside.count("]"):
+                    b += 1
+                for q in range(a, b + 1):
+                    is_m[q] = True
+            k = max(j, k + 1)
         # bridge operators/spaces/sub-scripts between or next to math spans on the same line
         for k, (li, si, sp) in enumerate(flat):
             if is_m[k]:

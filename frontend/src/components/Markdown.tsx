@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
+import { useEffect, useState, type ReactNode } from 'react';
 
 /**
  * Small, safe Markdown renderer for assistant replies (no raw HTML from the
@@ -9,10 +7,30 @@ import 'katex/dist/katex.min.css';
  * KaTeX, and page references like [p3] which become buttons that jump there.
  */
 
+// KaTeX (≈270 KB + fonts) is only fetched when an answer actually contains a formula
+type Katex = typeof import('katex').default;
+let katexLib: Katex | null = null;
+let katexLoading: Promise<void> | null = null;
+function loadKatex(): Promise<void> {
+  katexLoading ??= Promise.all([import('katex'), import('katex/dist/katex.min.css')]).then(([m]) => {
+    katexLib = m.default;
+  });
+  return katexLoading;
+}
+
 function TeX({ src, display }: { src: string; display: boolean }) {
+  const [, setReady] = useState(katexLib !== null);
+  useEffect(() => {
+    let alive = true;
+    if (!katexLib) void loadKatex().then(() => alive && setReady(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!katexLib) return <code>{src}</code>; // for a moment, until the library arrives
   let html: string;
   try {
-    html = katex.renderToString(src, { displayMode: display, throwOnError: false, strict: 'ignore', trust: false });
+    html = katexLib.renderToString(src, { displayMode: display, throwOnError: false, strict: 'ignore', trust: false });
   } catch {
     return <code>{src}</code>;
   }

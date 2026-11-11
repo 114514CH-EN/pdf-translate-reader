@@ -89,6 +89,8 @@ export interface World {
 export interface StepResult {
   /** hit the floor this step with this downward speed (px/s) — for the squash */
   landed: number;
+  /** hit a side wall this step with this sideways speed (px/s) */
+  wall: number;
   /** resting on the floor and (almost) still: the simulation is over */
   done: boolean;
 }
@@ -104,6 +106,7 @@ const MIN_BOUNCE = 180; // below this downward speed it stops bouncing and lands
 /** Advance one step of `dt` seconds (call with dt ≤ 1/30). Mutates `b`. */
 export function step(b: Body, w: World, dt: number, s: PhysicsSettings): StepResult {
   let landed = 0;
+  let wall = 0;
   const speed = Math.hypot(b.vx, b.vy);
   if (speed > MAX_SPEED) {
     b.vx *= MAX_SPEED / speed;
@@ -118,6 +121,7 @@ export function step(b: Body, w: World, dt: number, s: PhysicsSettings): StepRes
   // sides of the window
   if (b.x < w.minX || b.x > w.maxX) {
     b.x = b.x < w.minX ? w.minX : w.maxX;
+    wall = Math.abs(b.vx);
     b.vx = s.bounce ? -b.vx * WALL_BOUNCE : 0;
   }
   // top of the window
@@ -135,5 +139,5 @@ export function step(b: Body, w: World, dt: number, s: PhysicsSettings): StepRes
     }
   }
   const done = b.y <= w.ground + 0.5 && b.vy === 0 && Math.abs(b.vx) < 12;
-  return { landed, done };
+  return { landed, wall, done };
 }

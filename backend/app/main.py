@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from . import cloud
 from .config import APP_VERSION, BASE_DIR, FRONTEND_DIST
 from .db import init_db
-from .routers import assistant, documents, export, glossary, notes, pages, pet, reading, settings, translate
+from .routers import assistant, documents, export, glossary, notes, pages, pet, reading, settings, translate, update
 
 app = FastAPI(title="PDF Translate Reader", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -53,7 +53,6 @@ def _encrypt_keys() -> None:
 
 
 _encrypt_keys()
-documents.upgrade_old_documents()
 
 
 def _close_stale_jobs() -> None:
@@ -80,7 +79,8 @@ def _cleanup_orphans() -> None:
 
 
 _cleanup_orphans()
-documents.migrate_formula_placeholders()
+# after an update: re-parse old documents in the background (the page shows a notice)
+documents.upgrade_old_documents(background=True)
 
 app.include_router(documents.router)
 app.include_router(pages.router)
@@ -92,15 +92,18 @@ app.include_router(assistant.router)
 app.include_router(export.router)
 app.include_router(reading.router)
 app.include_router(pet.router)
+app.include_router(update.router)
 
 
 @app.get("/api/health")
 def health():
     # pid / base_dir let the launcher recognise (and stop) an older copy of itself
     if cloud.enabled():  # no process ids or paths for the outside world
-        return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "cloud": True}
+        return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "cloud": True,
+                "upgrading": documents.UPGRADE["left"]}
     return {"ok": True, "version": APP_VERSION, "variants": ["main", "pet"], "pid": os.getpid(),
-            "base_dir": str(BASE_DIR), "cloud": False}
+            "base_dir": str(BASE_DIR), "cloud": False, "upgrading": documents.UPGRADE["left"],
+            "release": update.release_version()}
 
 
 SHUTDOWN_HEADER = "x-pdftr-shutdown"
