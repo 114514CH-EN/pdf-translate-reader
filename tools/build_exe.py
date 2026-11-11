@@ -28,7 +28,10 @@ README = """PDF 双语翻译阅读器（Windows 版）
 两个版本共用这个文件夹里的 data\\（文档、译文、笔记、设置），可以随时切换。
 不需要安装 Python 或 Node.js。整个文件夹可以放到任何位置，也可以复制到 U 盘。
 
-关闭：关掉黑色的命令行窗口，或在程序的「设置 → 数据与安全」里点「退出程序」。
+程序在后台运行，没有黑色的命令行窗口：任务栏右下角有一个图标（可能收在 ^ 里），
+点它打开阅读器，右键可以打开桌宠版、查看运行日志或退出。
+关闭：右键这个图标 → 退出，或在程序的「设置 → 数据与安全」里点「退出程序」。
+想看到以前的命令行窗口：用 PDFTranslate.exe --console 启动。
 升级：在程序的「设置 → 数据与安全」里点「检查更新」，有新版本时一键下载、替换、重启。
       也可以手动下载新版本，把旧文件夹里的 data\\ 复制到新文件夹，所有文档和译文都还在。
 第一次使用：在 ⚙ 设置里填翻译 API（DeepSeek、OpenAI、Ollama 等），把 PDF 拖进窗口。
@@ -47,7 +50,7 @@ def build() -> Path:
     sep = ";" if sys.platform == "win32" else ":"
     args = [
         str(ROOT / "launcher.py"),
-        "--noconfirm", "--clean", "--onedir", "--console",
+        "--noconfirm", "--clean", "--onedir", "--windowed",  # no black console window: tray icon + data/logs/app.log
         "--name", NAME,
         "--icon", str(ROOT / "assets" / "app.ico"),
         "--distpath", str(ROOT / "dist"),

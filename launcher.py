@@ -247,6 +247,97 @@ def _pet_copy() -> None:
         pass  # in use, or a read-only folder: 启动桌宠版.bat still works
 
 
+def _windowed() -> bool:
+    """The packaged app has no console window (since v1.5.0): nothing to print to, nobody to ask."""
+    return FROZEN and os.name == "nt" and "--console" not in sys.argv
+
+
+def _open_console() -> None:
+    """PDFTranslate.exe --console: the old black window, for watching what the app does."""
+    if not (FROZEN and os.name == "nt" and "--console" in sys.argv):
+        return
+    try:
+        import ctypes
+
+        if ctypes.windll.kernel32.AllocConsole():
+            sys.stdout = open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1)  # noqa: SIM115
+            sys.stderr = sys.stdout
+    except Exception:
+        pass
+
+
+def _log_file(data_dir: Path) -> Path:
+    return data_dir / "logs" / "app.log"
+
+
+def _log_to_file(data_dir: Path) -> None:
+    """Without a console, everything the app prints goes to data\\logs\\app.log."""
+    if not _windowed() and sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        log = _log_file(data_dir)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if log.exists() and log.stat().st_size > 1_000_000:
+            log.replace(log.with_name("app.old.log"))
+        f = open(log, "a", encoding="utf-8", errors="replace", buffering=1)  # noqa: SIM115
+        f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+        sys.stdout = sys.stderr = f
+    except Exception:
+        if sys.stdout is None or sys.stderr is None:
+            sys.stdout = sys.stderr = open(os.devnull, "w")  # noqa: SIM115
+
+
+def _alert(text: str) -> None:
+    """Something the user must see: a message box without a console, else the old prompt."""
+    if _windowed():
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(None, text, "PDF 双语翻译阅读器", 0x30)
+        except Exception:
+            pass
+        return
+    try:
+        input(text + " 按回车退出")
+    except Exception:
+        pass
+
+
+def _start_tray(port: int, data_dir: Path) -> None:
+    """The app's presence now that the console is gone: an icon next to the clock."""
+    if not _windowed():
+        return
+    try:
+        import tray
+
+        first = data_dir / "logs" / ".tray-hint-shown"
+        hint = None
+        if not first.exists():
+            hint = "程序在后台运行。点这个图标打开阅读器，右键可以退出。"
+            try:
+                first.parent.mkdir(parents=True, exist_ok=True)
+                first.write_text("1", encoding="utf-8")
+            except Exception:
+                pass
+
+        def quit_app() -> None:
+            from backend.app.main import _exit_soon
+
+            _exit_soon()
+
+        tray.start(
+            "PDF 双语翻译阅读器",
+            on_open=lambda: webbrowser.open(_url(port)),
+            on_pet=lambda: webbrowser.open(_url(port) + "/pet"),
+            on_quit=quit_app,
+            log_path=str(_log_file(data_dir)),
+            hint=hint,
+        )
+        atexit.register(tray.stop)
+    except Exception as e:  # noqa: BLE001 — the app works without the icon
+        print(f"[tray] unavailable: {e!r}")
+
+
 def _console_title() -> None:
     if os.name == "nt":
         try:
@@ -262,11 +353,14 @@ def _pause_on_crash() -> None:
     if FROZEN:
         import traceback
 
-        traceback.print_exc()
         try:
-            input("启动失败，请把上面的错误信息截图发给开发者。按回车退出")
+            traceback.print_exc()
         except Exception:
             pass
+        if _windowed():
+            _alert("启动失败。错误信息在程序文件夹的 data\\logs\\app.log 里，请把这个文件发给开发者。")
+        else:
+            _alert("启动失败，请把上面的错误信息截图发给开发者。")
 
 
 def _safe_output() -> None:
@@ -279,16 +373,21 @@ def _safe_output() -> None:
 
 
 def main() -> None:
+    _open_console()
+    if sys.stdout is None or sys.stderr is None:  # no console: nothing may print before the log is open
+        sys.stdout = sys.stderr = open(os.devnull, "w")  # noqa: SIM115
     _safe_output()
     _console_title()
     _pet_copy()
     from backend.app.config import APP_VERSION, BASE_DIR, DATA_DIR
 
+    _log_to_file(Path(DATA_DIR))
+
     port = _pick_port(APP_VERSION, Path(BASE_DIR), Path(DATA_DIR))
     if port is None:
         return
     if port < 0:
-        input("按回车退出")
+        _alert(f"端口 {DEFAULT_PORT}–{SPARE_PORTS[-1]} 都被占用，无法启动。")
         sys.exit(1)
 
     import uvicorn
@@ -299,7 +398,11 @@ def main() -> None:
     if "--no-browser" not in sys.argv:
         threading.Thread(target=_open_when_ready, args=(port,), daemon=True).start()
     print(f"PDF 双语翻译阅读器{'（桌宠版）' if PET else ''}已启动：{_url(port)}{PATH}")
-    print("关闭方法：关掉这个窗口、按 Ctrl+C，或在程序的 设置 → 数据与安全 里点「退出程序」。")
+    if _windowed():
+        print("关闭方法：右键任务栏右下角的图标 → 退出，或在程序的 设置 → 数据与安全 里点「退出程序」。")
+        _start_tray(port, Path(DATA_DIR))
+    else:
+        print("关闭方法：关掉这个窗口、按 Ctrl+C，或在程序的 设置 → 数据与安全 里点「退出程序」。")
     try:
         uvicorn.run(app, host=HOST, port=port, log_level="warning")
     except KeyboardInterrupt:

@@ -103,6 +103,12 @@ jobs:
           if (-not $h.ok) { throw "PDFTranslate.exe did not start" }
           Write-Host "running $($h.version), release $($h.release)"
           if ($h.release -ne (Get-Content VERSION -Raw).Trim()) { throw "VERSION is not bundled" }
+          # no console window: output goes to the log, the tray icon code must at least not crash
+          Start-Sleep 2
+          $log = Get-Content dist\PDFTranslate\data\logs\app.log -Raw -Encoding UTF8
+          Write-Host ($log -split "`n" | Select-String 'tray' | Out-String)
+          if ($log -notmatch '已启动') { throw "nothing was written to data\logs\app.log" }
+          if ($log -match '\[tray\] unavailable') { throw "the tray icon code failed" }
           $page = Invoke-WebRequest http://127.0.0.1:8765/pet -UseBasicParsing
           if ($page.StatusCode -ne 200) { throw "pet page missing" }
           # the table finder still works with the unused ONNX models removed

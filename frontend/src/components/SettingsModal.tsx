@@ -999,7 +999,7 @@ function DataSettings() {
       <fieldset className="fieldset">
         <legend>退出程序</legend>
         <p className="fieldset-hint">
-          关闭后台服务（和关掉启动时的命令行窗口一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 PDFTranslate.exe（源码版是 run.bat）即可重新打开。
+          关闭后台服务（和右键任务栏图标选「退出」一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 PDFTranslate.exe（源码版是 run.bat）即可重新打开。
         </p>
         <div className="card-actions">
           <button type="button" className="btn btn-sm btn-danger" onClick={() => void quitApp()}>
