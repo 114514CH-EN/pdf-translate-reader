@@ -29,8 +29,15 @@ def _doc_dir(doc_id: int) -> Path:
 def list_documents():
     with get_db() as db:
         rows = db.execute(
-            "SELECT id, title, page_count, source_lang, target_lang, domain_guess, status,"
-            " created_at, updated_at, last_opened_at FROM documents ORDER BY last_opened_at DESC, id DESC"
+            "SELECT d.id, d.title, d.page_count, d.source_lang, d.target_lang, d.domain_guess, d.status,"
+            " d.created_at, d.updated_at, d.last_opened_at,"
+            # how far the translation has got (the library cards show it)
+            " (SELECT COUNT(*) FROM blocks b WHERE b.doc_id=d.id AND b.type NOT IN ('image','formula')"
+            "   AND trim(b.text)!='') AS blocks_total,"
+            " (SELECT COUNT(*) FROM blocks b JOIN translations t ON t.block_id=b.id AND t.lang=d.target_lang"
+            "   WHERE b.doc_id=d.id AND b.type NOT IN ('image','formula') AND trim(b.text)!='' AND t.text!='')"
+            "   AS blocks_done"
+            " FROM documents d ORDER BY d.last_opened_at DESC, d.id DESC"
         ).fetchall()
     return rows_to_dicts(rows)
 

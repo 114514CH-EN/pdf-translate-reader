@@ -186,6 +186,20 @@
   transition: left var(--motion-slow) var(--ease-out);
 }
 
+/* the library cards arrive one after another (first twelve; the rest are simply there) */
+.home-card {
+  animation: ui-rise var(--motion-slow) var(--ease-out) backwards;
+}
+.home-card:nth-child(2) { animation-delay: 30ms; }
+.home-card:nth-child(3) { animation-delay: 60ms; }
+.home-card:nth-child(4) { animation-delay: 90ms; }
+.home-card:nth-child(5) { animation-delay: 120ms; }
+.home-card:nth-child(6) { animation-delay: 150ms; }
+.home-card:nth-child(n + 7) { animation-delay: 180ms; }
+.home-drop {
+  animation: ui-dialog var(--motion-slow) var(--ease-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

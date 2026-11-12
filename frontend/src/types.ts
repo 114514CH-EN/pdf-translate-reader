@@ -15,6 +15,9 @@ export interface DocumentRow {
   created_at: string;
   updated_at: string;
   last_opened_at: string | null;
+  /** text blocks in the document / translated so far (document list only) */
+  blocks_total?: number;
+  blocks_done?: number;
 }
 
 export interface DocDetail extends DocumentRow {

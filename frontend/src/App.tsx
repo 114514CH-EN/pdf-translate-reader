@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-8';
+const EXPECTED_BACKEND = '2026.11.12-9';
+import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
@@ -345,6 +346,10 @@ export default function App() {
 
         <main className="main" aria-label="阅读区">
           <SearchBar />
+          {!activeId ? (
+            <HomeView />
+          ) : (
+          <>
           <div className="split">
           <section className="pane pane-left" style={{ width: `${leftPanePct}%` }}>
             {activeId && showSrcEdited ? (
@@ -396,6 +401,8 @@ export default function App() {
           </div>
 
           <Sidebar docId={activeId} />
+          </>
+          )}
         </main>
 
         {/* hint bar */}
