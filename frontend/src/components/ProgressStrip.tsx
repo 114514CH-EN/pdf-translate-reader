@@ -6,8 +6,9 @@ import { useViewStore } from '../stores/view';
 import type { PageProgress } from '../types';
 
 /**
- * 翻译进度条: one segment per page — grey untranslated, light partly translated,
- * solid translated, red with failed blocks. Click a segment to jump there.
+ * 翻译进度条: one bar across the window, one segment per page — grey untranslated, light
+ * partly translated, solid translated, red with failed blocks — and a round marker on
+ * the page being read, which glides along as you scroll. Click a segment to jump there.
  */
 export function ProgressStrip() {
   const docId = useDocStore((s) => s.activeId);
@@ -61,7 +62,10 @@ export function ProgressStrip() {
           ? `第 ${hover.page_no} 页 · ${hover.total ? `${hover.done}/${hover.total}` : '无文字'}${hover.failed ? ` · ${hover.failed} 失败` : ''}`
           : `已译 ${pct}%${failed ? ` · ${failed} 失败` : ''}`}
       </span>
-      <div className="progress-track" onMouseLeave={() => setHover(null)}>
+      <div
+        className={`progress-track ${pages.length > 150 ? 'is-packed' : pages.length > 60 ? 'is-dense' : ''}`}
+        onMouseLeave={() => setHover(null)}
+      >
         {pages.map((p) => (
           <button
             key={p.page_no}
@@ -73,6 +77,9 @@ export function ProgressStrip() {
             onClick={() => requestPageNav(p.page_no)}
           />
         ))}
+        {currentPage >= 1 && currentPage <= pages.length && (
+          <span className="progress-thumb" style={{ left: `${((currentPage - 0.5) / pages.length) * 100}%` }} aria-hidden="true" />
+        )}
       </div>
     </div>
   );

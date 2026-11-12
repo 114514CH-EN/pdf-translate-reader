@@ -1,0 +1,198 @@
+/* Motion — small, quick, and always answering something the reader did:
+   a surface that opens says where it came from; text that changes says it changed;
+   the page marker glides to the page you went to. Nothing loops, nothing decorates.
+
+   Entrances animate opacity plus the individual `translate` / `scale` properties, so they
+   compose with whatever `transform` an element already uses for its position.
+   The e-ink theme switches all of it off (themes.css), and so does the system's
+   "reduce motion" setting (end of this file). */
+
+:root {
+  --motion-fast: 0.14s;
+  --motion: 0.2s;
+  --motion-slow: 0.32s;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+@keyframes ui-fade {
+  from { opacity: 0; }
+}
+@keyframes ui-pop {
+  from { opacity: 0; scale: 0.96; translate: 0 -4px; }
+}
+@keyframes ui-rise {
+  from { opacity: 0; translate: 0 10px; }
+}
+@keyframes ui-drop {
+  from { opacity: 0; translate: 0 -8px; }
+}
+@keyframes ui-dialog {
+  from { opacity: 0; scale: 0.97; translate: 0 12px; }
+}
+@keyframes ui-slide-left {
+  from { opacity: 0; translate: 14px 0; }
+}
+
+/* ---- things that open ---- */
+.modal-backdrop {
+  animation: ui-fade var(--motion) ease-out;
+}
+.modal,
+.auth-card,
+.crash-card,
+.drop-overlay-card {
+  animation: ui-dialog var(--motion-slow) var(--ease-out);
+}
+.menu,
+.lib-dropdown,
+.search-results,
+.sel-panel {
+  animation: ui-pop var(--motion-fast) var(--ease-out);
+  transform-origin: top center;
+}
+.sel-bar,
+.edit-bar {
+  animation: ui-pop var(--motion-fast) var(--ease-spring);
+}
+.search-bar,
+.stale-banner,
+.jobs-banner {
+  animation: ui-drop var(--motion) var(--ease-out);
+}
+.toast {
+  animation: ui-slide-left var(--motion) var(--ease-out);
+}
+
+/* ---- switching: a tab's content, a settings section, the reading view ---- */
+.sidebar-body > *,
+.settings-body > *,
+.flow-pair {
+  animation: ui-fade var(--motion) ease-out;
+}
+.doc-tab {
+  animation: ui-rise var(--motion) var(--ease-out);
+}
+
+/* ---- pages: the sheet fades in when its picture has arrived ---- */
+.abs-page-bg {
+  animation: ui-fade var(--motion-slow) ease-out;
+}
+
+/* ---- a block whose translation has just arrived: a soft wash that drains away ---- */
+@keyframes block-arrived {
+  0% { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background-color: transparent; }
+}
+.abs-block.just-translated {
+  animation: block-arrived 1.1s ease-out;
+}
+.abs-block.just-translated .abs-block-content {
+  animation: ui-rise var(--motion-slow) var(--ease-out);
+}
+
+/* ---- edit mode ---- */
+.abs-page.is-editing .abs-block {
+  transition: box-shadow var(--motion-fast) ease-out;
+}
+.edit-handle {
+  animation: ui-fade var(--motion-fast) ease-out;
+  transition: scale var(--motion-fast) ease-out;
+}
+.edit-handle:hover {
+  scale: 1.35;
+}
+.edit-swatch,
+.img-tr-btn {
+  transition: scale var(--motion-fast) var(--ease-spring), box-shadow var(--motion-fast) ease-out;
+}
+.edit-swatch:hover {
+  scale: 1.2;
+}
+.img-tr {
+  animation: ui-fade var(--motion-slow) ease-out;
+}
+
+/* ---- controls ---- */
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.seg-btn:active:not(:disabled) {
+  scale: 0.96;
+}
+.btn,
+.icon-btn,
+.seg-btn {
+  transition-property: background, border-color, color, box-shadow, transform, scale;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease;
+}
+.settings-nav-btn,
+.menu-item,
+.theme-item,
+.doc-tab {
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+/* ---- changing the theme: colours cross-fade instead of snapping ---- */
+:root.theme-switching,
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition: background-color var(--motion-slow) ease, color var(--motion-slow) ease,
+    border-color var(--motion-slow) ease, box-shadow var(--motion-slow) ease, filter var(--motion-slow) ease !important;
+}
+
+/* ---- translation progress: one bar across the window, a marker on the page being read ---- */
+.progress-track {
+  position: relative;
+  gap: 2px;
+  height: 16px;
+  align-items: center;
+}
+.progress-track.is-dense {
+  gap: 1px;
+}
+.progress-track.is-packed {
+  gap: 0;
+}
+.progress-seg {
+  max-width: none;
+  height: 4px;
+  border-radius: 2px;
+  transition: background-color var(--motion-slow) ease, height var(--motion-fast) ease;
+}
+.progress-track.is-packed .progress-seg {
+  border-radius: 0;
+}
+.progress-seg:hover,
+.progress-seg:focus-visible {
+  transform: none;
+  height: 8px;
+}
+.progress-seg.current {
+  box-shadow: none;
+}
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  transition: left var(--motion-slow) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

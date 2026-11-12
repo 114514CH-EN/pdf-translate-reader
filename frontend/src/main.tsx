@@ -23,6 +23,7 @@ import '@fontsource/nunito/latin-700.css';
 import '@fontsource/cormorant-garamond/latin-500.css';
 import '@fontsource/cormorant-garamond/latin-600.css';
 import './styles.css';
+import './motion.css';
 import './themes.css';
 
 const container = document.getElementById('root');

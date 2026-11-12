@@ -286,6 +286,18 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   const select = () => {
     if (editMode) useEditStore.getState().select(block.id, side);
   };
+  // the translation of this block has just arrived (a running job, a retranslation):
+  // a soft wash over it for a moment, so the eye finds what changed
+  const [arrived, setArrived] = useState(false);
+  const lastTranslation = useRef(block.translation);
+  useEffect(() => {
+    const before = lastTranslation.current;
+    lastTranslation.current = block.translation;
+    if (!block.translation || before === block.translation || editMode || side === 'src') return;
+    setArrived(true);
+    const timer = window.setTimeout(() => setArrived(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [block.translation, editMode, side]);
 
   useFitBox(contentRef, baseSize, [block.translation, block.text, baseSize, boxW, boxH, editMode, selected, layout?.bold]);
 
@@ -477,7 +489,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   return (
     <>
     <div
-      className={cls([canType ? 'editable' : '', hasTranslation ? '' : 'untranslated', selected ? 'selected' : '', dragBox ? 'is-dragging' : ''])}
+      className={cls([canType ? 'editable' : '', hasTranslation ? '' : 'untranslated', selected ? 'selected' : '', dragBox ? 'is-dragging' : '', arrived ? 'just-translated' : ''])}
       data-block-id={block.id}
       style={box}
       onMouseDown={select}

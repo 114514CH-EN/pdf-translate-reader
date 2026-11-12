@@ -49,6 +49,11 @@ export function applyTheme(mode: ThemeMode): void {
   if (mql && listener) mql.removeEventListener('change', listener);
   const set = () => {
     const id = resolveTheme(mode);
+    if (root.dataset.theme && root.dataset.theme !== id) {
+      // colours cross-fade for a moment instead of snapping (motion.css)
+      root.classList.add('theme-switching');
+      window.setTimeout(() => root.classList.remove('theme-switching'), 380);
+    }
     root.dataset.theme = id;
     root.dataset.scheme = THEMES.find((t) => t.id === id)?.dark ? 'dark' : 'light';
   };

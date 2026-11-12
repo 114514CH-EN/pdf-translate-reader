@@ -22,6 +22,7 @@ import '@fontsource/nunito/latin-700.css';
 import '@fontsource/cormorant-garamond/latin-500.css';
 import '@fontsource/cormorant-garamond/latin-600.css';
 import '../styles.css';
+import '../motion.css';
 import '../themes.css';
 import { useViewStore } from '../stores/view';
 import { setPetMode } from './mode';
