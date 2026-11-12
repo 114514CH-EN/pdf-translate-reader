@@ -71,7 +71,7 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
         if page is None:
             raise HTTPException(404, "页面不存在")
         blocks = db.execute(
-            "SELECT b.*, t.text AS translation, t.edited AS translation_edited"
+            "SELECT b.*, t.text AS translation, t.edited AS translation_edited, t.layout_json AS layout_json"
             " FROM blocks b LEFT JOIN translations t ON t.block_id=b.id AND t.lang=?"
             " WHERE b.doc_id=? AND b.page_no=? ORDER BY b.order_idx",
             (lang, doc_id, page_no),
@@ -85,6 +85,7 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
         d["style"] = json.loads(d.pop("style_json") or "{}")
         d["meta"] = json.loads(d.pop("meta_json") or "{}")
         d["translated"] = bool(d.get("translation"))
+        d["layout"] = json.loads(d.pop("layout_json", None) or "null")  # the reader's formatting (edit mode)
         out.append(d)
 
     # pictures whose text has been translated (「翻译图片文字」): the painted copy lies over the original

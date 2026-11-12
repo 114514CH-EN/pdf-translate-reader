@@ -3,7 +3,9 @@ import type {
   BackupInfo,
   Highlight,
   HighlightColor,
+  BlockLayout,
   ImageTranslation,
+  ReplaceResult,
   PageProgress,
   SearchHit,
   TranslateEstimate,
@@ -138,6 +140,18 @@ export const api = {
       `/blocks/${encodeURIComponent(blockId)}/translation`,
       jsonInit('PUT', { text }),
     );
+  },
+
+  /** edit mode: formatting of a translated block; null clears it */
+  putLayout(blockId: string, layout: BlockLayout | null): Promise<void> {
+    return request<void>(`/blocks/${encodeURIComponent(blockId)}/layout`, jsonInit('PUT', { layout }));
+  },
+  /** find (and replace) in every translation of a document */
+  replaceInTranslations(
+    docId: string,
+    body: { find: string; replace: string; dry_run?: boolean; case_sensitive?: boolean },
+  ): Promise<ReplaceResult> {
+    return request<ReplaceResult>(`/documents/${encodeURIComponent(docId)}/replace`, jsonInit('POST', body));
   },
 
   retranslateBlock(blockId: string): Promise<{ job_id: string }> {

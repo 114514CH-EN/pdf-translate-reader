@@ -33,6 +33,7 @@ import {
   type FocusState,
   type Stats,
 } from './companion';
+import { ACT_MS, MOOD_NAME, moodOf, perform, trick, type ActName, type Mood } from './moods';
 import { PetBody, type PetBadge, type PetMood } from './PetBody';
 import {
   DEFAULT_APPEARANCE,
@@ -646,6 +647,9 @@ export function PetAssistant() {
   const tipsOnRef = useRef(tipsOn);
   tipsOnRef.current = tipsOn;
 
+  const pettedAt = useRef(0);
+  const cheeredAt = useRef(0);
+  const pageAt = useRef(Date.now());
   // ---- stroking: rub the pointer back and forth over it (no button pressed) ----
   const stroke = useRef({ x: 0, dir: 0, flips: 0, t0: 0, cool: 0 });
   const onStroke = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -669,6 +673,7 @@ export function PetAssistant() {
     if (st.flips >= 3) {
       st.flips = 0;
       st.cool = now + 3500;
+      pettedAt.current = Date.now();
       wake();
       burst('hearts');
       if (!openRef.current) speak(PURR[Math.floor(Math.random() * PURR.length)], 1800);
@@ -688,6 +693,7 @@ export function PetAssistant() {
     wake();
     setLanding((l) => (l === 'a' ? 'b' : 'a')); // a little hop-squash
     window.setTimeout(() => setLanding(''), 320);
+    cheeredAt.current = Date.now();
     if (presenceRef.current === 'normal') speak('翻译好了，可以看啦 ✓');
   }, [job, speak, wake]);
 
@@ -751,6 +757,7 @@ export function PetAssistant() {
         putStats(addFocus(statsRef.current, now));
         setFocus(startBreak(now));
         readingSince.current = now + BREAK_MIN * 60_000; // the break counts as the rest
+        cheeredAt.current = now;
         burst('stars');
         speak(`专注了 ${f.minutes} 分钟，歇 ${BREAK_MIN} 分钟吧`, 9000);
       } else {
@@ -771,6 +778,7 @@ export function PetAssistant() {
       putStats(r.stats);
       const chatty = presenceRef.current === 'normal' && !focusRef.current && !openRef.current && tipsOnRef.current;
       if (r.milestone) {
+        cheeredAt.current = Date.now();
         wake();
         burst('hearts');
         if (chatty) speak(`今天已经读了 ${r.milestone} 页！`, 5000);
@@ -788,6 +796,59 @@ export function PetAssistant() {
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [putStats]);
+
+  // ---- moods: now and then it does something on its own (pet/moods.ts) ----
+  const [act, setAct] = useState<{ name: ActName; n: number } | null>(null);
+  const [emote, setEmote] = useState<{ text: string; n: number } | null>(null);
+  const lastAct = useRef<ActName | undefined>(undefined);
+  const actTimers = useRef<number[]>([]);
+  const currentMood = useCallback(
+    (): Mood =>
+      moodOf({
+        hour: new Date().getHours(),
+        idleMs: Date.now() - lastActivity.current,
+        pagesToday: statsRef.current.pages.length,
+        pettedAgo: Date.now() - pettedAt.current,
+        cheeredAgo: Date.now() - cheeredAt.current,
+        pageAgo: Date.now() - pageAt.current,
+      }),
+    [],
+  );
+  const [moodNow, setMoodNow] = useState<Mood>('calm');
+  const express = useCallback(
+    (asked: boolean) => {
+      const mood = currentMood();
+      setMoodNow(mood);
+      const p = asked ? trick(Math.random, lastAct.current) : perform(mood, Math.random, lastAct.current);
+      lastAct.current = p.act;
+      for (const t of actTimers.current) window.clearTimeout(t);
+      setAct((a) => ({ name: p.act, n: (a?.n ?? 0) + 1 }));
+      setEmote((e) => ({ text: p.emote, n: (e?.n ?? 0) + 1 }));
+      actTimers.current = [
+        window.setTimeout(() => setAct(null), ACT_MS[p.act] + 60),
+        window.setTimeout(() => setEmote(null), Math.max(1800, ACT_MS[p.act])),
+      ];
+      if (p.line && !openRef.current && tipsOnRef.current) speak(p.line, 3600);
+    },
+    [currentMood, speak],
+  );
+  useEffect(() => () => actTimers.current.forEach((t) => window.clearTimeout(t)), []);
+  useEffect(() => {
+    pageAt.current = Date.now();
+  }, [docId, currentPage]);
+  const canExpress = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep && !quietFocus && !walking;
+  const canExpressRef = useRef(canExpress);
+  canExpressRef.current = canExpress;
+  useEffect(() => {
+    if (presence !== 'normal') return;
+    let timer = 0;
+    const tick = () => {
+      if (!document.hidden && canExpressRef.current) express(false);
+      timer = window.setTimeout(tick, 38_000 + Math.random() * 42_000);
+    };
+    timer = window.setTimeout(tick, 20_000 + Math.random() * 20_000);
+    return () => window.clearTimeout(timer);
+  }, [presence, express]);
 
   // ---- dozing off when nothing happens, waking on any activity ----
   useEffect(() => {
@@ -914,6 +975,7 @@ export function PetAssistant() {
   // ---- right-click menu ----
   const openMenu = (x: number, y: number) => {
     setTip(null);
+    setMoodNow(currentMood());
     setMenu({ x, y });
   };
   useEffect(() => {
@@ -1032,7 +1094,7 @@ export function PetAssistant() {
   const tipBottom = clamp(shown.y + size + (pill ? 30 : 10), 14, Math.max(14, vh - 120));
 
   const MENU_W = 200;
-  const MENU_H = 410;
+  const MENU_H = 445;
   const menuLeft = menu ? clamp(menu.x, 8, Math.max(8, vw - MENU_W - 8)) : 0;
   const menuTop = menu ? clamp(menu.y - MENU_H, 8, Math.max(8, vh - MENU_H - 8)) : 0;
 
@@ -1093,6 +1155,7 @@ export function PetAssistant() {
           dropping ? 'is-dropping' : '',
           flying ? 'is-flying' : '',
           landing ? `is-land-${landing}` : '',
+          act && !dragging && !flying ? `is-act-${act.name}` : '',
           presence === 'quiet' && !open ? 'is-quiet' : '',
           tucked ? 'is-tucked' : '',
           settling && !tucked ? 'is-untucking' : '',
@@ -1113,6 +1176,11 @@ export function PetAssistant() {
           <div className={`pet-pill is-${pill.kind}`} role={pill.kind === 'job' ? undefined : 'timer'} aria-label={pill.text}>
             {pill.text}
           </div>
+        )}
+        {emote && !dragging && !flying && (
+          <span className="pet-emote" key={emote.n} aria-hidden="true">
+            {emote.text}
+          </span>
         )}
         {fx && (
           <div className={`pet-fx is-${fx.kind}`} key={fx.n} aria-hidden="true">
@@ -1205,6 +1273,7 @@ export function PetAssistant() {
         >
           <div className="pet-menu-stats" title="读过的页数（停留几秒才算）、阅读时间、连续阅读的天数——只记在这个浏览器里">
             {summary(stats)}
+            <span className="pet-menu-mood">心情：{MOOD_NAME[moodNow]}</span>
           </div>
           <button type="button" role="menuitem" className="pet-menu-item" onClick={menuAction(() => { wake(); setOpen((o) => !o); })}>
             <span className="pet-menu-check" />
@@ -1333,6 +1402,20 @@ export function PetAssistant() {
           >
             <span className="pet-menu-check" />
             {sleep ? '叫醒它' : '让它睡一会'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pet-menu-item"
+            disabled={!!sleep}
+            onClick={menuAction(() => {
+              wake();
+              window.setTimeout(() => express(true), 120);
+            })}
+          >
+            <span className="pet-menu-check" />
+            表演一个
+            <span className="pet-menu-note">翻跟头、转圈…</span>
           </button>
         </div>
       )}

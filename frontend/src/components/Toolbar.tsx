@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import EditTools from './EditTools';
 import { EstimateDialog, skipEstimate } from './EstimateDialog';
 import type { TranslateEstimate } from '../types';
 import { useViewStore } from '../stores/view';
@@ -386,6 +387,7 @@ export function Toolbar() {
             </div>
           )}
         </div>
+        {editMode && <EditTools />}
         <button
           type="button"
           className={`btn ${editMode ? 'active' : ''}`}

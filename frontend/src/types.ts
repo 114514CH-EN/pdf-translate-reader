@@ -126,8 +126,30 @@ export interface Block {
   translation_edited: 0 | 1 | boolean;
   translated: boolean;
   sentences?: SentencePair[] | null;
+  /** the reader's own formatting of the translated block (edit mode) */
+  layout?: BlockLayout | null;
   /** image blocks: the copy with its text translated, when the reader asked for one */
   image_tr?: ImageTranslation | null;
+}
+
+export interface BlockLayout {
+  /** font size multiplier */
+  scale?: number;
+  bold?: boolean;
+  /** 0xRRGGBB */
+  color?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  /** moved / resized: [x0, y0, x1, y1] in page points */
+  bbox?: [number, number, number, number];
+  hidden?: boolean;
+}
+
+export interface ReplaceResult {
+  hits: number;
+  blocks: number;
+  pages: number[];
+  changed: { block_id: number | string; page: number; before: string; after: string }[];
+  dry_run: boolean;
 }
 
 export interface ImageTranslation {

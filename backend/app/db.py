@@ -44,6 +44,9 @@ def init_db() -> None:
         if "cache_hit_tokens" not in ucols:
             db.execute("ALTER TABLE usage_log ADD COLUMN cache_hit_tokens INTEGER NOT NULL DEFAULT 0")
             db.execute("ALTER TABLE usage_log ADD COLUMN peak INTEGER NOT NULL DEFAULT 0")
+        tcols = {r["name"] for r in db.execute("PRAGMA table_info(translations)").fetchall()}
+        if "layout_json" not in tcols:  # the reader's own formatting of a translated block (edit mode)
+            db.execute("ALTER TABLE translations ADD COLUMN layout_json TEXT")
         jcols = {r["name"] for r in db.execute("PRAGMA table_info(jobs)").fetchall()}
         if "result_json" not in jcols:
             db.execute("ALTER TABLE jobs ADD COLUMN result_json TEXT")

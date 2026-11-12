@@ -319,9 +319,9 @@ def reextract_document(doc_id: int) -> int:
                 continue
             db.execute(
                 "INSERT OR IGNORE INTO translations (block_id, lang, model, prompt_ver, text, edited, cache_key,"
-                " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                " created_at, updated_at, layout_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (nb, t["lang"], t["model"], t["prompt_ver"], t["text"], t["edited"], t["cache_key"],
-                 t["created_at"], t["updated_at"]),
+                 t["created_at"], t["updated_at"], t["layout_json"]),
             )
             kept += 1
         for n in old_notes:

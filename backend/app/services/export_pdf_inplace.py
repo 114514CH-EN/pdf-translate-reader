@@ -18,7 +18,7 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             raise ValueError("document not found")
         src_path = doc_row["file_path"]
         blocks = db.execute(
-            "SELECT b.*, t.text AS translation FROM blocks b"
+            "SELECT b.*, t.text AS translation, t.layout_json AS layout_json FROM blocks b"
             " LEFT JOIN translations t ON t.block_id=b.id AND t.lang=?"
             " WHERE b.doc_id=? ORDER BY b.page_no, b.order_idx",
             (lang, doc_id),
@@ -92,6 +92,19 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             style = json.loads(r["style_json"] or "{}")
             meta = json.loads(r["meta_json"] or "{}")
             trans = r["translation"]
+            # the reader's own formatting from edit mode: size, bold, colour, alignment, place, hidden
+            layout = json.loads(r["layout_json"] or "null") or {}
+            if layout.get("hidden"):
+                continue
+            if layout:
+                style = dict(style)
+                if layout.get("scale"):
+                    style["size"] = (style.get("size") or 12) * float(layout["scale"])
+                for key in ("bold", "color", "align"):
+                    if key in layout:
+                        style[key] = layout[key]
+                if layout.get("bbox") and r["type"] not in ("table", "code"):
+                    bbox = fitz.Rect(layout["bbox"]) & page.rect
             if r["type"] == "table" and meta.get("cells"):
                 if "{{m" in trans:
                     arch = mi.add_to(arch)

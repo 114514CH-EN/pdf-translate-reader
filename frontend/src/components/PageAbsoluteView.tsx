@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import ImageBlock from './ImageBlock';
+import EditFrame from './EditFrame';
+import { useEditStore } from '../stores/edit';
 import { useFitBox } from '../hooks/useFitBox';
 import { scrollPageIntoView } from '../hooks/useSyncScroll';
 import { useTranslationStore, type PageData } from '../stores/translation';
@@ -51,6 +53,14 @@ function parseMarkdownRows(text: string): string[][] | null {
   );
 }
 
+/** Rows of cells back into the markdown the translation is stored as. */
+function tableMarkdown(rows: string[][]): string {
+  const line = (r: string[]) => `| ${r.map((c) => c.replace(/\|/g, '｜').replace(/\s*\n\s*/g, ' ').trim()).join(' | ')} |`;
+  const out = rows.map(line);
+  if (rows.length) out.splice(1, 0, `| ${rows[0].map(() => '---').join(' | ')} |`);
+  return out.join('\n');
+}
+
 /** Light text (e.g. white header text) is only readable on the page background's dark fill. */
 function isLight(color: number | undefined): boolean {
   if (color === undefined || color === null) return false;
@@ -65,11 +75,15 @@ function TableCells({
   zoom,
   page,
   hasBackground,
+  editMode = false,
+  onSave,
 }: {
   block: Block;
   zoom: number;
   page: PageImage;
   hasBackground: boolean;
+  editMode?: boolean;
+  onSave?: (id: string, text: string) => void;
 }) {
   const cells: TableCell[] = block.meta?.cells ?? [];
   const translation = block.translation;
@@ -91,6 +105,14 @@ function TableCells({
             key={`${cell.row}-${cell.col}`}
             cell={cell}
             text={mdRows?.[cell.row]?.[cell.col] ?? cell.text}
+            editable={editMode && !!mdRows && !!onSave}
+            onCommit={(next) => {
+              if (!mdRows || !onSave) return;
+              const rows = mdRows.map((r) => r.slice());
+              if (!rows[cell.row] || rows[cell.row][cell.col] === next) return;
+              rows[cell.row][cell.col] = next;
+              onSave(block.id, tableMarkdown(rows));
+            }}
             offset={[bx0, by0]}
             zoom={zoom}
             fallbackPt={block.style?.size ?? 10}
@@ -114,9 +136,13 @@ function TableCellView({
   light,
   runs,
   page,
+  editable = false,
+  onCommit,
 }: {
   cell: TableCell;
   text: string;
+  editable?: boolean;
+  onCommit?: (text: string) => void;
   offset: [number, number];
   zoom: number;
   fallbackPt: number;
@@ -130,7 +156,7 @@ function TableCellView({
   const ref = useRef<HTMLDivElement>(null);
   const w = Math.max(1, (x1 - x0) * zoom);
   const h = Math.max(1, (y1 - y0) * zoom);
-  useFitBox(ref, size, [text, size, w, h]);
+  useFitBox(ref, size, [text, size, w, h, editable]);
   const [il, it, ir] = cell.inset ?? [3, 2, 3];
   // the CSS line box sits ~0.2em above the glyph tops
   const padTop = Math.max(0, (it - 0.22 * pt) * zoom);
@@ -138,7 +164,17 @@ function TableCellView({
   return (
     <div
       ref={ref}
-      className="abs-cell"
+      className={editable ? 'abs-cell editable' : 'abs-cell'}
+      contentEditable={editable}
+      suppressContentEditableWarning
+      onBlur={(e) => editable && onCommit?.((e.currentTarget.textContent ?? '').trim())}
+      onKeyDown={(e) => {
+        if (!editable) return;
+        if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
       style={{
         left: (x0 - offset[0]) * zoom,
         top: (y0 - offset[1]) * zoom,
@@ -158,7 +194,7 @@ function TableCellView({
         fontWeight: cell.bold ? 700 : undefined,
       }}
     >
-      <MathText text={text} runs={runs} page={page} basePt={pt} />
+      {editable ? text : <MathText text={text} runs={runs} page={page} basePt={pt} />}
     </div>
   );
 }
@@ -229,16 +265,25 @@ function blockBox(block: Block): [number, number, number, number] {
 }
 
 function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasBackground, page, cropBox, onHover, onSave }: BlockViewProps) {
-  const [x0, y0, x1, y1] = blockBox(block);
+  // the reader's own formatting from edit mode (text blocks only): size, weight, colour,
+  // alignment, a new place or size on the page, or hidden altogether
+  const textual = block.type !== 'image' && block.type !== 'table' && block.type !== 'code' && block.type !== 'formula';
+  const layout = textual ? (block.layout ?? null) : null;
+  const selected = useEditStore((s) => editMode && s.selectedId === String(block.id));
+  const [dragBox, setDragBox] = useState<[number, number, number, number] | null>(null);
+  const [x0, y0, x1, y1] = dragBox ?? layout?.bbox ?? blockBox(block);
   const boxW = (x1 - x0) * zoom;
   const boxH = (y1 - y0) * zoom;
   const style = block.style ?? { size: 12 };
-  const basePt = style.size || block.font_size || 12;
+  const basePt = (style.size || block.font_size || 12) * (layout?.scale ?? 1);
   const baseSize = basePt * zoom;
   const contentRef = useRef<HTMLDivElement>(null);
   const hasTranslation = !!block.translation;
+  const select = () => {
+    if (editMode) useEditStore.getState().select(block.id);
+  };
 
-  useFitBox(contentRef, baseSize, [block.translation, block.text, baseSize, boxW, boxH, editMode]);
+  useFitBox(contentRef, baseSize, [block.translation, block.text, baseSize, boxW, boxH, editMode, selected, layout?.bold]);
 
   const isList = block.type === 'list';
   const flash = useViewStore((s) => s.flashBlockId !== null && s.flashBlockId === String(block.id));
@@ -334,7 +379,8 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
 
   // Formula blocks and untranslated content: show the original rendering, pixel-identical.
   // (Fallback to text when the original render is unavailable.)
-  if (page.url && (block.type === 'formula' || !hasTranslation)) {
+  // (In edit mode, clicking an untranslated text block turns it into a box to type a translation in.)
+  if (page.url && (block.type === 'formula' || !hasTranslation) && !(editMode && selected && textual)) {
     return (
       <>
         <OrigCrop
@@ -347,7 +393,8 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           className={cls(['orig', block.type === 'formula' ? '' : 'untranslated'])}
           data-block-id={block.id}
           style={box}
-          title={block.type === 'formula' ? '公式（保持原样）' : '尚未翻译（显示原文）'}
+          title={block.type === 'formula' ? '公式（保持原样）' : editMode && textual ? '尚未翻译：点一下可以自己写译文' : '尚未翻译（显示原文）'}
+          onClick={textual ? select : undefined}
           {...hover}
         />
       </>
@@ -360,7 +407,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
     const flowFallback = (!!block.translation && !mdRows) || !(block.meta?.cells?.length ?? 0);
     return (
       <div className={cls([])} data-block-id={block.id} style={box} {...hover}>
-        <TableCells block={block} zoom={zoom} page={page} hasBackground={hasBackground} />
+        <TableCells block={block} zoom={zoom} page={page} hasBackground={hasBackground} editMode={editMode} onSave={onSave} />
         {flowFallback && (
           <div
             className="abs-table-fallback"
@@ -381,12 +428,25 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
     );
   }
 
+  if (layout?.hidden) {
+    // hidden by the reader: nothing in read mode, a ghost to bring it back in edit mode
+    if (!editMode) return null;
+    return (
+      <>
+        <div className={cls(['is-hidden', selected ? 'selected' : ''])} data-block-id={block.id} style={box} onClick={select} {...hover}>
+          <span className="abs-hidden-note">已隐藏</span>
+        </div>
+        {selected && <EditFrame block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
+      </>
+    );
+  }
+
   const textStyle: React.CSSProperties = {
-    color: colorToCss(style.color) ?? '#1a1a1a',
+    color: colorToCss(layout?.color ?? style.color) ?? '#1a1a1a',
     // follow the source: Word headings are often *light* (Calibri Light), not bold
-    fontWeight: fontWeightOf(style.font, !!(style.bold || block.bold)),
+    fontWeight: layout?.bold !== undefined ? (layout.bold ? 700 : 400) : fontWeightOf(style.font, !!(style.bold || block.bold)),
     fontStyle: style.italic ? 'italic' : undefined,
-    textAlign: (style.align as React.CSSProperties['textAlign']) ?? 'left',
+    textAlign: (layout?.align ?? (style.align as React.CSSProperties['textAlign'])) ?? 'left',
     fontFamily: fontStack(style.font),
     lineHeight: 1.25,
     fontSize: baseSize,
@@ -408,31 +468,35 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   const gapAbove = (i: number) =>
     i === 0 ? 0 : `${(gaps && hang && gaps.length === hang.length ? gaps[i] : typicalGap) / basePt}em`;
 
+  const canType = editMode && (hasTranslation || selected);
   return (
+    <>
     <div
-      className={cls([editMode && hasTranslation ? 'editable' : '', hasTranslation ? '' : 'untranslated'])}
+      className={cls([canType ? 'editable' : '', hasTranslation ? '' : 'untranslated', selected ? 'selected' : '', dragBox ? 'is-dragging' : ''])}
       data-block-id={block.id}
       style={box}
+      onMouseDown={select}
       {...hover}
     >
       <div
         ref={contentRef}
         className="abs-block-content"
         style={textStyle}
-        contentEditable={editMode && hasTranslation}
+        contentEditable={canType}
         suppressContentEditableWarning
         title={editMode && hasMath(block.translation) ? '{{mN}} 是公式占位符，请保留' : undefined}
         onBlur={(e) => {
-          if (!editMode || !hasTranslation) return;
+          if (!canType) return;
           const next = e.currentTarget.textContent ?? ''; // edit mode shows the bare translation
-          if (next !== block.translation) onSave(block.id, next);
+          // an untranslated block starts from the source text: saved once it has been rewritten
+          if (next !== (block.translation ?? block.text) && (hasTranslation || next.trim())) onSave(block.id, next);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') e.currentTarget.blur();
         }}
       >
-        {editMode && hasTranslation ? (
-          block.translation
+        {canType ? (
+          (block.translation ?? block.text)
         ) : hang ? (
           hang.map((it, i) => (
             <div key={i} className="abs-hang-item" style={{ marginTop: gapAbove(i) }}>
@@ -452,6 +516,8 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
         )}
       </div>
     </div>
+    {selected && <EditFrame block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
+    </>
   );
 }
 
@@ -547,9 +613,17 @@ function AbsolutePage({
   const nDone = translatable.filter((b) => b.translation).length;
   return (
     <div
-      className={`abs-page ${bg ? 'has-bg' : ''}`}
+      className={`abs-page ${bg ? 'has-bg' : ''} ${editMode ? 'is-editing' : ''}`}
       data-page-no={page.pageNo}
       style={{ width: page.width * zoom, height: page.height * zoom }}
+      onMouseDown={(e) => {
+        // a click on the empty page lets go of the selected block
+        const t = e.target as HTMLElement;
+        if (editMode && (t === e.currentTarget || t.classList.contains('abs-page-bg'))) {
+          useEditStore.getState().select(null);
+          (document.activeElement as HTMLElement | null)?.blur?.();
+        }
+      }}
     >
       {bg && (
         <img
@@ -611,7 +685,6 @@ export function PageAbsoluteView({
   const pageNavSeq = useViewStore((s) => s.pageNavSeq);
   const pages = useTranslationStore((s) => s.pages);
   const loadPage = useTranslationStore((s) => s.loadPage);
-  const saveBlock = useTranslationStore((s) => s.saveBlockTranslation);
   const failedBlockIds = useTranslationStore((s) => s.failedBlockIds);
   const failedIds = new Set(failedBlockIds.map(String));
   // unloaded pages take the size of a loaded one so both panes stay aligned
@@ -662,7 +735,7 @@ export function PageAbsoluteView({
             hoverId={hoverId}
             failedIds={failedIds}
             onHover={setHover}
-            onSave={(id, text) => void saveBlock(id, text)}
+            onSave={(id, text) => void useEditStore.getState().setText(id, text)}
             active={Math.abs(n - currentPage) <= 3}
           />
         );

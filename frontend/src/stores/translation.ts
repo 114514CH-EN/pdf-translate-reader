@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, ApiError } from '../api/client';
-import type { Block, JobInfo, PageFigure, TranslateRequest } from '../types';
+import type { Block, BlockLayout, JobInfo, PageFigure, TranslateRequest } from '../types';
 import { useViewStore } from './view';
 
 export interface PageData {
@@ -29,6 +29,7 @@ interface TranslationState {
   getPage: (pageNo: number) => PageData | undefined;
   getBlock: (blockId: string) => Block | undefined;
   setBlockTranslation: (blockId: string, text: string) => void;
+  setBlockLayout: (blockId: string, layout: BlockLayout | null) => void;
   saveBlockTranslation: (blockId: string, text: string) => Promise<void>;
   startTranslate: (body: TranslateRequest) => Promise<string | null>;
   startRetranslateBlock: (blockId: string) => Promise<string | null>;
@@ -123,15 +124,30 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     const pages = { ...get().pages };
     for (const key of Object.keys(pages)) {
       const p = pages[Number(key)];
-      const idx = p.blocks.findIndex((b) => b.id === blockId);
+      const idx = p.blocks.findIndex((b) => String(b.id) === String(blockId));
       if (idx >= 0) {
         const blocks = p.blocks.slice();
         blocks[idx] = {
           ...blocks[idx],
-          translation: text,
-          translated: true,
+          translation: text || null,
+          translated: !!text,
           translation_edited: 1,
         };
+        pages[Number(key)] = { ...p, blocks };
+        set({ pages });
+        return;
+      }
+    }
+  },
+
+  setBlockLayout(blockId, layout) {
+    const pages = { ...get().pages };
+    for (const key of Object.keys(pages)) {
+      const p = pages[Number(key)];
+      const idx = p.blocks.findIndex((b) => String(b.id) === String(blockId));
+      if (idx >= 0) {
+        const blocks = p.blocks.slice();
+        blocks[idx] = { ...blocks[idx], layout };
         pages[Number(key)] = { ...p, blocks };
         set({ pages });
         return;

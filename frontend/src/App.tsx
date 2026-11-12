@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-2';
+const EXPECTED_BACKEND = '2026.11.12-3';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PageAbsoluteView } from './components/PageAbsoluteView';

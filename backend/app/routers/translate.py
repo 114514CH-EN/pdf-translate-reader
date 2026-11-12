@@ -69,6 +69,108 @@ def edit_translation(block_id: int, payload: dict):
     return {"ok": True}
 
 
+LAYOUT_ALIGN = ("left", "center", "right", "justify")
+
+
+def clean_layout(raw) -> dict | None:
+    """The reader's formatting of one translated block, reduced to what is understood.
+
+    scale  font size × (0.4 … 3)      bold   true / false      color  0xRRGGBB
+    align  left / center / right       bbox   [x0, y0, x1, y1] in page points (moved / resized)
+    hidden true: nothing is shown in the block's place
+    """
+    if not isinstance(raw, dict):
+        return None
+    out: dict = {}
+    try:
+        if raw.get("scale") is not None:
+            sc = round(min(3.0, max(0.4, float(raw["scale"]))), 3)
+            if abs(sc - 1.0) > 0.001:
+                out["scale"] = sc
+        if isinstance(raw.get("bold"), bool):
+            out["bold"] = raw["bold"]
+        if raw.get("color") is not None:
+            out["color"] = int(raw["color"]) & 0xFFFFFF
+        if raw.get("align") in LAYOUT_ALIGN:
+            out["align"] = raw["align"]
+        box = raw.get("bbox")
+        if isinstance(box, (list, tuple)) and len(box) == 4:
+            x0, y0, x1, y1 = (round(float(v), 2) for v in box)
+            if x1 - x0 >= 4 and y1 - y0 >= 4 and all(-2000 < v < 20000 for v in (x0, y0, x1, y1)):
+                out["bbox"] = [x0, y0, x1, y1]
+        if raw.get("hidden") is True:
+            out["hidden"] = True
+    except (TypeError, ValueError):
+        raise HTTPException(400, "layout 的格式不对")
+    return out or None
+
+
+@router.put("/api/blocks/{block_id}/layout")
+def edit_layout(block_id: int, payload: dict):
+    """Formatting set in edit mode: size, bold, colour, alignment, position, hidden. null clears it."""
+    cfg = load_settings()
+    lang = payload.get("lang") or cfg.get("target_lang") or "zh"
+    layout = clean_layout(payload.get("layout"))
+    with get_db() as db:
+        row = db.execute("SELECT id FROM blocks WHERE id=?", (block_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "块不存在")
+        value = json.dumps(layout) if layout else None
+        cur = db.execute("UPDATE translations SET layout_json=? WHERE block_id=? AND lang=?", (value, block_id, lang))
+        if cur.rowcount == 0 and layout:
+            # formatting a block that has no translation yet (hiding it, for example)
+            db.execute("INSERT INTO translations (block_id, lang, text, edited, layout_json) VALUES (?, ?, '', 0, ?)",
+                       (block_id, lang, value))
+    return {"ok": True, "layout": layout}
+
+
+@router.post("/api/documents/{doc_id}/replace")
+def replace_in_translations(doc_id: int, payload: dict):
+    """Find (and replace) text in every translation of a document — unifying a term, fixing a name.
+
+    dry_run: only count. Returns the changed blocks with their text before, so the page can undo.
+    """
+    find = str(payload.get("find") or "")
+    repl = str(payload.get("replace") or "")
+    if not find:
+        raise HTTPException(400, "请输入要查找的文字")
+    if len(find) > 500 or len(repl) > 2000:
+        raise HTTPException(400, "文字太长")
+    cfg = load_settings()
+    lang = payload.get("lang") or cfg.get("target_lang") or "zh"
+    case = bool(payload.get("case_sensitive", True))
+    dry = bool(payload.get("dry_run"))
+    import re as _re
+
+    pat = _re.compile(_re.escape(find), 0 if case else _re.IGNORECASE)
+    changed: list[dict] = []
+    hits = 0
+    with get_db() as db:
+        if db.execute("SELECT 1 FROM documents WHERE id=?", (doc_id,)).fetchone() is None:
+            raise HTTPException(404, "文档不存在")
+        rows = db.execute(
+            "SELECT t.block_id, t.text, b.page_no FROM translations t JOIN blocks b ON b.id=t.block_id"
+            " WHERE b.doc_id=? AND t.lang=? AND t.text != '' ORDER BY b.page_no, b.order_idx", (doc_id, lang),
+        ).fetchall()
+        for r in rows:
+            n = len(pat.findall(r["text"]))
+            if not n:
+                continue
+            hits += n
+            # a formula placeholder must survive: never touch the inside of {{mN}}
+            parts = _re.split(r"(\{\{m\d+\}\})", r["text"])
+            new = "".join(p if _re.fullmatch(r"\{\{m\d+\}\}", p) else pat.sub(lambda _m: repl, p) for p in parts)
+            if new == r["text"]:
+                continue
+            changed.append({"block_id": r["block_id"], "page": r["page_no"], "before": r["text"], "after": new})
+            if not dry:
+                db.execute("UPDATE translations SET text=?, edited=1, updated_at=datetime('now')"
+                           " WHERE block_id=? AND lang=?", (new, r["block_id"], lang))
+                db.execute("DELETE FROM sentences WHERE block_id=?", (r["block_id"],))
+    return {"hits": hits, "blocks": len(changed), "pages": sorted({c["page"] for c in changed}),
+            "changed": changed if not dry else [], "dry_run": dry}
+
+
 @router.put("/api/blocks/{block_id}/sentences/{idx}")
 def edit_sentence(block_id: int, idx: int, payload: dict):
     """Edit one aligned sentence; the block translation is rebuilt from all sentences."""

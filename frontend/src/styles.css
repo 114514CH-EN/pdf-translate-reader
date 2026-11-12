@@ -3187,3 +3187,200 @@ textarea {
     animation-duration: 2.4s;
   }
 }
+
+/* ---------- 编辑译文：选中的段落、格式条、拖动手柄、查找替换 ---------- */
+.abs-page.is-editing .abs-block.selected {
+  overflow: visible;
+  box-shadow: 0 0 0 1.5px var(--accent);
+  z-index: 3;
+}
+.abs-page.is-editing .abs-block.is-dragging {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.abs-block.is-hidden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  cursor: pointer;
+}
+.abs-hidden-note {
+  font-size: 11px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.abs-cell.editable {
+  cursor: text;
+  outline: none;
+}
+.abs-cell.editable:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.abs-cell.editable:focus {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, #fff);
+  z-index: 2;
+}
+.edit-bar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  color: var(--text);
+  background: var(--panel);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+  user-select: none;
+  white-space: nowrap;
+}
+.edit-btn,
+.edit-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.edit-btn:hover:not(:disabled),
+.edit-grip:hover {
+  background: var(--panel-2);
+}
+.edit-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.edit-btn.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.edit-btn.is-bold {
+  font-weight: 700;
+}
+.edit-btn.is-text {
+  padding: 0 6px;
+}
+.edit-btn:focus-visible,
+.edit-grip:focus-visible,
+.edit-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.edit-grip {
+  cursor: grab;
+  color: var(--text-dim);
+  touch-action: none;
+}
+.edit-grip:active {
+  cursor: grabbing;
+}
+.edit-scale {
+  min-width: 34px;
+  text-align: center;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.edit-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
+}
+.edit-swatch {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1.5px solid var(--panel);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.edit-swatch.active {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.edit-swatch.is-custom {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(#e74c3c, #f1c40f, #2ecc71, #3498db, #9b59b6, #e74c3c);
+}
+.edit-swatch.is-custom input {
+  position: absolute;
+  inset: -6px;
+  width: 30px;
+  height: 30px;
+  opacity: 0;
+  cursor: pointer;
+}
+.edit-handle {
+  position: absolute;
+  z-index: 6;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  background: var(--panel);
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  touch-action: none;
+}
+.edit-handle.is-nw,
+.edit-handle.is-se {
+  cursor: nwse-resize;
+}
+.edit-handle.is-ne,
+.edit-handle.is-sw {
+  cursor: nesw-resize;
+}
+.replace-pop {
+  width: 280px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.replace-field {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.replace-field input {
+  min-width: 0;
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--radius-btn);
+}
+.replace-field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.replace-case {
+  font-size: 12px;
+}
+.replace-status {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.replace-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

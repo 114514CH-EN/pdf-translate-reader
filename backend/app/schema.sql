@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS translations (
     text TEXT NOT NULL DEFAULT '',
     edited INTEGER NOT NULL DEFAULT 0,
     cache_key TEXT,
+    layout_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(block_id, lang)
