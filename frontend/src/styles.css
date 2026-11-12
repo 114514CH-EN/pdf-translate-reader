@@ -2515,16 +2515,17 @@ textarea {
 .progress-track {
   flex: 1;
   display: flex;
-  gap: 1px;
-  height: 8px;
+  gap: 2px;
+  height: 6px;
   align-items: stretch;
 }
 .progress-seg {
   flex: 1;
   min-width: 2px;
+  max-width: 72px; /* a two-page document is two pills, not two slabs across the window */
   border: 0;
   padding: 0;
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
   background: var(--border-soft);
   transition: transform var(--ease);
@@ -2536,9 +2537,9 @@ textarea {
 }
 .progress-seg.partial { background: color-mix(in srgb, var(--accent) 40%, var(--border-soft)); }
 .progress-seg.done { background: var(--accent); }
-.progress-seg.failed { background: var(--danger); }
+.progress-seg.failed { background: color-mix(in srgb, var(--danger) 72%, var(--panel)); }
 .progress-seg.empty { background: transparent; box-shadow: inset 0 0 0 1px var(--border-soft); }
-.progress-seg.current { box-shadow: 0 0 0 1.5px var(--text); }
+.progress-seg.current { box-shadow: 0 0 0 1px var(--panel), 0 0 0 2px var(--text-dim); }
 
 /* ---- estimate dialog ---- */
 .modal.modal-sm {

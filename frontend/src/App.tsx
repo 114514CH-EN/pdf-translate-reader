@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-6';
+const EXPECTED_BACKEND = '2026.11.12-7';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
@@ -21,7 +21,7 @@ import { useViewStore } from './stores/view';
 import { useTranslationStore } from './stores/translation';
 import { useSettingsStore } from './stores/settings';
 import { TOOLBAR_EVENT, actionFor, comboFromEvent, resolveShortcuts } from './lib/shortcuts';
-import { applyTheme, nextTheme, type ThemeMode } from './lib/theme';
+import { applyPageTone, applyTheme, nextTheme, type PageTone, type ThemeMode } from './lib/theme';
 import { isPetMode } from './pet/mode';
 
 /** Only the pet build downloads this — the classic reader never fetches it. */
@@ -176,6 +176,8 @@ export default function App() {
   }, []);
   const theme = (ui?.theme as ThemeMode | undefined) ?? 'system';
   useEffect(() => applyTheme(theme), [theme]);
+  const pageTone = ui?.pageTone as PageTone | undefined;
+  useEffect(() => applyPageTone(pageTone), [pageTone]);
 
   // keyboard shortcuts (configurable in 设置 → 快捷键; ignored while typing)
   useEffect(() => {

@@ -920,6 +920,19 @@ function UiSettingsPane() {
           ))}
         </select>
       </div>
+      <div className="form-row">
+        <label htmlFor="set-page-tone">暗色主题下的页面</label>
+        <select
+          id="set-page-tone"
+          value={(settings.ui?.pageTone as string) ?? 'soft'}
+          onChange={(e) => patchLocal({ ui: { ...settings.ui, pageTone: e.target.value } })}
+        >
+          <option value="soft">柔和（默认）：把白纸调暗一点，不刺眼</option>
+          <option value="night">夜间：页面变成深色底、浅色字</option>
+          <option value="paper">原样：保持白纸</option>
+        </select>
+      </div>
+      <p className="fieldset-hint">只在暗色主题（默认 · 暗色、OLED 深色）里起作用；导出的 PDF 不受影响。</p>
       <div className="form-row form-row-top">
         <label>快捷键</label>
         <ShortcutEditor
