@@ -8,9 +8,12 @@ _SCHEMA = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # A long write (re-reading a document after an update, a translation job storing a batch)
+    # must not make everything else fail with "database is locked": wait for it instead…
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -28,6 +31,15 @@ def get_db():
 
 
 def init_db() -> None:
+    try:
+        # …and with a write-ahead log, reading never waits for a writer at all
+        # (opening a document while another one is being re-read or translated)
+        conn = _connect()
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.close()
+    except sqlite3.Error:
+        pass  # a read-only or network folder: the default journal still works
     with get_db() as db:
         db.executescript(_SCHEMA)
         # lightweight migrations for DBs created before new columns

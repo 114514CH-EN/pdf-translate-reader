@@ -117,7 +117,7 @@ export default function EditFrame({
         style={{ left: barLeft, top: barAbove ? top - 40 : y1 * zoom + 8 }}
         onMouseDown={keep}
       >
-        <button type="button" className="edit-grip" title="拖动来移动这个段落" aria-label="移动" {...gripProps('move')}>
+        <button type="button" className="edit-grip" title="拖动来移动这个段落。键盘：先按 Esc 退出打字，再用方向键微调（Shift 移得更远），Delete 隐藏" aria-label="移动" {...gripProps('move')}>
           ⠿
         </button>
         {!hidden && (

@@ -1080,7 +1080,6 @@ def _refine_run_boxes(page: fitz.Page, raw_blocks: list[dict], runs: list[dict])
     """
     if not runs:
         return
-    by_id = {r["id"]: r for r in runs}
     others: list[tuple[str | None, list[float]]] = []  # (run id or None, box) of all text
     for blk in raw_blocks:
         for ln in blk["lines"]:

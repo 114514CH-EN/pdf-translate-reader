@@ -256,7 +256,7 @@ function hangItems(text: string, fallbackMarker: string | null | undefined): { m
 }
 
 /** Text blocks reach as far up/down as their inline formulas (tall fractions, braces). */
-function blockBox(block: Block): [number, number, number, number] {
+export function blockBox(block: Block): [number, number, number, number] {
   let [x0, y0, x1, y1] = block.bbox;
   if (block.type === 'paragraph' || block.type === 'list' || block.type === 'heading') {
     for (const m of block.meta?.math ?? []) {

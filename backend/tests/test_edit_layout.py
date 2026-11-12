@@ -98,3 +98,27 @@ def test_original_text_can_be_edited_too(monkeypatch):
             text = pdf[0].get_text()
         text = text.replace("\xa0", " ")
         assert "removes hum" in text and "noise" not in text and "second paragraph" not in text
+
+
+def test_reading_and_opening_do_not_wait_for_a_long_write():
+    """A document being re-read after an update holds a write transaction for seconds:
+    opening another document meanwhile used to answer 500 "database is locked"."""
+    import sqlite3
+    import time
+
+    from app.config import DB_PATH
+
+    with TestClient(app) as c:
+        doc_id = c.post("/api/documents", files={"file": ("busy.pdf", _pdf(), "application/pdf")}).json()["doc_id"]
+        writer = sqlite3.connect(DB_PATH, timeout=5)
+        try:
+            writer.execute("BEGIN IMMEDIATE")
+            writer.execute("UPDATE documents SET title='being rewritten' WHERE id=?", (doc_id,))
+            t0 = time.time()
+            assert c.get(f"/api/documents/{doc_id}").status_code == 200
+            assert c.get(f"/api/documents/{doc_id}/pages/1/blocks").status_code == 200
+            assert c.get("/api/documents").status_code == 200
+            assert time.time() - t0 < 6  # readers do not queue behind the writer
+        finally:
+            writer.rollback()
+            writer.close()

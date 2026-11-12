@@ -25,6 +25,16 @@ CSS_TMPL = """
 * {{ font-family: cjk; }}
 """
 
+# the bold cut that goes with each regular font — without it bold text (headings, the
+# reader's own "加粗") comes out in the regular weight
+BOLD_OF = {
+    "msyh.ttc": "msyhbd.ttc",
+    "msyh.ttf": "msyhbd.ttf",
+    "NotoSansCJK-Regular.ttc": "NotoSansCJK-Bold.ttc",
+    "wqy-microhei.ttc": None,
+}
+CSS_BOLD = "@font-face {{ font-family: cjk; font-weight: bold; src: url('{fname}'); }}\n"
+
 
 def font_archive() -> tuple[fitz.Archive | None, str]:
     """Return (archive, css) using the first available CJK font (Windows, or the Linux paths)."""
@@ -34,8 +44,17 @@ def font_archive() -> tuple[fitz.Archive | None, str]:
             dst = FONT_DIR / src.name
             if not dst.exists():
                 dst.write_bytes(src.read_bytes())
+            css = CSS_TMPL.format(fname=src.name)
+            bold = BOLD_OF.get(src.name)
+            if bold and (src.parent / bold).exists():
+                try:
+                    if not (FONT_DIR / bold).exists():
+                        (FONT_DIR / bold).write_bytes((src.parent / bold).read_bytes())
+                    css = CSS_BOLD.format(fname=bold) + css
+                except OSError:
+                    pass
             arch = fitz.Archive(str(FONT_DIR))
-            return arch, CSS_TMPL.format(fname=src.name)
+            return arch, css
     return None, "* { font-family: sans-serif; }"
 
 

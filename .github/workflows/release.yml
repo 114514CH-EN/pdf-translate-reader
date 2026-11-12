@@ -48,6 +48,20 @@ jobs:
           TAG: ${{ steps.v.outputs.tag }}
         run: gh release edit "$TAG" --notes-file ".github/release-notes/$TAG.md"
 
+      # A hook after an early return type-checks and passes short tests, then blanks the page
+      # on a longer document (v1.8.0). No release without the rules-of-hooks lint and tsc.
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists != 'true'
+        with:
+          node-version: 20
+      - name: Check the frontend (rules of hooks, types)
+        if: steps.check.outputs.exists != 'true'
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npx tsc --noEmit
+
       - name: Build the source zip
         if: steps.check.outputs.exists != 'true'
         run: |

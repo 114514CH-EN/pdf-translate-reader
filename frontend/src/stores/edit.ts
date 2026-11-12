@@ -112,6 +112,10 @@ export const useEditStore = create<EditState>((set, get) => ({
     const change: Change = { blockId, side, before: { text: before }, after: { text } };
     set((s) => ({ undoStack: [...s.undoStack, [change]].slice(-LIMIT), redoStack: [] }));
     await applyAll([change], 'after');
+    if (side === 'src' && block?.translation) {
+      // the translation on the right still belongs to the old wording
+      useViewStore.getState().toast('原文已修改。右边这一段的译文还是按旧原文翻的——退出编辑后把鼠标移到它上面点「重新翻译」即可更新', 'info');
+    }
   },
 
   async setLayout(blockId, patch, side = 'tgt') {

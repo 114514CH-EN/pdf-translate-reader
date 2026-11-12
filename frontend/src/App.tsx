@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-5';
+const EXPECTED_BACKEND = '2026.11.12-6';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
@@ -14,7 +14,7 @@ import { SelectionToolbar } from './components/SelectionToolbar';
 import { useReadingPosition } from './hooks/useReadingPosition';
 import { JobsProgressBanner } from './components/JobsProgressBanner';
 import { UploadDropZone } from './components/UploadDropZone';
-import { useSyncScroll } from './hooks/useSyncScroll';
+import { pageAtTop, scrollPageIntoView, useSyncScroll } from './hooks/useSyncScroll';
 import { useJobEvents } from './hooks/useJobEvents';
 import { useDocStore } from './stores/doc';
 import { useViewStore } from './stores/view';
@@ -232,7 +232,32 @@ export default function App() {
   }, [requestPageNav]);
 
   // sync scroll between panes in both modes
-  useSyncScroll(leftRef, rightRef, !!activeId);
+  useSyncScroll(leftRef, rightRef, !!activeId, showSrcEdited);
+  // The left pane is swapped (original PDF ⇄ editable original) when edit mode starts or
+  // ends: the new one starts at its top, so bring it to where the right pane is.
+  const firstSwap = useRef(true);
+  useEffect(() => {
+    if (firstSwap.current) {
+      firstSwap.current = false;
+      return;
+    }
+    let tries = 0;
+    let timer = 0;
+    const align = () => {
+      const left = leftRef.current;
+      const right = rightRef.current;
+      const pos = right ? pageAtTop(right) : null;
+      const page = pos ? Number(pos.page) : useViewStore.getState().currentPage;
+      const target = left?.querySelector<HTMLElement>(`[data-page-no="${page}"]`);
+      if (left && target && target.getBoundingClientRect().height > 50) {
+        scrollPageIntoView(left, page, 'auto', pos?.frac ?? 0);
+        return;
+      }
+      if (++tries < 40) timer = window.setTimeout(align, 100); // the PDF is still being laid out
+    };
+    timer = window.setTimeout(align, 60);
+    return () => window.clearTimeout(timer);
+  }, [showSrcEdited]);
   // 最近阅读位置
   useReadingPosition(leftRef);
 

@@ -4,7 +4,8 @@ import { useDocStore } from '../stores/doc';
 import { findBlock, useEditStore, type Change } from '../stores/edit';
 import { useTranslationStore } from '../stores/translation';
 import { useViewStore } from '../stores/view';
-import type { ReplaceResult } from '../types';
+import type { EditSide, ReplaceResult } from '../types';
+import { blockBox } from './PageAbsoluteView';
 
 /**
  * Toolbar tools that appear in edit mode: 撤销 / 重做 and 查找替换.
@@ -40,9 +41,37 @@ export default function EditTools() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       const typing = !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+      if (e.key === 'Escape' && t?.isContentEditable && t.closest('.abs-block')) {
+        t.blur(); // first Esc: stop typing (the text is saved), the block stays selected for the arrow keys
+        return;
+      }
       if (e.key === 'Escape' && !typing) {
         useEditStore.getState().select(null);
         return;
+      }
+      // the selected block from the keyboard: arrows nudge it (Shift: 10× further), Delete hides it
+      const sel = useEditStore.getState().selectedId;
+      if (sel && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const cut = sel.indexOf(':');
+        const side = sel.slice(0, cut) as EditSide;
+        const id = sel.slice(cut + 1);
+        const block = findBlock(id);
+        const move: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (block && move[e.key]) {
+          e.preventDefault();
+          const layout = side === 'src' ? block.src_edit?.layout : block.layout;
+          const [x0, y0, x1, y1] = layout?.bbox ?? blockBox(block);
+          const k = e.shiftKey ? 10 : 1;
+          const [dx, dy] = move[e.key];
+          const r = (v: number) => Math.round(v * 100) / 100;
+          void useEditStore.getState().setLayout(id, { bbox: [r(x0 + dx * k), r(y0 + dy * k), r(x1 + dx * k), r(y1 + dy * k)] }, side);
+          return;
+        }
+        if (block && (e.key === 'Delete' || e.key === 'Backspace')) {
+          e.preventDefault();
+          void useEditStore.getState().setLayout(id, { hidden: true }, side);
+          return;
+        }
       }
       if (!(e.ctrlKey || e.metaKey)) return;
       if (typing) {

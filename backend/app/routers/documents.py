@@ -548,11 +548,17 @@ def get_document(doc_id: int):
         row = db.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "文档不存在")
-        db.execute("UPDATE documents SET last_opened_at=datetime('now') WHERE id=?", (doc_id,))
         edits = db.execute(
             "SELECT COUNT(*) AS n FROM translations t JOIN blocks b ON b.id=t.block_id"
             " WHERE b.doc_id=? AND t.lang='__src__' AND (t.text != '' OR t.layout_json IS NOT NULL)", (doc_id,)
         ).fetchone()
+    try:
+        # only bookkeeping: opening a document must never fail because something else is writing
+        with get_db() as db:
+            db.execute("PRAGMA busy_timeout=1500")
+            db.execute("UPDATE documents SET last_opened_at=datetime('now') WHERE id=?", (doc_id,))
+    except Exception:
+        pass
     return {**dict(row), "src_edits": edits["n"]}  # blocks of the original the reader has edited
 
 
