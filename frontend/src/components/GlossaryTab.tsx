@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import { useTranslationStore } from '../stores/translation';
 import { useViewStore } from '../stores/view';
 import type { GlossaryTerm } from '../types';
+import { Icon } from './Icon';
 
 function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message;
@@ -139,156 +140,149 @@ export function GlossaryTab({ docId }: { docId: string }) {
     }
   };
 
+  const ORIGIN: Record<string, string> = { manual: '手动', extract: '提取', extracted: '提取', import: '导入', csv: '导入', selection: '划词' };
+  const f = filter.trim().toLowerCase();
+  const shown = terms.filter((t) => !f || t.src_term.toLowerCase().includes(f) || t.tgt_term.toLowerCase().includes(f));
+  const approved = terms.filter((t) => t.status === 'approved').length;
+
   return (
     <div className="glossary-tab">
-      <div className="glossary-actions">
-        <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()}>
-          导入CSV
-        </button>
-        <button type="button" className="btn btn-sm" onClick={() => void exportCsv()}>
-          导出CSV
-        </button>
-        <button type="button" className="btn btn-sm" onClick={() => void extract()}>
+      <div className="glossary-head">
+        <label className="glossary-search">
+          <Icon name="search" size={13} />
+          <input placeholder="筛选术语" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="筛选术语" />
+        </label>
+        <button type="button" className="btn btn-sm" title="让模型从这份文档里找出专业术语" onClick={() => void extract()}>
+          <Icon name="sparkle" size={13} />
           提取术语
+        </button>
+      </div>
+      <div className="glossary-io">
+        <button type="button" className="link-btn" onClick={() => fileRef.current?.click()}>
+          导入 CSV
+        </button>
+        <button type="button" className="link-btn" onClick={() => void exportCsv()}>
+          导出 CSV
         </button>
         <label className="glossary-check" title="导入的术语对所有文档生效">
           <input type="checkbox" checked={importGlobal} onChange={(e) => setImportGlobal(e.target.checked)} />
           导入为全局
         </label>
         <input
-          className="cell-input glossary-filter"
-          placeholder="筛选…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <input
           ref={fileRef}
           type="file"
           accept=".csv,text/csv"
           style={{ display: 'none' }}
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importCsv(f);
+            const file = e.target.files?.[0];
+            if (file) void importCsv(file);
             e.target.value = '';
           }}
         />
       </div>
 
-      <div className="glossary-new-row">
-        <input
-          className="cell-input"
-          placeholder="源术语"
-          value={newSrc}
-          onChange={(e) => setNewSrc(e.target.value)}
-        />
-        <input
-          className="cell-input"
-          placeholder="目标译法"
-          value={newTgt}
-          onChange={(e) => setNewTgt(e.target.value)}
-        />
-        <input
-          className="cell-input"
-          placeholder="备注（可选）"
-          value={newNote}
-          onChange={(e) => setNewNote(e.target.value)}
-        />
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => void addRow()}>
-          添加
-        </button>
-      </div>
+      <form
+        className="glossary-new"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void addRow();
+        }}
+      >
+        <div className="term-pair">
+          <input className="cell-input" placeholder="源术语" value={newSrc} onChange={(e) => setNewSrc(e.target.value)} />
+          <Icon name="next" size={12} className="term-arrow" />
+          <input className="cell-input" placeholder="目标译法" value={newTgt} onChange={(e) => setNewTgt(e.target.value)} />
+        </div>
+        <div className="glossary-new-foot">
+          <input className="cell-input" placeholder="备注（可选）" value={newNote} onChange={(e) => setNewNote(e.target.value)} />
+          <button type="submit" className="btn btn-sm btn-primary">
+            添加
+          </button>
+        </div>
+      </form>
 
-      <div className="glossary-table-wrap">
-        {loading && <div className="empty-hint">加载中…</div>}
-        {!loading && terms.length === 0 && <div className="empty-hint">暂无术语</div>}
+      <div className="glossary-list">
         {terms.length > 0 && (
-          <table className="glossary-table">
-            <thead>
-              <tr>
-                <th>源术语</th>
-                <th>目标译法</th>
-                <th>备注</th>
-                <th>状态</th>
-                <th title="全局术语对所有文档生效；本文档术语优先">全局</th>
-                <th>来源</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {terms
-                .filter((t) => {
-                  const f = filter.trim().toLowerCase();
-                  return !f || t.src_term.toLowerCase().includes(f) || t.tgt_term.toLowerCase().includes(f);
-                })
-                .map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <input
-                      className="cell-input"
-                      defaultValue={t.src_term}
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v && v !== t.src_term) void patch(t.id, { src_term: v });
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="cell-input"
-                      defaultValue={t.tgt_term}
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v && v !== t.tgt_term) void patch(t.id, { tgt_term: v });
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="cell-input"
-                      defaultValue={t.note ?? ''}
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v !== (t.note ?? '')) void patch(t.id, { note: v });
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      className="cell-select"
-                      value={t.status}
-                      onChange={(e) => void patch(t.id, { status: e.target.value })}
-                    >
-                      {STATUS_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                      {!STATUS_OPTIONS.some((o) => o.value === t.status) && (
-                        <option value={t.status}>{t.status}</option>
-                      )}
-                    </select>
-                  </td>
-                  <td className="scope-cell">
-                    <input
-                      type="checkbox"
-                      checked={t.scope === 'global' || t.doc_id === null}
-                      title={t.scope === 'global' ? '全局术语（点击改为仅本文档）' : '设为全局术语，其他文档也会使用'}
-                      onChange={(e) =>
-                        void patch(t.id, e.target.checked ? { scope: 'global' } : { scope: 'doc', doc_id: docId })
-                      }
-                    />
-                  </td>
-                  <td className="origin-cell">{t.origin ?? '手动'}</td>
-                  <td>
-                    <button type="button" className="btn btn-sm" onClick={() => void remove(t.id)}>
-                      删除
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="glossary-count">
+            {f ? `${shown.length} / ${terms.length} 个术语` : `${terms.length} 个术语`} · 已采用 {approved}
+          </div>
         )}
+        {loading && terms.length === 0 && <div className="empty-hint">加载中…</div>}
+        {!loading && terms.length === 0 && (
+          <div className="empty-hint">
+            还没有术语
+            <div className="empty-sub">在上面手动添加，或点「提取术语」让模型从文档里找。已采用的术语会在翻译时保持一致。</div>
+          </div>
+        )}
+        {terms.length > 0 && shown.length === 0 && <div className="empty-hint">没有匹配「{filter.trim()}」的术语</div>}
+        {shown.map((t) => {
+          const global = t.scope === 'global' || t.doc_id === null;
+          return (
+            <div key={t.id} className={`term-card is-${t.status}`}>
+              <div className="term-pair">
+                <input
+                  className="term-input term-src"
+                  defaultValue={t.src_term}
+                  aria-label="源术语"
+                  title={t.src_term}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== t.src_term) void patch(t.id, { src_term: v });
+                  }}
+                />
+                <Icon name="next" size={12} className="term-arrow" />
+                <input
+                  className="term-input term-tgt"
+                  defaultValue={t.tgt_term}
+                  aria-label="目标译法"
+                  title={t.tgt_term}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== t.tgt_term) void patch(t.id, { tgt_term: v });
+                  }}
+                />
+              </div>
+              <div className="term-foot">
+                <input
+                  className="term-input term-note"
+                  defaultValue={t.note ?? ''}
+                  placeholder="备注"
+                  aria-label="备注"
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== (t.note ?? '')) void patch(t.id, { note: v });
+                  }}
+                />
+                <span className="term-origin">{ORIGIN[t.origin ?? 'manual'] ?? t.origin}</span>
+                <button
+                  type="button"
+                  className={`term-chip ${global ? 'on' : ''}`}
+                  aria-pressed={global}
+                  title={global ? '全局术语：所有文档都会使用（点击改为仅本文档）' : '仅本文档使用（点击设为全局术语）'}
+                  onClick={() => void patch(t.id, global ? { scope: 'doc', doc_id: docId } : { scope: 'global' })}
+                >
+                  全局
+                </button>
+                <select
+                  className={`term-status is-${t.status}`}
+                  value={t.status}
+                  aria-label="状态"
+                  onChange={(e) => void patch(t.id, { status: e.target.value })}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                  {!STATUS_OPTIONS.some((o) => o.value === t.status) && <option value={t.status}>{t.status}</option>}
+                </select>
+                <button type="button" className="term-del" title="删除这个术语" aria-label="删除" onClick={() => void remove(t.id)}>
+                  <Icon name="trash" size={13} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

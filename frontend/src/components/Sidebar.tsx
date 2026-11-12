@@ -41,6 +41,17 @@ export function Sidebar({ docId }: { docId: string | null }) {
   const ref = useRef<HTMLElement>(null);
   const tabs = visibleTabs();
 
+  // a narrow window has no room for three columns: the panel starts folded and, when opened, floats over the page
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1000px)');
+    const fold = () => {
+      if (mq.matches) setOpen(false);
+    };
+    fold();
+    mq.addEventListener('change', fold);
+    return () => mq.removeEventListener('change', fold);
+  }, [setOpen]);
+
   useEffect(() => {
     try {
       localStorage.setItem(W_KEY, String(width));

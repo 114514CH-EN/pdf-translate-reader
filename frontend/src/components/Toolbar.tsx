@@ -227,7 +227,7 @@ export function Toolbar() {
         }}
       />
     )}
-    <div className="toolbar">
+    <div className={`toolbar ${activeId ? '' : 'is-home'}`}>
       <div className="segmented" role="group" aria-label="视图模式">
         <button
           type="button"
@@ -237,7 +237,7 @@ export function Toolbar() {
           onClick={() => setMode('page')}
         >
           <Icon name="page" size={15} />
-          整页预览
+          <span className="btn-label">整页预览</span>
         </button>
         <button
           type="button"
@@ -247,7 +247,7 @@ export function Toolbar() {
           onClick={() => setMode('flow')}
         >
           <Icon name="rows" size={15} />
-          逐句对照
+          <span className="btn-label">逐句对照</span>
         </button>
       </div>
 
@@ -398,7 +398,7 @@ export function Toolbar() {
           onClick={() => setEditMode(!editMode)}
         >
           <Icon name="edit" />
-          {editMode ? '完成编辑' : '编辑译文'}
+          <span className={editMode ? undefined : 'btn-label'}>{editMode ? '完成编辑' : '编辑译文'}</span>
         </button>
         <div className="export-menu" ref={exportRef}>
           <button
@@ -409,7 +409,7 @@ export function Toolbar() {
             onClick={() => setExportOpen(!exportOpen)}
           >
             <Icon name="download" />
-            导出
+            <span className="btn-label">导出</span>
             <Icon name="chevronDown" size={13} className="caret" />
           </button>
           {exportOpen && (

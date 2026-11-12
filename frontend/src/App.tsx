@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-10';
+const EXPECTED_BACKEND = '2026.11.12-11';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -407,11 +407,19 @@ export default function App() {
 
         {/* hint bar */}
         <footer className="statusbar">
-          <span>{editMode ? '编辑模式：点击原文或译文即可修改，Ctrl+Z 撤销' : '←/→ 翻页 · 拖拽分隔线调整布局'}</span>
           <span>
-            第 {currentPage} 页
-            {mode === 'page' ? ' · 整页预览' : ' · 逐句对照'}
+            {!activeId
+              ? '把 PDF 拖进窗口就能添加'
+              : editMode
+                ? '编辑模式：点击原文或译文即可修改，Ctrl+Z 撤销'
+                : '←/→ 翻页 · 拖拽分隔线调整布局'}
           </span>
+          {activeId && (
+            <span>
+              第 {currentPage} 页
+              {mode === 'page' ? ' · 整页预览' : ' · 逐句对照'}
+            </span>
+          )}
         </footer>
 
         <Suspense fallback={null}>

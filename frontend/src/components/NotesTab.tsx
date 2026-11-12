@@ -10,6 +10,18 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
+/** "今天 14:05" / "11-03 09:20" / "2025-12-01" — short enough for the narrow panel */
+function shortTime(v: string): string {
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) || !v.includes(' ') ? v : v.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(d.getTime())) return v;
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+  if (d.getFullYear() === now.getFullYear()) return `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm}`;
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+}
+
 export function NotesTab({ docId }: { docId: string }) {
   const toast = useViewStore((s) => s.toast);
   const currentPage = useViewStore((s) => s.currentPage);
@@ -196,7 +208,7 @@ export function NotesTab({ docId }: { docId: string }) {
           <div key={n.id} className="note-item">
             <div className="note-meta">
               {n.page_no != null ? <span className="badge">第 {n.page_no} 页</span> : <span className="badge">全局</span>}
-              <span className="note-time">{new Date(n.updated_at || n.created_at).toLocaleString()}</span>
+              <span className="note-time">{shortTime(n.updated_at || n.created_at)}</span>
             </div>
             {editingId === n.id ? (
               <>

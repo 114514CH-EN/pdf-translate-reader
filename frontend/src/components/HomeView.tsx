@@ -56,7 +56,10 @@ export default function HomeView() {
     <div className="home">
       {input}
       <div className="home-inner">
-        <h1 className="home-title">继续阅读</h1>
+        <div className="home-head">
+          <h1 className="home-title">继续阅读</h1>
+          <span className="home-count">{documents.length} 份文档</span>
+        </div>
         <div className="home-grid">
           {documents.map((d) => {
             const total = d.blocks_total ?? 0;
