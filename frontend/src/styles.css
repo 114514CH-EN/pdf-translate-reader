@@ -3411,3 +3411,49 @@ textarea {
 .abs-view.is-source .abs-block.untranslated {
   background: none;
 }
+
+/* 页面渲染出错时的兜底界面 */
+.crash-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg, #f4f1ea);
+  color: var(--text, #222);
+}
+.crash-card {
+  width: min(560px, 100%);
+  padding: 24px 26px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg, 0 8px 30px rgba(0, 0, 0, 0.12));
+}
+.crash-card h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.crash-card p {
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+.crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.crash-note {
+  color: var(--accent, #2b5fd9);
+}
+.crash-card pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--panel-2, #f3f3f3);
+  border-radius: 8px;
+}

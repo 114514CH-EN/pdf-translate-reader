@@ -604,15 +604,7 @@ function AbsolutePage({
       probe.src = ''; // drop the download when the page scrolls out of range
     };
   }, [page.original, page.loaded, active]);
-  const img: PageImage = { url: origOk === false ? null : page.original, width: page.width, height: page.height };
-  if (!active) {
-    // virtualised: an empty sheet keeps the scroll geometry, no images / blocks
-    return (
-      <div className="abs-page" data-page-no={page.pageNo} style={{ width: page.width * zoom, height: page.height * zoom }}>
-        <div className="abs-page-anchor" data-block-id={`__page_${page.pageNo}`} />
-      </div>
-    );
-  }
+  // (hooks stay above the early return below: a page that scrolls out of range must run the same hooks)
   const side = useContext(SideContext);
   // the left pane in edit mode: the same page, but each block shows the ORIGINAL — untouched
   // (a crop of the page) until the reader edits it, then their text and formatting
@@ -623,6 +615,15 @@ function AbsolutePage({
         : page.blocks,
     [side, page.blocks],
   );
+  const img: PageImage = { url: origOk === false ? null : page.original, width: page.width, height: page.height };
+  if (!active) {
+    // virtualised: an empty sheet keeps the scroll geometry, no images / blocks
+    return (
+      <div className="abs-page" data-page-no={page.pageNo} style={{ width: page.width * zoom, height: page.height * zoom }}>
+        <div className="abs-page-anchor" data-block-id={`__page_${page.pageNo}`} />
+      </div>
+    );
+  }
   const hovered = hoverId ? page.blocks.find((b) => b.id === hoverId) : undefined;
   const translatable = page.blocks.filter((b) => b.type !== 'image' && b.type !== 'formula' && b.text.trim());
   const nDone = translatable.filter((b) => b.translation).length;
@@ -707,6 +708,17 @@ export function PageAbsoluteView({
   const failedIds = new Set(failedBlockIds.map(String));
   // unloaded pages take the size of a loaded one so both panes stay aligned
   const sample = Object.values(pages).find((p) => p.loaded);
+
+  // the left pane swaps in when edit mode starts: begin at the page being read, not at page 1
+  useEffect(() => {
+    if (side !== 'src') return;
+    const page = useViewStore.getState().currentPage;
+    const id = requestAnimationFrame(() => {
+      if (scrollRef.current) scrollPageIntoView(scrollRef.current, page, 'auto', 0);
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [side]);
 
   // load pages lazily: current ± 2, clamped to the real page count
   useEffect(() => {

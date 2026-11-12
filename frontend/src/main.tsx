@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import AuthGate from './components/AuthGate';
+import ErrorBoundary from './components/ErrorBoundary';
 // typefaces of the interface styles, bundled so the app works fully offline
 // (latin subsets only — CJK text falls back to the system fonts)
 import '@fontsource/inter/latin-400.css';
@@ -28,7 +29,9 @@ const container = document.getElementById('root');
 if (!container) throw new Error('root 元素不存在');
 
 createRoot(container).render(
-  <AuthGate>
-    <App />
-  </AuthGate>,
+  <ErrorBoundary>
+    <AuthGate>
+      <App />
+    </AuthGate>
+  </ErrorBoundary>,
 );
