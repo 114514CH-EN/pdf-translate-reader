@@ -236,3 +236,40 @@ def test_centred_title_on_two_lines_is_one_paragraph():
     assert len(out) == 2
     assert out[0]["text"] == "A long chart title that wraps onto\na second line"
     assert out[0]["style"]["align"] == "center"
+
+
+def test_rows_that_exist_only_in_some_columns_are_split():
+    """Three labels beside one vertically merged cell: partial rules split only the cells they cross."""
+    from app.services.extract import _split_by_partial_rules
+
+    cells = [{"row": 0, "col": 0, "bbox": [40, 118, 212, 184]}, {"row": 0, "col": 1, "bbox": [212, 118, 384, 184]},
+             {"row": 1, "col": 0, "bbox": [40, 184, 212, 444], "text": "A B C"},
+             {"row": 1, "col": 1, "bbox": [212, 184, 384, 444], "text": "merged"}]
+    hs = [(118.0, 39, 384), (184.4, 39, 384), (278.0, 39, 212), (371.6, 39, 212), (443.6, 39, 384)]
+    n, out = _split_by_partial_rules(cells, 2, (hs, []))
+    assert n == 4
+    col0 = [(c["row"], c["bbox"][1], c["bbox"][3]) for c in out if c["col"] == 0]
+    assert col0 == [(0, 118, 184), (1, 184, 278.0), (2, 278.0, 371.6), (3, 371.6, 444)]
+    merged = [c for c in out if c["col"] == 1 and c["row"] > 0]
+    assert len(merged) == 1 and merged[0]["row"] == 1 and merged[0]["bbox"] == [212, 184, 384, 444]
+    assert all("text" not in c for c in out if c["col"] == 0 and c["row"] > 0)  # re-read per piece
+    # rules across the whole row are not partial: nothing changes
+    full = [(118.0, 39, 384), (300.0, 39, 384), (443.6, 39, 384)]
+    assert _split_by_partial_rules(cells, 2, (full, [])) == (2, cells)
+
+
+def test_raised_exponent_in_the_text_font_is_not_read_as_a_number():
+    from app.services.extract import _plain_superscripts
+
+    base = _span("up to 10", 100, 100, 160, 118)
+    base["size"] = 18.0
+    sup = _span("5", 160, 100, 166, 112)
+    sup["size"], sup["flags"] = 12.0, 1
+    note = _span("3", 300, 106, 306, 118)  # same size, on the baseline: an ordinary digit
+    note["size"] = 18.0
+    blk = _block(base, sup, _span(" items and ", 166, 100, 300, 118), note)
+    for sp in blk["lines"][0]["spans"]:
+        sp.setdefault("size", 18.0)
+    fixes = _plain_superscripts([blk])
+    assert [sp["text"] for sp in blk["lines"][0]["spans"]][:2] == ["up to 10", "⁵"]
+    assert note["text"] == "3" and len(fixes) == 1 and fixes[0][1:] == ("up to 10"[-6:], "5", "⁵")

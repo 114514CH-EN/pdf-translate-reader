@@ -53,8 +53,12 @@ def _words_in_bbox(words: list[tuple], bbox: list[float]) -> str:
                 line.append(p)
                 continue
         lines.append([p])
-    parts = [q[3] for line in lines for q in sorted(line, key=lambda q: q[1])]
-    text = " ".join(parts)
+    rows = [" ".join(q[3] for q in sorted(line, key=lambda q: q[1])) for line in lines]
+    text = rows[0]
+    for nxt in rows[1:]:
+        # "torque-" / "speed characteristics": a compound broken at its hyphen, not two words
+        glue = "" if re.search(r"[A-Za-z]-$", text) and nxt[:1].islower() else " "
+        text += glue + nxt
     text = re.sub(r"\s+([,.;:!?)\]}])", r"\1", text)
     text = re.sub(r"([(\[{])\s+", r"\1", text)
     return text.strip()
@@ -253,6 +257,92 @@ def _page_rules(page: fitz.Page) -> tuple[list[tuple[float, float, float]], list
     return join(hs), join(vs)
 
 
+_SUP_MAP = str.maketrans("0123456789+-−n", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻ⁿ")
+_SUP_RE = re.compile(r"^[0-9+\-−n]{1,4}$")
+
+
+def _plain_superscripts(raw_blocks: list[dict]) -> list[tuple[list[float], str, str, str]]:
+    """A raised exponent in the text font ("10" + small "5") reads "105" once the spans are joined,
+    and is translated as one hundred and five. Such spans become Unicode superscripts (10⁵).
+
+    Spans already inside a formula keep their original rendering and are left alone.
+    Returns (bbox, text before it, plain text, superscript text) for the table cells,
+    whose text is assembled from words instead of spans.
+    """
+    fixes = []
+    for blk in raw_blocks:
+        for ln in blk["lines"]:
+            prev = None
+            for sp in ln["spans"]:
+                t = (sp.get("text") or "").strip()
+                if t and prev is not None and not sp.get("m") and not prev.get("m") \
+                        and _SUP_RE.match(t) and any(ch.isdigit() or ch == "n" for ch in t) \
+                        and sp["size"] < 0.8 * prev["size"] \
+                        and (sp.get("flags", 0) & 1 or sp["bbox"][3] < prev["bbox"][3] - 0.2 * prev["size"]) \
+                        and (prev.get("text") or "")[-1:].isalnum():
+                    sup = t.translate(_SUP_MAP)
+                    fixes.append((list(sp["bbox"]), (prev.get("text") or "").strip()[-6:], t, sup))
+                    sp["text"] = (sp.get("text") or "").replace(t, sup, 1)
+                if t:
+                    prev = sp
+    return fixes
+
+
+def _split_by_partial_rules(cells: list[dict], n_rows: int, rules: tuple) -> tuple[int, list[dict]]:
+    """Rows that exist only in some columns (the other columns are vertically merged cells).
+
+    "Shunt / Series / Compound" in the first column, one tall "up to 10⁵" beside them:
+    find_tables sees one row, and three labels become one cell. A horizontal rule that
+    crosses a cell from side to side inside its row splits that cell; cells it does not
+    cross stay tall and simply start at the first of the new rows.
+    """
+    hs = rules[0] if rules else []
+    if not hs or not cells:
+        return n_rows, cells
+    by_row: dict[int, list[dict]] = {}
+    for c in cells:
+        by_row.setdefault(c["row"], []).append(c)
+    out: list[dict] = []
+    new_row = 0
+    changed = False
+    for r in sorted(by_row):
+        row = by_row[r]
+        y0 = min(c["bbox"][1] for c in row)
+        y1 = max(c["bbox"][3] for c in row)
+
+        def cuts_of(c: dict) -> list[float]:
+            x0, _, x1, _ = c["bbox"]
+            ys = sorted(y for y, a, b in hs
+                        if y0 + 6 < y < y1 - 6 and min(b, x1) - max(a, x0) >= 0.9 * (x1 - x0))
+            return [y for i, y in enumerate(ys) if i == 0 or y - ys[i - 1] > 2]
+
+        per_cell = [cuts_of(c) for c in row]
+        all_cuts: list[float] = []
+        for y in sorted(y for ys in per_cell for y in ys):
+            if not all_cuts or y - all_cuts[-1] > 2:
+                all_cuts.append(y)
+        # a rule across every cell is a normal row border find_tables chose to ignore: not ours to undo
+        if not all_cuts or all(len(ys) == len(all_cuts) for ys in per_cell):
+            for c in row:
+                out.append({**c, "row": new_row})
+            new_row += 1
+            continue
+        changed = True
+        edges = [y0, *all_cuts, y1]
+        for c, ys in zip(row, per_cell):
+            mine = [c["bbox"][1], *ys, c["bbox"][3]]
+            for a, b in zip(mine, mine[1:]):
+                sub = min(range(len(edges) - 1), key=lambda k: abs(edges[k] - a))
+                piece = {k: v for k, v in c.items() if k not in ("text", "ph", "math", "math_ids")}
+                piece.update(row=new_row + sub, bbox=[c["bbox"][0], a, c["bbox"][2], b])
+                out.append(piece)
+        new_row += len(edges) - 1
+    if not changed:
+        return n_rows, cells
+    out.sort(key=lambda c: (c["row"], c["col"]))
+    return new_row, out
+
+
 _SENTENCE_END = re.compile(r"[.:;!?。：；！？)\]]\s*$")
 
 
@@ -355,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 20  # v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 21  # v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -1301,6 +1391,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
         _refine_run_boxes(page, raw_blocks, math_runs)
     except Exception:
         pass  # keep the text-based boxes
+    sup_fixes = _plain_superscripts(raw_blocks)
     math_spans = [
         (sp["bbox"], len((sp.get("text") or "").replace(" ", "")), bool(sp.get("m")))
         for blk in raw_blocks for ln in blk["lines"] for sp in ln["spans"] if (sp.get("text") or "").strip()
@@ -1323,12 +1414,20 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
             try:
                 n_rows, n_cols, cells = _normalize_table(tbl, words)
                 n_rows, cells = _merge_wrapped_rows(cells, n_rows, rules, words)
+                n_rows, cells = _split_by_partial_rules(cells, n_rows, rules)
             except Exception:
                 n_rows, n_cols, cells = 0, 0, []
             if not cells:
                 continue
             for cell in cells:
                 cell["text"] = _words_in_bbox(words, cell["bbox"])
+                for sb, tail, plain, sup in sup_fixes:  # "10" + raised "5" came out of the words as "105"
+                    if cell["bbox"][0] <= (sb[0] + sb[2]) / 2 <= cell["bbox"][2] \
+                            and cell["bbox"][1] <= (sb[1] + sb[3]) / 2 <= cell["bbox"][3]:
+                        for glue in ("", " "):
+                            if tail + glue + plain in cell["text"]:
+                                cell["text"] = cell["text"].replace(tail + glue + plain, tail + sup, 1)
+                                break
                 cell.update(_cell_style(span_info, cell["bbox"]))
                 # math cell → shown as a crop of the original rendering
                 x0, y0, x1, y1 = cell["bbox"]
