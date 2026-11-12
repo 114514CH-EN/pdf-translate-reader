@@ -1,29 +1,33 @@
 /* ===== PDF 双语翻译阅读器 — light theme ===== */
 :root {
-  /* surfaces & ink */
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --panel-2: #f1f3f6;
-  --border: #d9dde4;
-  --border-soft: #e7eaef;
-  --text: #1f2430;
-  --text-dim: #5f6776;
-  --text-faint: #98a0ad;
-  --accent: #2f5fd0;
-  --accent-hover: #2550b5;
+  /* surfaces & ink — "paper and ink": a warm, quiet desk; white sheets with a real
+     shadow; near-white chrome drawn in hairlines; one deep ink blue, used sparingly */
+  --bg: #f5f4f1;
+  --panel: #fdfdfc;
+  --panel-2: #f1f0ed;
+  --border: #dcdad4;
+  --border-soft: #e9e7e2;
+  --text: #1a1c21;
+  --text-dim: #575c67;
+  --text-faint: #8c909a;
+  --accent: #2a49bd;
+  --accent-hover: #213b9f;
   --accent-ink: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 11%, transparent);
-  --danger: #d43d3d;
-  --ok: #1f9d57;
-  --pane-bg: #e8ebf0;
-  --page-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 14px rgba(16, 24, 40, 0.08);
-  --shadow: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-lg: 0 10px 30px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
+  --danger: #c93a3a;
+  --ok: #1b8f50;
+  --pane-bg: #e8e6e1;
+  /* a sheet lying on the desk: a hairline edge, a tight contact shadow, a wide soft one */
+  --page-shadow: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 1px 1px rgba(24, 24, 32, 0.04),
+    0 8px 14px -6px rgba(24, 24, 32, 0.1), 0 26px 44px -22px rgba(24, 24, 32, 0.22);
+  --shadow: 0 0 0 1px rgba(24, 24, 32, 0.04), 0 1px 2px rgba(24, 24, 32, 0.06), 0 4px 10px -3px rgba(24, 24, 32, 0.08);
+  --shadow-lg: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 10px 22px -8px rgba(24, 24, 32, 0.14),
+    0 32px 64px -24px rgba(24, 24, 32, 0.3);
   /* shape */
-  --radius: 7px;
-  --radius-lg: 10px;
-  --radius-btn: 7px;
-  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-btn: 8px;
+  --radius-sm: 5px;
   --bw: 1px;
   --control-h: 30px;
   /* buttons */
@@ -31,14 +35,14 @@
   --btn-border: var(--border);
   --btn-text: var(--text);
   --btn-hover-bg: var(--panel-2);
-  --btn-hover-border: color-mix(in srgb, var(--text) 22%, var(--border));
+  --btn-hover-border: color-mix(in srgb, var(--text) 20%, var(--border));
   --btn-hover-text: var(--text);
-  --btn-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
+  --btn-shadow: 0 1px 1px rgba(24, 24, 32, 0.04);
   --btn-active-shadow: none;
   --btn-press: translateY(1px);
-  --focus: color-mix(in srgb, var(--accent) 45%, transparent);
-  /* type */
-  --font-ui: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --focus: color-mix(in srgb, var(--accent) 42%, transparent);
+  /* type: Inter for Latin and figures, the system's own face for Chinese */
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-read: var(--font-ui);
   --font-num: var(--font-ui);
   --ease: 0.14s ease;
@@ -3636,4 +3640,195 @@ textarea {
   font-size: 13px;
   line-height: 2;
   color: var(--text-dim);
+}
+
+/* ============================================================================
+   Craft — the last layer of finish on the two default themes (亮色 / 暗色).
+   The other themes have their own character and keep it.
+   ============================================================================ */
+:root {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  font-feature-settings: 'cv11', 'ss03', 'calt';
+  letter-spacing: -0.003em;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* thinner scrollbars that stay out of the way until used */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 34%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* the divider between the two pages: a hairline with a generous grab area */
+.split-divider {
+  position: relative;
+  width: 9px;
+  margin: 0 -4px;
+  z-index: 2;
+  background: transparent;
+}
+.split-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--border);
+  transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
+}
+.split-divider:hover {
+  background: transparent;
+}
+.split-divider:hover::after,
+body.resizing .split-divider::after {
+  left: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* fields: one height, one radius, a ring instead of a hard outline */
+.cell-input,
+.form-row input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+.form-row select,
+.form-row textarea {
+  border-radius: var(--radius-sm);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.cell-input:focus,
+.form-row input:focus-visible,
+.form-row select:focus-visible,
+.form-row textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* dialogs: the page behind steps back */
+.modal-backdrop {
+  background: color-mix(in srgb, #14151a 34%, transparent);
+  backdrop-filter: blur(5px) saturate(120%);
+  -webkit-backdrop-filter: blur(5px) saturate(120%);
+}
+.modal {
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  padding: 14px 18px;
+}
+.modal-head h2 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.menu,
+.lib-dropdown {
+  padding: 5px;
+  border-color: var(--border-soft);
+}
+.menu-item {
+  border-radius: 6px;
+}
+
+:root:is([data-theme='light'], [data-theme='dark'], :not([data-theme])) {
+  /* chrome */
+  .topbar {
+    background: var(--panel-2);
+    border-bottom-color: var(--border);
+  }
+  .doc-tab {
+    border-radius: 8px 8px 0 0;
+  }
+  .doc-tab.active {
+    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.6) inset, 0 -2px 6px -3px rgba(24, 24, 32, 0.12);
+  }
+  .toolbar {
+    padding: 8px 14px;
+    border-bottom-color: var(--border-soft);
+    box-shadow: 0 1px 0 var(--border-soft), 0 6px 12px -10px rgba(24, 24, 32, 0.18);
+    position: relative;
+    z-index: 3;
+  }
+  .statusbar {
+    border-top-color: var(--border-soft);
+    background: var(--bg);
+  }
+  .sidebar {
+    border-left-color: var(--border-soft);
+    box-shadow: -8px 0 14px -14px rgba(24, 24, 32, 0.2);
+  }
+
+  /* buttons: a faint top light on the raised ones, real depth on the primary */
+  .btn {
+    box-shadow: var(--btn-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+  .btn-primary {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+  }
+  .btn:disabled {
+    box-shadow: none;
+  }
+  .segmented {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    box-shadow: inset 0 1px 2px rgba(24, 24, 32, 0.06);
+  }
+  .seg-btn.active {
+    box-shadow: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 1px 2px rgba(24, 24, 32, 0.12);
+  }
+  .sidebar-tab {
+    border-radius: 7px;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+  .sidebar-tab:hover:not(.active) {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+    color: var(--text);
+  }
+}
+
+:root[data-theme='dark'] {
+  .doc-tab.active {
+    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.05) inset;
+  }
+  .toolbar {
+    box-shadow: 0 1px 0 var(--border-soft), 0 8px 14px -10px rgba(0, 0, 0, 0.6);
+  }
+  .sidebar {
+    box-shadow: -10px 0 16px -14px rgba(0, 0, 0, 0.7);
+  }
+  .btn {
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  .btn-primary {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .segmented {
+    background: rgba(0, 0, 0, 0.28);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+  .seg-btn.active {
+    background: var(--panel-2);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
 }
