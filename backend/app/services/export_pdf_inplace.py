@@ -24,6 +24,16 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             (lang, doc_id),
         ).fetchall()
 
+    if lang == "__src__":
+        # the original with the reader's edits: a block that was only moved, restyled or hidden
+        # (no new text) is redrawn from its own text
+        fixed = []
+        for r in blocks:
+            d = dict(r)
+            if not d["translation"] and d["layout_json"] and d["type"] not in ("table", "code", "image", "formula"):
+                d["translation"] = json.loads(d["meta_json"] or "{}").get("ph") or d["text"]
+            fixed.append(d)
+        blocks = fixed
     arch, css = font_archive()
     pdf = fitz.open(src_path)
     orig = fitz.open(src_path)  # untouched copy: formula crops are rendered from it
@@ -42,7 +52,7 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
     from ..config import UPLOAD_DIR
 
     doc_dir = UPLOAD_DIR / str(doc_id)
-    if (doc_dir / "imgtr").is_dir():
+    if lang != "__src__" and (doc_dir / "imgtr").is_dir():
         for r in blocks:
             if r["type"] != "image":
                 continue
@@ -125,7 +135,7 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
     # highlights made in the translation pane sit on the translated text
     from .export_common import add_highlight_annots, load_highlights
 
-    for page_no, hls in load_highlights(doc_id, "tgt").items():
+    for page_no, hls in load_highlights(doc_id, "src" if lang == "__src__" else "tgt").items():
         if 1 <= page_no <= pdf.page_count:
             add_highlight_annots(pdf.load_page(page_no - 1), hls)
     try:

@@ -30,6 +30,8 @@ interface TranslationState {
   getBlock: (blockId: string) => Block | undefined;
   setBlockTranslation: (blockId: string, text: string) => void;
   setBlockLayout: (blockId: string, layout: BlockLayout | null) => void;
+  /** the reader's edit of the original text / its formatting (undefined: leave that part) */
+  setBlockSource: (blockId: string, patch: { text?: string | null; layout?: BlockLayout | null }) => void;
   saveBlockTranslation: (blockId: string, text: string) => Promise<void>;
   startTranslate: (body: TranslateRequest) => Promise<string | null>;
   startRetranslateBlock: (blockId: string) => Promise<string | null>;
@@ -148,6 +150,26 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       if (idx >= 0) {
         const blocks = p.blocks.slice();
         blocks[idx] = { ...blocks[idx], layout };
+        pages[Number(key)] = { ...p, blocks };
+        set({ pages });
+        return;
+      }
+    }
+  },
+
+  setBlockSource(blockId, patch) {
+    const pages = { ...get().pages };
+    for (const key of Object.keys(pages)) {
+      const p = pages[Number(key)];
+      const idx = p.blocks.findIndex((b) => String(b.id) === String(blockId));
+      if (idx >= 0) {
+        const blocks = p.blocks.slice();
+        const cur = blocks[idx].src_edit ?? { text: null, layout: null };
+        const next = {
+          text: patch.text !== undefined ? patch.text || null : cur.text,
+          layout: patch.layout !== undefined ? patch.layout : cur.layout,
+        };
+        blocks[idx] = { ...blocks[idx], src_edit: next.text || next.layout ? next : null };
         pages[Number(key)] = { ...p, blocks };
         set({ pages });
         return;

@@ -49,7 +49,7 @@ import {
   type PoseSlot,
 } from './appearance';
 import { PET_SUMMON_EVENT } from './mode';
-import { loadPhysics, PHYSICS_EVENT, savePhysics, step, VelocityTracker, type Body, type PhysicsSettings } from './physics';
+import { loadPhysics, PHYSICS_EVENT, savePhysics, step, swing, upright, VelocityTracker, type Body, type PhysicsSettings } from './physics';
 import './pet.css';
 
 /** distance of the pet's feet from the bottom of the window — above the status bar */
@@ -116,6 +116,8 @@ const isSvg = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
 
 /** What the pet offers for a page, decided from the blocks already loaded for it. */
 const DIZZY = ['晕……', '轻一点嘛', '哎哟！', '转、转起来了……'];
+const SHAKEN = ['别、别摇啦……', '晕了晕了', '要吐了……'];
+const BUMPED = ['哎呀！', '谁撞我？', '呜哇——'];
 const PURR = ['嘿嘿', '好舒服～', '再摸摸', '(*ˊᗜˋ*)'];
 /** minutes of reading before it suggests a break */
 const BREAK_AFTER_MIN = 45;
@@ -249,6 +251,7 @@ export function PetAssistant() {
   }, []);
   /** landing squash: alternates a/b so the animation restarts on every bounce */
   const [landing, setLanding] = useState<'' | 'a' | 'b'>('');
+  const [hitSide, setHitSide] = useState<'floor' | 'wall'>('floor');
   const [physics, setPhysicsState] = useState<PhysicsSettings>(() => loadPhysics());
   const physicsRef = useRef(physics);
   physicsRef.current = physics;
@@ -294,13 +297,22 @@ export function PetAssistant() {
    * re-render the whole assistant (chat history included) every frame. The state
    * catches up with `place` when the movement ends; renders in between read posRef.
    */
-  const moveFast = useCallback((next: { x: number; y: number }, tilt = 0) => {
+  const moveFast = useCallback((next: { x: number; y: number }, angle?: number | null) => {
     posRef.current = next;
     const el = rootRef.current;
     if (!el) return;
     el.style.left = `${next.x}px`;
     el.style.bottom = `${next.y}px`;
-    el.style.transform = tilt ? `rotate(${tilt.toFixed(1)}deg)` : '';
+    // null: the rotation is someone else's business (the pendulum while dragged)
+    if (angle !== null) el.style.transform = angle ? `rotate(${angle.toFixed(1)}deg)` : '';
+  }, []);
+  /** back to normal after a drag or a flight: no rotation, default pivot */
+  const resetPose = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    el.style.transition = '';
+    el.style.transform = '';
+    el.style.transformOrigin = '';
   }, []);
 
   // growing the pet near the right edge would push it off screen
@@ -445,6 +457,7 @@ export function PetAssistant() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ offX: number; offY: number; startX: number; startY: number; lastX: number; moved: boolean } | null>(null);
   const tracker = useRef(new VelocityTracker());
+  const throwRef = useRef<(vx: number, vy: number, angle?: number, spin?: number) => void>(() => undefined);
   const simRef = useRef(0); // requestAnimationFrame id of the running simulation
   const stopSim = useCallback(() => {
     if (simRef.current) cancelAnimationFrame(simRef.current);
@@ -485,9 +498,10 @@ export function PetAssistant() {
       stopSim();
       setFlying(false);
       place(posRef.current);
-      if (rootRef.current) rootRef.current.style.transform = '';
+      resetPose();
       setLanding('');
     }
+    window.clearTimeout(settleTimer.current);
     tracker.current.reset();
     tracker.current.add(e.clientX, e.clientY);
     const rect = e.currentTarget.getBoundingClientRect();
@@ -499,6 +513,34 @@ export function PetAssistant() {
       lastX: e.clientX,
       moved: false,
     };
+    hang.current = { theta: 0, omega: 0, handVx: 0, lastX: e.clientX, lastT: performance.now(), raf: 0, flips: 0, dir: 0, flipT: 0, dizzy: false };
+  };
+
+  // ---- while dragged it hangs from the pointer and swings (physics.swing) ----
+  const hang = useRef({ theta: 0, omega: 0, handVx: 0, lastX: 0, lastT: 0, raf: 0, flips: 0, dir: 0, flipT: 0, dizzy: false });
+  const settleTimer = useRef(0);
+  const startSwing = () => {
+    const el = rootRef.current;
+    const d = dragRef.current;
+    if (!el || !d || !(physicsRef.current.bounce || physicsRef.current.inertia)) return;
+    el.style.transition = 'none';
+    el.style.transformOrigin = `${d.offX}px ${d.offY}px`; // it turns around the point it is held by
+    let last = performance.now();
+    const frame = (now: number) => {
+      const h = hang.current;
+      if (!dragRef.current) return;
+      let dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      if (now - h.lastT > 60) h.handVx *= 0.6; // the hand stopped: no new samples arrive
+      while (dt > 0) {
+        const s = Math.min(dt, 1 / 120);
+        [h.theta, h.omega] = swing(h.theta, h.omega, h.handVx, s);
+        dt -= s;
+      }
+      el.style.transform = `rotate(${h.theta.toFixed(1)}deg)`;
+      h.raf = requestAnimationFrame(frame);
+    };
+    hang.current.raf = requestAnimationFrame(frame);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -516,6 +558,29 @@ export function PetAssistant() {
       }
     }
     if (!d.moved) return;
+    if (!hang.current.raf) startSwing();
+    {
+      // how fast the hand moves sideways (drives the swing), and whether it is being shaken
+      const h = hang.current;
+      const now = performance.now();
+      const dtm = Math.max(now - h.lastT, 1);
+      const v = ((e.clientX - h.lastX) / dtm) * 1000;
+      h.handVx = h.handVx * 0.6 + v * 0.4;
+      h.lastX = e.clientX;
+      h.lastT = now;
+      const dir = Math.abs(v) > 900 ? Math.sign(v) : 0;
+      if (dir && dir !== h.dir) {
+        if (now - h.flipT > 1300) h.flips = 0;
+        h.flips += 1;
+        h.flipT = now;
+        h.dir = dir;
+        if (h.flips >= 6 && !h.dizzy) {
+          h.dizzy = true; // shaken hard: it gets dizzy
+          burst('stars', 1800);
+          if (!openRef.current) speak(SHAKEN[Math.floor(Math.random() * SHAKEN.length)], 2200);
+        }
+      }
+    }
     tracker.current.add(e.clientX, e.clientY);
     const dx = e.clientX - d.lastX;
     if (Math.abs(dx) > 2) {
@@ -524,7 +589,7 @@ export function PetAssistant() {
     }
     const x = clamp(e.clientX - d.offX, 8, maxX());
     const top = clamp(e.clientY - d.offY, 8, window.innerHeight - sizeRef.current - GROUND);
-    moveFast({ x, y: window.innerHeight - sizeRef.current - top });
+    moveFast({ x, y: window.innerHeight - sizeRef.current - top }, hang.current.raf ? null : undefined);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -532,6 +597,8 @@ export function PetAssistant() {
     dragRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     if (!d) return;
+    cancelAnimationFrame(hang.current.raf);
+    hang.current.raf = 0;
     setDragging(false);
     if (!d.moved) {
       wake();
@@ -544,9 +611,23 @@ export function PetAssistant() {
     place(posRef.current); // the drag moved the element directly: let the state catch up
     if (ph.bounce || ph.inertia) {
       const v = ph.inertia ? tracker.current.velocity() : { vx: 0, vy: 0 };
-      throwPet(v.vx, v.vy);
+      const h = hang.current;
+      if (Math.abs(h.theta) > 0.5) {
+        // from here on it turns around its middle instead of the point it was held by:
+        // shift it so that it does not jump on screen when the pivot changes
+        const size = sizeRef.current;
+        const ox = d.offX - size * 0.5;
+        const oy = d.offY - size * 0.55;
+        const r = (h.theta * Math.PI) / 180;
+        const dx = ox - (ox * Math.cos(r) - oy * Math.sin(r));
+        const dy = oy - (ox * Math.sin(r) + oy * Math.cos(r));
+        posRef.current = { x: posRef.current.x + dx, y: posRef.current.y - dy };
+      }
+      // it leaves the hand at the angle it was hanging at, still swinging; a throw adds spin
+      throwPet(v.vx, v.vy, h.theta, h.omega + (ph.inertia ? v.vx * 0.22 : 0) + (h.dizzy ? 240 : 0));
       return;
     }
+    resetPose();
     writeStore(POS_KEY, JSON.stringify({ ratio: limit > 0 ? posRef.current.x / limit : 0 }));
     if (posRef.current.y > GROUND + 2) {
       setDropping(true);
@@ -555,61 +636,85 @@ export function PetAssistant() {
     }
   };
 
-  /** let go: gravity, bounces and the speed of the hand (physics.ts) */
-  const throwPet = (vx: number, vy: number) => {
-    const body: Body = { x: posRef.current.x, y: posRef.current.y, vx, vy };
-    if (body.y <= GROUND + 1 && Math.hypot(vx, vy) < 40) {
+  /** let go: gravity, bounces, spin and the speed of the hand (physics.ts) */
+  const throwPet = (vx: number, vy: number, angle = 0, spin = 0) => {
+    const el = rootRef.current;
+    const body: Body = { x: posRef.current.x, y: posRef.current.y, vx, vy, a: angle, w: Math.max(-900, Math.min(900, spin)), t: 0 };
+    if (body.y <= GROUND + 1 && Math.hypot(vx, vy) < 40 && Math.abs(angle) < 2) {
+      resetPose();
       place({ x: body.x, y: GROUND });
       savePos();
       return;
     }
     stopSim();
+    window.clearTimeout(settleTimer.current);
+    if (el) {
+      el.style.transition = 'none';
+      el.style.transformOrigin = '50% 55%'; // in the air and on the floor it turns around its middle
+    }
     setFlying(true);
     let last = performance.now();
     let flip: 'a' | 'b' = 'a';
+    let dizzy = false;
     const frame = (now: number) => {
       const world = {
         minX: 8,
         maxX: maxX(),
         ground: GROUND,
         ceiling: Math.max(GROUND, window.innerHeight - sizeRef.current - 8),
+        radius: sizeRef.current / 2,
       };
       let dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      let res = { landed: 0, wall: 0, done: false };
+      let res = { landed: 0, wall: 0, ceiling: 0, done: false };
       // small fixed steps: a fast fall never tunnels through the floor
       while (dt > 0) {
         const h = Math.min(dt, 1 / 120);
         const r = step(body, world, h, physicsRef.current);
-        res = { landed: Math.max(res.landed, r.landed), wall: Math.max(res.wall, r.wall), done: r.done };
+        res = { landed: Math.max(res.landed, r.landed), wall: Math.max(res.wall, r.wall), ceiling: Math.max(res.ceiling, r.ceiling), done: r.done };
         dt -= h;
         if (r.done) break;
       }
       if (Math.abs(body.vx) > 60) setHeading(body.vx < 0 ? 'left' : 'right');
-      if (res.landed > 260) {
+      const hit = Math.max(res.landed, res.ceiling);
+      if (hit > 200 || res.wall > 260) {
+        // squash as hard as it hit: flat on the floor, thin against a wall
         flip = flip === 'a' ? 'b' : 'a';
+        const power = Math.min(1, Math.max(hit, res.wall) / 1800);
+        el?.style.setProperty('--hit', power.toFixed(2));
         setLanding(flip);
+        setHitSide(res.wall > hit ? 'wall' : 'floor');
       }
-      if (res.landed > 1500 || res.wall > 1100) {
-        // a really hard landing or a wall at full speed: seeing stars
+      if ((res.landed > 1500 || res.wall > 1100 || res.ceiling > 1300) && !dizzy) {
+        // a really hard landing, a wall at full speed, a bump on the head: seeing stars
+        dizzy = true;
         burst('stars', 1800);
         speak(DIZZY[Math.floor(Math.random() * DIZZY.length)], 2200);
       }
-      const airborne = body.y > GROUND + 1;
-      moveFast({ x: body.x, y: body.y }, airborne ? Math.max(-16, Math.min(16, body.vx / 90)) : 0);
+      moveFast({ x: body.x, y: body.y }, body.a % 360);
       if (res.done) {
         simRef.current = 0;
         place({ x: body.x, y: body.y });
-        if (rootRef.current) rootRef.current.style.transform = '';
         setFlying(false);
-        window.setTimeout(() => setLanding(''), 300);
+        window.setTimeout(() => setLanding(''), 320);
         savePos();
+        // whatever way up it ended, it gets back on its feet (the short way round, with a wobble)
+        const rest = upright(body.a);
+        if (el && Math.abs(body.a - rest) > 1.5) {
+          el.style.transition = 'transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1)';
+          el.style.transform = `rotate(${(body.a % 360) + (rest - body.a)}deg)`;
+          settleTimer.current = window.setTimeout(resetPose, 540);
+        } else {
+          resetPose();
+        }
         return;
       }
       simRef.current = requestAnimationFrame(frame);
     };
     simRef.current = requestAnimationFrame(frame);
   };
+
+  throwRef.current = throwPet;
 
   const savePos = () => {
     const limit = maxX();
@@ -650,8 +755,53 @@ export function PetAssistant() {
   const pettedAt = useRef(0);
   const cheeredAt = useRef(0);
   const pageAt = useRef(Date.now());
+  // ---- a fast swipe of the pointer straight through it knocks it away (设置里「可以被鼠标撞开」) ----
+  // Watched on the window: the browser reports a fast pointer about once per frame, so a
+  // quick swipe may never produce two events over the pet itself. What counts is whether
+  // the path between two reports crossed it.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const k = knock.current;
+      const now = performance.now();
+      const dt = now - k.t;
+      const px = k.x;
+      const py = k.y;
+      k.x = e.clientX;
+      k.y = e.clientY;
+      k.t = now;
+      if (e.buttons !== 0 || dt <= 0 || dt > 60 || now < k.cool) return;
+      const ph = physicsRef.current;
+      if (!ph.poke || !ph.bounce || dragRef.current || simRef.current) return;
+      if (presenceRef.current !== 'normal' || openRef.current || sleepRef.current || focusRef.current) return;
+      const vx = ((e.clientX - px) / dt) * 1000;
+      const vy = ((e.clientY - py) / dt) * 1000;
+      if (Math.hypot(vx, vy) < 2100) return;
+      const size = sizeRef.current;
+      const left = posRef.current.x + size * 0.15;
+      const right = posRef.current.x + size * 0.85;
+      const top = window.innerHeight - posRef.current.y - size * 0.9;
+      const bottom = window.innerHeight - posRef.current.y;
+      let through = false;
+      for (let i = 0; i <= 8 && !through; i++) {
+        const x = px + ((e.clientX - px) * i) / 8;
+        const y = py + ((e.clientY - py) * i) / 8;
+        through = x >= left && x <= right && y >= top && y <= bottom;
+      }
+      if (!through) return;
+      k.cool = now + 2500;
+      stroke.current.cool = now + 2500; // that was not petting
+      stroke.current.flips = 0;
+      wake();
+      throwRef.current(vx * 0.42, Math.max(320, -vy * 0.42 + 260), 0, vx * 0.3);
+      if (Math.random() < 0.5) speak(BUMPED[Math.floor(Math.random() * BUMPED.length)], 1800);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [speak, wake]);
+
   // ---- stroking: rub the pointer back and forth over it (no button pressed) ----
   const stroke = useRef({ x: 0, dir: 0, flips: 0, t0: 0, cool: 0 });
+  const knock = useRef({ x: 0, y: 0, t: 0, cool: 0 });
   const onStroke = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.buttons !== 0 || dragRef.current || simRef.current || presenceRef.current !== 'normal') return;
     const st = stroke.current;
@@ -691,6 +841,7 @@ export function PetAssistant() {
     if (!finished || (job && job.id === prev.id && job.status !== 'done')) return;
     if (presenceRef.current === 'hidden' || openRef.current) return;
     wake();
+    setHitSide('floor');
     setLanding((l) => (l === 'a' ? 'b' : 'a')); // a little hop-squash
     window.setTimeout(() => setLanding(''), 320);
     cheeredAt.current = Date.now();
@@ -731,6 +882,8 @@ export function PetAssistant() {
     saveStats(next);
   }, []);
   const hop = useCallback(() => {
+    setHitSide('floor');
+    rootRef.current?.style.removeProperty('--hit');
     setLanding((l) => (l === 'a' ? 'b' : 'a'));
     window.setTimeout(() => setLanding(''), 320);
   }, []);
@@ -1154,7 +1307,7 @@ export function PetAssistant() {
           dragging ? 'is-dragging' : '',
           dropping ? 'is-dropping' : '',
           flying ? 'is-flying' : '',
-          landing ? `is-land-${landing}` : '',
+          landing ? `is-land-${landing} is-hit-${hitSide}` : '',
           act && !dragging && !flying ? `is-act-${act.name}` : '',
           presence === 'quiet' && !open ? 'is-quiet' : '',
           tucked ? 'is-tucked' : '',
@@ -1377,10 +1530,10 @@ export function PetAssistant() {
             role="menuitemcheckbox"
             aria-checked={physics.bounce || physics.inertia}
             className="pet-menu-item"
-            title="拖到高处松手会掉下来弹几下，甩出去有惯性（设置 → 界面 → 桌宠 可以分开开关）"
+            title="弹跳、惯性、打滚、拎起来会晃、鼠标能撞开（设置 → 界面 → 桌宠 可以分开开关，还能换重力）"
             onClick={menuAction(() => {
               const on = !(physics.bounce || physics.inertia);
-              savePhysics({ bounce: on, inertia: on });
+              savePhysics({ ...physics, bounce: on, inertia: on });
             })}
           >
             <span className="pet-menu-check">{physics.bounce || physics.inertia ? '✓' : ''}</span>

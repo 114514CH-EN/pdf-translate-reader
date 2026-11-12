@@ -18,6 +18,7 @@ const EXPORT_ITEMS: { format: ExportFormat; label: string; suffix: string }[] = 
   { format: 'pdf_alternate', label: '交替页 PDF（原页 + 译页）', suffix: '_交替.pdf' },
   { format: 'pdf_bilingual', label: '双语流式 PDF', suffix: '_双语.pdf' },
   { format: 'md', label: 'Markdown', suffix: '.md' },
+  { format: 'pdf_source_edited', label: '原文修改版 PDF（编辑过的原文）', suffix: '_原文修改版.pdf' },
 ];
 
 type TranslateAction = 'doc' | 'page' | 'page_force' | 'doc_force' | 'polish';

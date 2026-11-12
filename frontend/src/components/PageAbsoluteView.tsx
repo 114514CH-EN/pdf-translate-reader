@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import ImageBlock from './ImageBlock';
 import EditFrame from './EditFrame';
-import { useEditStore } from '../stores/edit';
+import { selKey, useEditStore } from '../stores/edit';
 import { useFitBox } from '../hooks/useFitBox';
 import { scrollPageIntoView } from '../hooks/useSyncScroll';
 import { useTranslationStore, type PageData } from '../stores/translation';
 import { useViewStore } from '../stores/view';
-import type { Block, MathRun, TableCell } from '../types';
+import type { Block, EditSide, MathRun, TableCell } from '../types';
 import { HighlightLayer } from './HighlightLayer';
 import { MathText, OrigCrop, hasMath, type PageImage } from './MathText';
 import { codeTranslationFits, emWidth, splitCodeLine } from '../lib/codeBlock';
@@ -199,6 +199,9 @@ function TableCellView({
   );
 }
 
+/** which text the pane shows and edits: the translation (right) or the original (left, edit mode) */
+const SideContext = createContext<EditSide>('tgt');
+
 interface BlockViewProps {
   block: Block;
   zoom: number;
@@ -269,7 +272,8 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   // alignment, a new place or size on the page, or hidden altogether
   const textual = block.type !== 'image' && block.type !== 'table' && block.type !== 'code' && block.type !== 'formula';
   const layout = textual ? (block.layout ?? null) : null;
-  const selected = useEditStore((s) => editMode && s.selectedId === String(block.id));
+  const side = useContext(SideContext);
+  const selected = useEditStore((s) => editMode && s.selectedId === selKey(block.id, side));
   const [dragBox, setDragBox] = useState<[number, number, number, number] | null>(null);
   const [x0, y0, x1, y1] = dragBox ?? layout?.bbox ?? blockBox(block);
   const boxW = (x1 - x0) * zoom;
@@ -280,7 +284,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   const contentRef = useRef<HTMLDivElement>(null);
   const hasTranslation = !!block.translation;
   const select = () => {
-    if (editMode) useEditStore.getState().select(block.id);
+    if (editMode) useEditStore.getState().select(block.id, side);
   };
 
   useFitBox(contentRef, baseSize, [block.translation, block.text, baseSize, boxW, boxH, editMode, selected, layout?.bold]);
@@ -299,6 +303,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
 
   // Image block — the page background already contains the image; ImageBlock adds
   // the optional copy with its text translated (设置 → 翻译 → 翻译图片文字).
+  if (block.type === 'image' && side === 'src') return null; // the page background shows it
   if (block.type === 'image') {
     return (
       <ImageBlock
@@ -393,7 +398,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           className={cls(['orig', block.type === 'formula' ? '' : 'untranslated'])}
           data-block-id={block.id}
           style={box}
-          title={block.type === 'formula' ? '公式（保持原样）' : editMode && textual ? '尚未翻译：点一下可以自己写译文' : '尚未翻译（显示原文）'}
+          title={side === 'src' ? (editMode && textual ? '点一下可以修改原文' : undefined) : block.type === 'formula' ? '公式（保持原样）' : editMode && textual ? '尚未翻译：点一下可以自己写译文' : '尚未翻译（显示原文）'}
           onClick={textual ? select : undefined}
           {...hover}
         />
@@ -436,7 +441,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
         <div className={cls(['is-hidden', selected ? 'selected' : ''])} data-block-id={block.id} style={box} onClick={select} {...hover}>
           <span className="abs-hidden-note">已隐藏</span>
         </div>
-        {selected && <EditFrame block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
+        {selected && <EditFrame side={side} block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
       </>
     );
   }
@@ -489,14 +494,14 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           if (!canType) return;
           const next = e.currentTarget.textContent ?? ''; // edit mode shows the bare translation
           // an untranslated block starts from the source text: saved once it has been rewritten
-          if (next !== (block.translation ?? block.text) && (hasTranslation || next.trim())) onSave(block.id, next);
+          if (next !== (block.translation ?? block.meta?.ph ?? block.text) && (hasTranslation || next.trim())) onSave(block.id, next);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') e.currentTarget.blur();
         }}
       >
         {canType ? (
-          (block.translation ?? block.text)
+          (block.translation ?? block.meta?.ph ?? block.text)
         ) : hang ? (
           hang.map((it, i) => (
             <div key={i} className="abs-hang-item" style={{ marginTop: gapAbove(i) }}>
@@ -516,7 +521,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
         )}
       </div>
     </div>
-    {selected && <EditFrame block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
+    {selected && <EditFrame side={side} block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />}
     </>
   );
 }
@@ -608,6 +613,16 @@ function AbsolutePage({
       </div>
     );
   }
+  const side = useContext(SideContext);
+  // the left pane in edit mode: the same page, but each block shows the ORIGINAL — untouched
+  // (a crop of the page) until the reader edits it, then their text and formatting
+  const blocks = useMemo(
+    () =>
+      side === 'src'
+        ? page.blocks.map((b) => ({ ...b, translation: b.src_edit?.text ?? null, layout: b.src_edit?.layout ?? null, translated: !!b.src_edit?.text, image_tr: null }))
+        : page.blocks,
+    [side, page.blocks],
+  );
   const hovered = hoverId ? page.blocks.find((b) => b.id === hoverId) : undefined;
   const translatable = page.blocks.filter((b) => b.type !== 'image' && b.type !== 'formula' && b.text.trim());
   const nDone = translatable.filter((b) => b.translation).length;
@@ -636,7 +651,7 @@ function AbsolutePage({
         />
       )}
       <div className="abs-page-anchor" data-block-id={`__page_${page.pageNo}`} />
-      {page.blocks.map((b) => (
+      {blocks.map((b) => (
         <BlockView
           key={b.id}
           block={b}
@@ -653,9 +668,9 @@ function AbsolutePage({
           onSave={onSave}
         />
       ))}
-      <HighlightLayer pageNo={page.pageNo} pane="tgt" zoom={zoom} />
-      {hovered && !editMode && <BlockActions block={hovered} zoom={zoom} onHover={onHover} />}
-      {page.loaded && translatable.length > 0 && nDone < translatable.length && (
+      <HighlightLayer pageNo={page.pageNo} pane={side} zoom={zoom} />
+      {hovered && !editMode && side === 'tgt' && <BlockActions block={hovered} zoom={zoom} onHover={onHover} />}
+      {side === 'tgt' && page.loaded && translatable.length > 0 && nDone < translatable.length && (
         <div className={`abs-page-badge ${nDone === 0 ? 'none' : 'partial'}`}>
           {nDone === 0 ? '未翻译' : `已翻译 ${nDone}/${translatable.length}`}
         </div>
@@ -672,9 +687,12 @@ function AbsolutePage({
 export function PageAbsoluteView({
   scrollRef,
   docId,
+  side = 'tgt',
 }: {
   scrollRef: RefObject<HTMLDivElement>;
   docId: string;
+  /** 'src': the original with the reader's edits (left pane) */
+  side?: EditSide;
 }) {
   const zoom = useViewStore((s) => s.zoom);
   const editMode = useViewStore((s) => s.editMode);
@@ -715,7 +733,8 @@ export function PageAbsoluteView({
   for (let n = 1; n <= total; n++) range.push(n);
 
   return (
-    <div className="translation-pane abs-view" ref={scrollRef}>
+    <SideContext.Provider value={side}>
+    <div className={`translation-pane abs-view ${side === 'src' ? 'is-source' : ''}`} ref={scrollRef}>
       {range.map((n) => {
         const page = pages[n] ?? {
           pageNo: n,
@@ -735,11 +754,12 @@ export function PageAbsoluteView({
             hoverId={hoverId}
             failedIds={failedIds}
             onHover={setHover}
-            onSave={(id, text) => void useEditStore.getState().setText(id, text)}
+            onSave={(id, text) => void useEditStore.getState().setText(id, text, side)}
             active={Math.abs(n - currentPage) <= 3}
           />
         );
       })}
     </div>
+    </SideContext.Provider>
   );
 }

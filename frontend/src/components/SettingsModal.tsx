@@ -868,16 +868,32 @@ function PetPhysicsSettings() {
       <div className="form-row">
         <label className="inline-check">
           <input type="checkbox" checked={ph.bounce} onChange={(e) => set({ bounce: e.target.checked })} />
-          弹跳：拖到高处松手，小页会掉下来，在底边和窗口两侧弹几下
+          弹跳：拖到高处松手，小页会掉下来，在底边、两侧和顶边弹几下；撞得越重压得越扁，滑得够快会打滚，最后自己站好
         </label>
       </div>
       <div className="form-row">
         <label className="inline-check">
           <input type="checkbox" checked={ph.inertia} onChange={(e) => set({ inertia: e.target.checked })} />
-          惯性：拖着甩出去再松手，小页会顺着甩的方向飞出去，落地后滑一段停下
+          惯性：拖着甩出去再松手，小页会顺着甩的方向旋转着飞出去；拎着它的时候会像钟摆一样晃
         </label>
       </div>
-      <p className="fieldset-hint">两个都关掉就是原来的样子：松手后直接落回底边。右键小页的「物理效果」可以一起开关。</p>
+      <div className="form-row">
+        <label className="inline-check">
+          <input type="checkbox" checked={ph.poke} disabled={!ph.bounce} onChange={(e) => set({ poke: e.target.checked })} />
+          可以被鼠标撞开：鼠标很快地从它身上划过，会把它撞飞（慢慢来回蹭还是摸头）
+        </label>
+      </div>
+      <div className="form-row">
+        <label>
+          重力
+          <select value={ph.gravity} disabled={!ph.bounce} onChange={(e) => set({ gravity: e.target.value as typeof ph.gravity })}>
+            <option value="earth">地球（正常）</option>
+            <option value="moon">月球（跳得高，落得慢）</option>
+            <option value="feather">羽毛（左右飘着落下来）</option>
+          </select>
+        </label>
+      </div>
+      <p className="fieldset-hint">弹跳和惯性都关掉就是最早的样子：松手后直接落回底边。右键小页的「物理效果」可以一起开关；拎着它猛摇，它会晕。</p>
     </fieldset>
   );
 }

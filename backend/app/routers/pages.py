@@ -71,8 +71,11 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
         if page is None:
             raise HTTPException(404, "页面不存在")
         blocks = db.execute(
-            "SELECT b.*, t.text AS translation, t.edited AS translation_edited, t.layout_json AS layout_json"
+            "SELECT b.*, t.text AS translation, t.edited AS translation_edited, t.layout_json AS layout_json,"
+            " s.text AS src_text, s.layout_json AS src_layout_json"
             " FROM blocks b LEFT JOIN translations t ON t.block_id=b.id AND t.lang=?"
+            # the reader's edits of the ORIGINAL text are kept like a translation into a pseudo language
+            " LEFT JOIN translations s ON s.block_id=b.id AND s.lang='__src__'"
             " WHERE b.doc_id=? AND b.page_no=? ORDER BY b.order_idx",
             (lang, doc_id, page_no),
         ).fetchall()
@@ -86,6 +89,8 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
         d["meta"] = json.loads(d.pop("meta_json") or "{}")
         d["translated"] = bool(d.get("translation"))
         d["layout"] = json.loads(d.pop("layout_json", None) or "null")  # the reader's formatting (edit mode)
+        src_text, src_layout = d.pop("src_text", None), json.loads(d.pop("src_layout_json", None) or "null")
+        d["src_edit"] = {"text": src_text or None, "layout": src_layout} if (src_text or src_layout) else None
         out.append(d)
 
     # pictures whose text has been translated (「翻译图片文字」): the painted copy lies over the original

@@ -1,6 +1,6 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditStore } from '../stores/edit';
-import type { Block, BlockLayout } from '../types';
+import type { Block, BlockLayout, EditSide } from '../types';
 
 /**
  * The frame around the selected block in edit mode: a format bar and drag handles.
@@ -35,7 +35,10 @@ export default function EditFrame({
   zoom,
   page,
   onDrag,
+  side = 'tgt',
 }: {
+  /** the translation or the original text of the block */
+  side?: EditSide;
   block: Block;
   layout: BlockLayout | null;
   box: Box;
@@ -44,7 +47,8 @@ export default function EditFrame({
   /** live box while dragging (null when done) */
   onDrag: (box: Box | null) => void;
 }) {
-  const setLayout = useEditStore((s) => s.setLayout);
+  const setLayoutOf = useEditStore((s) => s.setLayout);
+  const setLayout = (blockId: string, patch: Partial<BlockLayout> | null) => setLayoutOf(blockId, patch, side);
   const drag = useRef<{ grip: Grip; px: number; py: number; start: Box; last: Box } | null>(null);
   const [x0, y0, x1, y1] = box;
   const id = String(block.id);

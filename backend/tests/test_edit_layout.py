@@ -66,3 +66,35 @@ def test_format_replace_and_export():
         c.put(f"/api/blocks/{a['id']}/layout", json={"lang": "zh", "layout": None})
         got = {x["id"]: x for x in c.get(f"/api/documents/{doc_id}/pages/1/blocks?lang=zh").json()["blocks"]}
         assert got[a["id"]]["layout"] is None
+
+
+def test_original_text_can_be_edited_too(monkeypatch):
+    """Edits of the source live beside the translations (lang "__src__"): shown, translated, exported."""
+    from app.services import translate_worker
+
+    with TestClient(app) as c:
+        doc_id = c.post("/api/documents", files={"file": ("src.pdf", _pdf(), "application/pdf")}).json()["doc_id"]
+        base = f"/api/documents/{doc_id}"
+        a, b = c.get(f"{base}/pages/1/blocks").json()["blocks"][:2]
+        assert a["src_edit"] is None and c.get(base).json()["src_edits"] == 0
+
+        c.put(f"/api/blocks/{a['id']}/translation", json={"text": "The filter removes hum from the signal.", "lang": "__src__"})
+        c.put(f"/api/blocks/{b['id']}/layout", json={"lang": "__src__", "layout": {"hidden": True}})
+        got = {x["id"]: x for x in c.get(f"{base}/pages/1/blocks?lang=zh").json()["blocks"]}
+        assert got[a["id"]]["src_edit"] == {"text": "The filter removes hum from the signal.", "layout": None}
+        assert got[b["id"]]["src_edit"] == {"text": None, "layout": {"hidden": True}}
+        assert got[a["id"]]["translation"] is None and got[a["id"]]["text"].startswith("The filter removes noise")
+        assert c.get(base).json()["src_edits"] == 2
+
+        # the corrected text is what a translation job sends to the model
+        todo = {x["id"]: x for x in translate_worker.select_blocks(doc_id, "all", None, None)}
+        assert todo[a["id"]]["src"] == "The filter removes hum from the signal."
+        assert todo[b["id"]]["src"].startswith("A second paragraph")
+
+        # and the original can be exported with the corrections in place
+        r = c.post(f"{base}/export", json={"format": "pdf_source_edited"})
+        assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+        with fitz.open(stream=r.content, filetype="pdf") as pdf:
+            text = pdf[0].get_text()
+        text = text.replace("\xa0", " ")
+        assert "removes hum" in text and "noise" not in text and "second paragraph" not in text

@@ -3384,3 +3384,30 @@ textarea {
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* 原文也能编辑：左栏在编辑模式下是可编辑的原文块 */
+.pane-left {
+  position: relative;
+}
+.src-view-switch {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: var(--bw) solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.src-view-switch:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.abs-view.is-source .abs-block.untranslated {
+  background: none;
+}

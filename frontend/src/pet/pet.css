@@ -906,34 +906,39 @@
   transition: none;
   z-index: 42;
 }
-/* squash on every landing; two identical animations so each bounce restarts it */
+/* squash on every hit, as hard as it hit (--hit: 0…1, set by the simulation);
+   two identical animations so each bounce restarts it */
 .pet.is-land-a .pet-body .pet-art {
   animation: pet-land-a 0.3s cubic-bezier(0.3, 1.5, 0.6, 1);
 }
 .pet.is-land-b .pet-body .pet-art {
   animation: pet-land-b 0.3s cubic-bezier(0.3, 1.5, 0.6, 1);
 }
+.pet.is-land-a.is-hit-wall .pet-body .pet-art {
+  animation-name: pet-wall-a;
+}
+.pet.is-land-b.is-hit-wall .pet-body .pet-art {
+  animation-name: pet-wall-b;
+}
 @keyframes pet-land-a {
-  0% {
-    transform: scale(1.2, 0.76);
-  }
-  55% {
-    transform: scale(0.95, 1.06);
-  }
-  100% {
-    transform: none;
-  }
+  0% { transform: scale(calc(1 + 0.36 * var(--hit, 0.55)), calc(1 - 0.44 * var(--hit, 0.55))); }
+  55% { transform: scale(calc(1 - 0.09 * var(--hit, 0.55)), calc(1 + 0.11 * var(--hit, 0.55))); }
+  100% { transform: none; }
 }
 @keyframes pet-land-b {
-  0% {
-    transform: scale(1.2, 0.76);
-  }
-  55% {
-    transform: scale(0.95, 1.06);
-  }
-  100% {
-    transform: none;
-  }
+  0% { transform: scale(calc(1 + 0.36 * var(--hit, 0.55)), calc(1 - 0.44 * var(--hit, 0.55))); }
+  55% { transform: scale(calc(1 - 0.09 * var(--hit, 0.55)), calc(1 + 0.11 * var(--hit, 0.55))); }
+  100% { transform: none; }
+}
+@keyframes pet-wall-a {
+  0% { transform: scale(calc(1 - 0.4 * var(--hit, 0.55)), calc(1 + 0.28 * var(--hit, 0.55))); }
+  55% { transform: scale(calc(1 + 0.1 * var(--hit, 0.55)), calc(1 - 0.07 * var(--hit, 0.55))); }
+  100% { transform: none; }
+}
+@keyframes pet-wall-b {
+  0% { transform: scale(calc(1 - 0.4 * var(--hit, 0.55)), calc(1 + 0.28 * var(--hit, 0.55))); }
+  55% { transform: scale(calc(1 + 0.1 * var(--hit, 0.55)), calc(1 - 0.07 * var(--hit, 0.55))); }
+  100% { transform: none; }
 }
 
 /* ---------- says something by itself, hearts and stars ---------- */

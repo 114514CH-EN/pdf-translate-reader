@@ -79,8 +79,9 @@ def cancel_job(job_id: int) -> bool:
 def select_blocks(doc_id: int, scope: str, page_no: int | None, block_ids: list[int] | None) -> list[dict]:
     q = (
         "SELECT b.id, b.text, b.type, b.order_idx, b.page_no, b.meta_json, t.text AS translation, t.edited AS edited,"
-        " t.cache_key AS cache_key FROM blocks b"
+        " t.cache_key AS cache_key, s.text AS src_edit FROM blocks b"
         " LEFT JOIN translations t ON t.block_id=b.id AND t.lang=(SELECT target_lang FROM documents WHERE id=b.doc_id)"
+        " LEFT JOIN translations s ON s.block_id=b.id AND s.lang='__src__'"
         " WHERE b.doc_id=? AND b.type NOT IN ('image', 'formula')"
     )
     args: list[Any] = [doc_id]
@@ -103,6 +104,10 @@ def select_blocks(doc_id: int, scope: str, page_no: int | None, block_ids: list[
         d["meta"] = meta
         # translate the placeholder text: formulas stay as {{mN}} and are re-inserted verbatim
         d["src"] = meta.get("ph") or d["text"]
+        # the reader corrected the original text of this block (edit mode): that is what gets translated
+        edited_src = (d.pop("src_edit", None) or "").strip()
+        if edited_src and d["type"] not in ("table", "code"):
+            d["src"] = d["text"] = edited_src
         d["placeholders"] = PH_RE.findall(d["src"])
         out.append(d)
     return out

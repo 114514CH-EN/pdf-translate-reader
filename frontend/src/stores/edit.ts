@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
-import type { Block, BlockLayout } from '../types';
+import { SRC_LANG, type Block, type BlockLayout, type EditSide } from '../types';
 import { useTranslationStore } from './translation';
 import { useViewStore } from './view';
 
@@ -22,6 +22,8 @@ export interface Snap {
 
 export interface Change {
   blockId: string;
+  /** the translation (default) or the original text */
+  side?: EditSide;
   before: Snap;
   after: Snap;
 }
@@ -30,10 +32,10 @@ interface EditState {
   selectedId: string | null;
   undoStack: Change[][];
   redoStack: Change[][];
-  select: (id: string | null) => void;
-  setText: (blockId: string, text: string) => Promise<void>;
+  select: (id: string | null, side?: EditSide) => void;
+  setText: (blockId: string, text: string, side?: EditSide) => Promise<void>;
   /** merge a patch into the block's formatting; null clears all of it */
-  setLayout: (blockId: string, patch: Partial<BlockLayout> | null) => Promise<void>;
+  setLayout: (blockId: string, patch: Partial<BlockLayout> | null, side?: EditSide) => Promise<void>;
   /** record edits the server already made (find & replace) */
   pushDone: (changes: Change[]) => void;
   undo: () => Promise<void>;
@@ -64,9 +66,19 @@ function tidy(layout: BlockLayout | null | undefined): BlockLayout | null {
   return Object.keys(out).length ? out : null;
 }
 
+/** "tgt:12" / "src:12": the same block can be selected in either pane */
+export const selKey = (id: string | number, side: EditSide = 'tgt') => `${side}:${id}`;
+
 /** Write one side of a change to the page and the server. */
-async function apply(blockId: string, snap: Snap): Promise<void> {
+async function apply(blockId: string, snap: Snap, side: EditSide = 'tgt'): Promise<void> {
   const tr = useTranslationStore.getState();
+  if (side === 'src') {
+    // edits of the original are stored like a translation into the pseudo language "__src__"
+    tr.setBlockSource(blockId, snap);
+    if (snap.text !== undefined) await api.putTranslation(blockId, snap.text ?? '', SRC_LANG);
+    if (snap.layout !== undefined) await api.putLayout(blockId, snap.layout, SRC_LANG);
+    return;
+  }
   if (snap.text !== undefined) {
     tr.setBlockTranslation(blockId, snap.text ?? '');
     await api.putTranslation(blockId, snap.text ?? '');
@@ -79,7 +91,7 @@ async function apply(blockId: string, snap: Snap): Promise<void> {
 
 async function applyAll(changes: Change[], side: 'before' | 'after'): Promise<void> {
   try {
-    for (const c of changes) await apply(c.blockId, c[side]);
+    for (const c of changes) await apply(c.blockId, c[side], c.side);
     window.dispatchEvent(new Event('pdftr:translations-changed'));
   } catch (e) {
     useViewStore.getState().toast(`保存失败：${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -91,23 +103,29 @@ export const useEditStore = create<EditState>((set, get) => ({
   undoStack: [],
   redoStack: [],
 
-  select: (id) => set({ selectedId: id === null ? null : String(id) }),
+  select: (id, side = 'tgt') => set({ selectedId: id === null ? null : selKey(id, side) }),
 
-  async setText(blockId, text) {
+  async setText(blockId, text, side = 'tgt') {
     const block = findBlock(blockId);
-    const before = block?.translation ?? null;
+    const before = (side === 'src' ? block?.src_edit?.text : block?.translation) ?? null;
     if ((before ?? '') === text) return;
-    const change: Change = { blockId, before: { text: before }, after: { text } };
+    const change: Change = { blockId, side, before: { text: before }, after: { text } };
     set((s) => ({ undoStack: [...s.undoStack, [change]].slice(-LIMIT), redoStack: [] }));
     await applyAll([change], 'after');
   },
 
-  async setLayout(blockId, patch) {
+  async setLayout(blockId, patch, side = 'tgt') {
     const block = findBlock(blockId);
-    const before = tidy(block?.layout);
+    const before = tidy(side === 'src' ? block?.src_edit?.layout : block?.layout);
     const after = patch === null ? null : tidy({ ...(before ?? {}), ...patch });
     if (JSON.stringify(before) === JSON.stringify(after)) return;
-    const change: Change = { blockId, before: { layout: before }, after: { layout: after } };
+    const change: Change = { blockId, side, before: { layout: before }, after: { layout: after } };
+    if (side === 'src' && block && !block.src_edit?.text && after) {
+      // formatting the original for the first time: from now on the block is drawn as text
+      // (its own text, formulas kept as placeholders) instead of a picture of the page
+      change.before.text = null;
+      change.after.text = block.meta?.ph ?? block.text;
+    }
     set((s) => ({ undoStack: [...s.undoStack, [change]].slice(-LIMIT), redoStack: [] }));
     await applyAll([change], 'after');
   },

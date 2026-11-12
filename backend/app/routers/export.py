@@ -36,6 +36,13 @@ def export_document(doc_id: int, payload: dict):
             out = tmp_dir / f"{safe_title}_译_{suffix}.pdf"
             export_translated_pdf(doc_id, out, lang)
             media = "application/pdf"
+        elif fmt == "pdf_source_edited":
+            # the original with the reader's own corrections (edit mode, left pane)
+            from ..services.export_pdf_inplace import export_translated_pdf
+
+            out = tmp_dir / f"{safe_title}_原文修改版_{suffix}.pdf"
+            export_translated_pdf(doc_id, out, "__src__")
+            media = "application/pdf"
         elif fmt == "pdf_bilingual":
             from ..services.export_pdf_bilingual import export_bilingual_pdf
 

@@ -23,6 +23,8 @@ export interface DocDetail extends DocumentRow {
   /** remembered reading position */
   last_page?: number | null;
   last_frac?: number | null;
+  /** how many blocks of the original the reader has edited */
+  src_edits?: number;
 }
 
 export type BlockType = 'heading' | 'paragraph' | 'list' | 'table' | 'image' | 'formula' | 'code';
@@ -126,6 +128,8 @@ export interface Block {
   translation_edited: 0 | 1 | boolean;
   translated: boolean;
   sentences?: SentencePair[] | null;
+  /** the reader's edits of the ORIGINAL text of this block (edit mode, left pane) */
+  src_edit?: { text: string | null; layout: BlockLayout | null } | null;
   /** the reader's own formatting of the translated block (edit mode) */
   layout?: BlockLayout | null;
   /** image blocks: the copy with its text translated, when the reader asked for one */
@@ -401,7 +405,11 @@ export interface GlossaryTerm {
   scope?: 'global' | 'doc';
 }
 
-export type ExportFormat = 'md' | 'pdf_translated' | 'pdf_bilingual' | 'pdf_side_by_side' | 'pdf_alternate';
+export type ExportFormat = 'md' | 'pdf_translated' | 'pdf_bilingual' | 'pdf_side_by_side' | 'pdf_alternate' | 'pdf_source_edited';
+
+/** which text of a block an edit applies to: the translation or the original */
+export type EditSide = 'tgt' | 'src';
+export const SRC_LANG = '__src__';
 export type ViewMode = 'page' | 'flow';
 export type SidebarTab = 'assistant' | 'notes' | 'glossary';
 

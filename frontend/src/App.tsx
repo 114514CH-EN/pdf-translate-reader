@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-3';
+const EXPECTED_BACKEND = '2026.11.12-4';
+import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PageAbsoluteView } from './components/PageAbsoluteView';
@@ -68,6 +69,17 @@ export default function App() {
   const requestPageNav = useViewStore((s) => s.requestPageNav);
   const currentPage = useViewStore((s) => s.currentPage);
   const editMode = useViewStore((s) => s.editMode);
+  // 原文也能编辑: in edit mode the left pane turns into editable blocks of the original
+  const srcEdits = useDocStore((s) => s.detail?.src_edits ?? 0);
+  const [srcOriginal, setSrcOriginal] = useState(false);
+  useEffect(() => {
+    // leaving edit mode: find out whether the original now carries edits
+    const id = useDocStore.getState().activeId;
+    if (editMode || !id) return;
+    void api.getDocument(id).then((d) => useDocStore.getState().patchDetail({ src_edits: d.src_edits ?? 0 })).catch(() => undefined);
+  }, [editMode]);
+  useEffect(() => setSrcOriginal(false), [activeId]);
+  const showSrcEdited = mode === 'page' && (editMode || (srcEdits > 0 && !srcOriginal));
 
   const job = useTranslationStore((s) => s.job);
   const refreshPage = useTranslationStore((s) => s.refreshPage);
@@ -308,9 +320,24 @@ export default function App() {
           <SearchBar />
           <div className="split">
           <section className="pane pane-left" style={{ width: `${leftPanePct}%` }}>
-            <Suspense fallback={null}>
-              <PdfPane scrollRef={leftRef} docId={activeId} />
-            </Suspense>
+            {activeId && showSrcEdited ? (
+              // the original as editable blocks: in edit mode, and afterwards while it carries edits
+              <PageAbsoluteView scrollRef={leftRef} docId={activeId} side="src" />
+            ) : (
+              <Suspense fallback={null}>
+                <PdfPane scrollRef={leftRef} docId={activeId} />
+              </Suspense>
+            )}
+            {activeId && mode === 'page' && !editMode && srcEdits > 0 && (
+              <button
+                type="button"
+                className="src-view-switch"
+                title="这份文档的原文被你修改过。可以在「修改后的原文」和「原始 PDF」之间切换"
+                onClick={() => setSrcOriginal((v) => !v)}
+              >
+                {srcOriginal ? '原始 PDF · 点击看修改后的原文' : '修改后的原文 · 点击看原始 PDF'}
+              </button>
+            )}
           </section>
           <div
             ref={dividerRef}
@@ -346,7 +373,7 @@ export default function App() {
 
         {/* hint bar */}
         <footer className="statusbar">
-          <span>{editMode ? '编辑模式：点击译文即可修改' : '←/→ 翻页 · 拖拽分隔线调整布局'}</span>
+          <span>{editMode ? '编辑模式：点击原文或译文即可修改，Ctrl+Z 撤销' : '←/→ 翻页 · 拖拽分隔线调整布局'}</span>
           <span>
             第 {currentPage} 页
             {mode === 'page' ? ' · 整页预览' : ' · 逐句对照'}

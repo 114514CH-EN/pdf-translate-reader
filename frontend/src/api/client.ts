@@ -135,16 +135,17 @@ export const api = {
     return request<void>(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
   },
 
-  putTranslation(blockId: string, text: string): Promise<void> {
+  /** lang "__src__" stores an edit of the original text instead of a translation */
+  putTranslation(blockId: string, text: string, lang?: string): Promise<void> {
     return request<void>(
       `/blocks/${encodeURIComponent(blockId)}/translation`,
-      jsonInit('PUT', { text }),
+      jsonInit('PUT', lang ? { text, lang } : { text }),
     );
   },
 
   /** edit mode: formatting of a translated block; null clears it */
-  putLayout(blockId: string, layout: BlockLayout | null): Promise<void> {
-    return request<void>(`/blocks/${encodeURIComponent(blockId)}/layout`, jsonInit('PUT', { layout }));
+  putLayout(blockId: string, layout: BlockLayout | null, lang?: string): Promise<void> {
+    return request<void>(`/blocks/${encodeURIComponent(blockId)}/layout`, jsonInit('PUT', lang ? { layout, lang } : { layout }));
   },
   /** find (and replace) in every translation of a document */
   replaceInTranslations(
