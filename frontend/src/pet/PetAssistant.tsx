@@ -16,6 +16,23 @@ import { useSettingsStore } from '../stores/settings';
 import { useTranslationStore } from '../stores/translation';
 import { useViewStore } from '../stores/view';
 import type { AssistantMode, Block } from '../types';
+import {
+  BREAK_MIN,
+  FOCUS_CHOICES,
+  addFocus,
+  addMinute,
+  clock,
+  loadFocus,
+  loadStats,
+  recordPage,
+  saveFocus,
+  saveStats,
+  startBreak,
+  startFocus,
+  summary,
+  type FocusState,
+  type Stats,
+} from './companion';
 import { PetBody, type PetBadge, type PetMood } from './PetBody';
 import {
   DEFAULT_APPEARANCE,
@@ -191,6 +208,10 @@ export function PetAssistant() {
     readStore<Presence>(PRESENCE_KEY, (r) => (r === 'quiet' || r === 'hidden' || r === 'normal' ? r : undefined), 'normal'),
   );
   const presenceRef = useRef(presence);
+  const [focus, setFocusState] = useState<FocusState | null>(() => loadFocus());
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
+  const focusPhase = focus?.phase ?? null;
   const [tipsOn, setTipsOnState] = useState(() => readStore(TIPS_KEY, (r) => (r === 'off' ? false : r === 'on' ? true : undefined), true));
   /** null = awake; idle = dozed off by itself (any activity wakes it); manual = told to sleep (wakes when clicked) */
   const [sleep, setSleepState] = useState<null | 'idle' | 'manual'>(null);
@@ -608,7 +629,8 @@ export function PetAssistant() {
     window.setTimeout(() => setWalking(false), 2450);
   }, [place, maxX]);
 
-  const canWander = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep;
+  const quietFocus = focusPhase === 'focus';
+  const canWander = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep && !quietFocus;
   useEffect(() => {
     if (!canWander) return;
     let timer = 0;
@@ -681,10 +703,91 @@ export function PetAssistant() {
       if (now - readingSince.current < BREAK_AFTER_MIN * 60_000) return;
       readingSince.current = now;
       if (!tipsOnRef.current || presenceRef.current !== 'normal' || openRef.current || sleepRef.current) return;
+      if (focusRef.current) return; // the focus timer has its own breaks
       speak(`已经读了 ${BREAK_AFTER_MIN} 分钟了，起来活动一下、看看远处吧`, 9000);
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [speak]);
+
+  // ---- study companion: a focus timer and a small reading log (pet/companion.ts) ----
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [stats, setStatsState] = useState<Stats>(() => loadStats());
+  const statsRef = useRef(stats);
+  const setFocus = useCallback((f: FocusState | null) => {
+    focusRef.current = f;
+    setFocusState(f);
+    saveFocus(f);
+    setClockNow(Date.now());
+  }, []);
+  const putStats = useCallback((next: Stats) => {
+    statsRef.current = next;
+    setStatsState(next);
+    saveStats(next);
+  }, []);
+  const hop = useCallback(() => {
+    setLanding((l) => (l === 'a' ? 'b' : 'a'));
+    window.setTimeout(() => setLanding(''), 320);
+  }, []);
+  const beginFocus = useCallback(
+    (minutes: number) => {
+      setFocus(startFocus(minutes));
+      setTip(null);
+      wake();
+      speak(`开始专注 ${minutes} 分钟，这段时间我不打扰你`, 3600);
+    },
+    [setFocus, speak, wake],
+  );
+  const focusOn = focus !== null;
+  useEffect(() => {
+    if (!focusOn) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setClockNow(now);
+      const f = focusRef.current;
+      if (!f || now < f.endsAt) return;
+      wake();
+      hop();
+      if (f.phase === 'focus') {
+        putStats(addFocus(statsRef.current, now));
+        setFocus(startBreak(now));
+        readingSince.current = now + BREAK_MIN * 60_000; // the break counts as the rest
+        burst('stars');
+        speak(`专注了 ${f.minutes} 分钟，歇 ${BREAK_MIN} 分钟吧`, 9000);
+      } else {
+        setFocus(null);
+        speak('休息结束。右键我可以再开一轮专注', 9000);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [focusOn, burst, hop, putStats, setFocus, speak, wake]);
+
+  // a page counts as read after a few seconds on it; minutes count while the reader is active
+  useEffect(() => {
+    if (!docId) return;
+    const timer = window.setTimeout(() => {
+      if (document.hidden) return;
+      const r = recordPage(statsRef.current, docId, currentPage);
+      if (r.stats === statsRef.current) return;
+      putStats(r.stats);
+      const chatty = presenceRef.current === 'normal' && !focusRef.current && !openRef.current && tipsOnRef.current;
+      if (r.milestone) {
+        wake();
+        burst('hearts');
+        if (chatty) speak(`今天已经读了 ${r.milestone} 页！`, 5000);
+      } else if (r.streakDay && chatty) {
+        speak(`连续第 ${r.streakDay} 天来读书了，继续保持`, 5000);
+      }
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [docId, currentPage, burst, putStats, speak, wake]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!useDocStore.getState().activeId || document.hidden) return;
+      if (Date.now() - lastActivity.current > 90_000) return;
+      putStats(addMinute(statsRef.current));
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [putStats]);
 
   // ---- dozing off when nothing happens, waking on any activity ----
   useEffect(() => {
@@ -836,7 +939,7 @@ export function PetAssistant() {
   const turnedDown = useRef(0);
   useEffect(() => {
     setTip((t) => (t && t.page !== currentPage ? null : t));
-    if (!docId || !tipsOn || presence !== 'normal') return;
+    if (!docId || !tipsOn || presence !== 'normal' || focusPhase === 'focus') return;
     const key = `${docId}:${currentPage}`;
     if (tipped.current.has(key)) return;
     const timer = window.setTimeout(() => {
@@ -852,7 +955,7 @@ export function PetAssistant() {
       setTip({ ...offer, page: currentPage });
     }, TIP_DWELL_MS);
     return () => window.clearTimeout(timer);
-  }, [docId, currentPage, tipsOn, presence]);
+  }, [docId, currentPage, tipsOn, presence, focusPhase]);
   useEffect(() => {
     if (!tip) return;
     const t = window.setTimeout(() => setTip(null), TIP_SHOW_MS);
@@ -917,10 +1020,19 @@ export function PetAssistant() {
 
   const tipW = Math.min(250, vw - 20);
   const tipLeft = clamp(shown.x + size / 2 - tipW / 2, 10, Math.max(10, vw - tipW - 10));
-  const tipBottom = clamp(shown.y + size + 10, 14, Math.max(14, vh - 120));
+  // the little tag over its head: the focus countdown, or how far a translation has got
+  const jobRunning = !!job && (job.status === 'running' || job.status === 'pending') && job.total > 0;
+  const pill = tucked
+    ? null
+    : focus
+      ? { kind: focus.phase, text: `${focus.phase === 'focus' ? '专注' : '休息'} ${clock(focus.endsAt - clockNow)}` }
+      : jobRunning
+        ? { kind: 'job', text: `翻译 ${Math.min(99, Math.floor((job.done / job.total) * 100))}%` }
+        : null;
+  const tipBottom = clamp(shown.y + size + (pill ? 30 : 10), 14, Math.max(14, vh - 120));
 
   const MENU_W = 200;
-  const MENU_H = 330;
+  const MENU_H = 410;
   const menuLeft = menu ? clamp(menu.x, 8, Math.max(8, vw - MENU_W - 8)) : 0;
   const menuTop = menu ? clamp(menu.y - MENU_H, 8, Math.max(8, vh - MENU_H - 8)) : 0;
 
@@ -997,6 +1109,11 @@ export function PetAssistant() {
         ref={rootRef}
         onPointerMove={onStroke}
       >
+        {pill && (
+          <div className={`pet-pill is-${pill.kind}`} role={pill.kind === 'job' ? undefined : 'timer'} aria-label={pill.text}>
+            {pill.text}
+          </div>
+        )}
         {fx && (
           <div className={`pet-fx is-${fx.kind}`} key={fx.n} aria-hidden="true">
             {(fx.kind === 'hearts' ? ['♥', '♥', '♥'] : ['✦', '✧', '✦']).map((c, i) => (
@@ -1086,6 +1203,9 @@ export function PetAssistant() {
             items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
           }}
         >
+          <div className="pet-menu-stats" title="读过的页数（停留几秒才算）、阅读时间、连续阅读的天数——只记在这个浏览器里">
+            {summary(stats)}
+          </div>
           <button type="button" role="menuitem" className="pet-menu-item" onClick={menuAction(() => { wake(); setOpen((o) => !o); })}>
             <span className="pet-menu-check" />
             {open ? '收起对话' : '打开对话'}
@@ -1145,6 +1265,31 @@ export function PetAssistant() {
               <span className="pet-menu-note">{note}</span>
             </button>
           ))}
+          <div className="pet-menu-sep" role="separator" />
+          {focus ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="pet-menu-item"
+              onClick={menuAction(() => {
+                setFocus(null);
+                speak(focus.phase === 'focus' ? '专注结束了' : '好，继续读吧', 2400);
+              })}
+            >
+              <span className="pet-menu-check" />
+              {focus.phase === 'focus' ? '结束专注' : '跳过休息'}
+              <span className="pet-menu-note">还剩 {clock(focus.endsAt - clockNow)}</span>
+            </button>
+          ) : (
+            <div className="pet-menu-row" role="group" aria-label="专注计时" title={`专注期间小页不走动、不搭话，时间到了提醒你休息 ${BREAK_MIN} 分钟`}>
+              <span className="pet-menu-row-label">专注</span>
+              {FOCUS_CHOICES.map((m) => (
+                <button key={m} type="button" role="menuitem" className="pet-menu-item pet-menu-chip" aria-label={`专注 ${m} 分钟`} onClick={menuAction(() => beginFocus(m))}>
+                  {m} 分
+                </button>
+              ))}
+            </div>
+          )}
           <div className="pet-menu-sep" role="separator" />
           <button
             type="button"
