@@ -119,3 +119,23 @@ def test_shutdown_endpoint_needs_the_header(monkeypatch):
 
     time.sleep(0.2)
     assert calls == [1]
+
+
+def test_a_stale_copy_never_replaces_a_newer_server(monkeypatch, tmp_path):
+    """An exe left behind by an update holds older code: it opens the running, newer one."""
+    port = _free_port()
+    monkeypatch.setattr(launcher, "DEFAULT_PORT", port)
+    opened = []
+    monkeypatch.setattr(launcher, "_open", lambda p: opened.append(p))
+    server = _fake_server(port, "2026.11.13-3", obeys_shutdown=True)
+    try:
+        assert launcher._pick_port("2026.11.13-2", tmp_path, tmp_path) is None
+        assert opened == [port]
+        assert launcher._port_open(port)  # still running
+    finally:
+        server.shutdown()
+
+
+def test_version_order():
+    assert launcher._ver_key("2026.11.13-10") > launcher._ver_key("2026.11.13-9")
+    assert launcher._ver_key("2026.11.13-1") > launcher._ver_key("2026.11.12-11")

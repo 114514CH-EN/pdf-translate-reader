@@ -238,7 +238,7 @@ def _pick_port(version: str, base: Path, data_dir: Path) -> int | None:
         return None
     if info is None:
         print(f"端口 {DEFAULT_PORT} 被其他程序占用。")
-    elif _ver_key(str(info.get("version") or "")) > _ver_key(version):
+    elif _ver_key(version) and _ver_key(str(info.get("version") or "")) > _ver_key(version):
         # this exe is the stale one (a copy left behind by an update): never replace a newer
         # server with older code — the page it serves would not match it
         print(f"已有更新的版本（{info.get('version')}）在运行，直接打开它：{_url(DEFAULT_PORT)}{PATH}")
