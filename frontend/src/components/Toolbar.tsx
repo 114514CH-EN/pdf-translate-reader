@@ -369,6 +369,45 @@ export function Toolbar() {
       <div className="toolbar-spacer" />
 
       <div className="toolbar-group">
+        <div className="export-menu split-btn" ref={trRef}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!activeId || busy || jobActive}
+            title={`翻译整个文档（已翻译且未改动的块自动跳过）${kb('translateDoc')}`}
+            onClick={() => void translate('doc')}
+          >
+            <Icon name="translate" />
+            {jobActive && job?.kind === 'translate' ? '翻译中…' : '翻译全文'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary split-caret"
+            disabled={!activeId || busy || jobActive}
+            aria-label="更多翻译选项"
+            aria-expanded={trOpen}
+            {...press(() => setTrOpen(!trOpen))}
+          >
+            <Icon name="chevronDown" size={14} />
+          </button>
+          {trOpen && (
+            <div className="menu" role="menu">
+              <button type="button" className="menu-item" onClick={() => void translate('page')}>
+                只翻译本页<span className="menu-kbd">{kb('translatePage').slice(1, -1)}</span>
+              </button>
+              <button type="button" className="menu-item" onClick={() => void translate('page_force')}>
+                强制重新翻译本页
+              </button>
+              <button type="button" className="menu-item" onClick={() => void translate('doc_force')}>
+                强制重新翻译全文
+              </button>
+              <div className="menu-sep" />
+              <button type="button" className="menu-item" onClick={() => void translate('polish')}>
+                一致性润色（统一术语和标题）
+              </button>
+            </div>
+          )}
+        </div>
         {editMode && <EditTools />}
         <button
           type="button"
@@ -463,45 +502,6 @@ export function Toolbar() {
         >
           <Icon name="settings" />
         </button>
-        <div className="export-menu split-btn" ref={trRef}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!activeId || busy || jobActive}
-            title={`翻译整个文档（已翻译且未改动的块自动跳过）${kb('translateDoc')}`}
-            onClick={() => void translate('doc')}
-          >
-            <Icon name="translate" />
-            {jobActive && job?.kind === 'translate' ? '翻译中…' : '翻译全文'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary split-caret"
-            disabled={!activeId || busy || jobActive}
-            aria-label="更多翻译选项"
-            aria-expanded={trOpen}
-            {...press(() => setTrOpen(!trOpen))}
-          >
-            <Icon name="chevronDown" size={14} />
-          </button>
-          {trOpen && (
-            <div className="menu" role="menu">
-              <button type="button" className="menu-item" onClick={() => void translate('page')}>
-                只翻译本页<span className="menu-kbd">{kb('translatePage').slice(1, -1)}</span>
-              </button>
-              <button type="button" className="menu-item" onClick={() => void translate('page_force')}>
-                强制重新翻译本页
-              </button>
-              <button type="button" className="menu-item" onClick={() => void translate('doc_force')}>
-                强制重新翻译全文
-              </button>
-              <div className="menu-sep" />
-              <button type="button" className="menu-item" onClick={() => void translate('polish')}>
-                一致性润色（统一术语和标题）
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </div>
     </>

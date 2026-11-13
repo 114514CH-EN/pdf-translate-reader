@@ -4601,7 +4601,7 @@ body.resizing .split-divider::after {
     gap: 4px;
   }
   .toolbar-group > .split-btn {
-    margin-left: 8px;
+    margin-right: 8px;
   }
 
   /* navigation and zoom: a shape is container enough */
@@ -4807,4 +4807,17 @@ body.resizing .split-divider::after {
 }
 :root[data-scheme='dark'] .toast.error .toast-icon {
   color: #c63a32;
+}
+
+/* Home over an open document (v1.11.3 fixes):
+   - the reader underneath is hidden, not just covered — some themes have see-through panes;
+   - the layer sits below the toolbar, so the toolbar's menus open on top of it. */
+.home-over {
+  z-index: 2;
+  background: none;
+}
+.app.at-home .split,
+.app.at-home .sidebar,
+.app.at-home .search-bar {
+  visibility: hidden;
 }
