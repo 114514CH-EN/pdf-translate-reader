@@ -131,34 +131,58 @@ export default function EditTools() {
     }
   };
 
-  // 从零编辑: a text box of one's own on the page being read, and more pages
-  const addBox = async () => {
-    const docId = useDocStore.getState().activeId;
-    if (!docId) return;
-    const pageNo = useViewStore.getState().currentPage;
-    const tr = useTranslationStore.getState();
-    const page = tr.pages[pageNo];
-    const w = page?.width ?? 595;
-    const mine = (page?.blocks ?? []).filter((b) => (b.meta as { user?: boolean } | undefined)?.user).length;
-    const top = 96 + (mine % 12) * 44;
-    try {
-      const { block_id } = await api.addTextBlock(docId, pageNo, [72, top, w - 72, top + 34], '在这里输入文字');
-      await tr.refreshPage(docId, pageNo);
-      useEditStore.getState().select(String(block_id), 'src');
-      window.dispatchEvent(new Event('pdftr:translations-changed'));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), 'error');
-    }
+  // 从零编辑: arm a tool, then click (or drag) on a page of the original to place it — components/PlaceTool.tsx
+  const tool = useEditStore((s) => s.tool);
+  const setTool = useEditStore((s) => s.setTool);
+  const imgRef = useRef<HTMLInputElement>(null);
+  const arm = (kind: 'text' | 'line') => {
+    if (tool?.kind === kind) return setTool(null);
+    setTool({ kind });
+    toast(kind === 'text' ? '在左边的页面上点一下放文本框，或拖出想要的大小（Esc 取消）' : '在左边的页面上拖出一条线（Esc 取消）', 'info');
   };
-  const addPage = async () => {
+  // 页面: add / delete / reorder
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const currentPage = useViewStore((s) => s.currentPage);
+  const pageCount = useViewStore((s) => s.pageCount);
+  useEffect(() => {
+    if (!pagesOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pagesRef.current && !pagesRef.current.contains(e.target as Node)) setPagesOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [pagesOpen]);
+  /** the pages changed places: everything shown per page number is read again */
+  const reloadPages = async (docId: string, count: number, goTo: number) => {
+    const tr = useTranslationStore.getState();
+    tr.reset();
+    useEditStore.getState().clearHistory(); // the steps recorded so far name pages that have moved
+    useViewStore.getState().setPageCount(count);
+    await useDocStore.getState().loadDocuments();
+    for (let n = Math.max(1, goTo - 1); n <= Math.min(count, goTo + 1); n++) void tr.refreshPage(docId, n);
+    window.setTimeout(() => useViewStore.getState().requestPageNav(goTo), 150);
+  };
+  const pageOp = async (op: 'add' | 'delete' | 'up' | 'down') => {
     const docId = useDocStore.getState().activeId;
     if (!docId) return;
+    setPagesOpen(false);
+    setConfirmDel(false);
     try {
-      const r = await api.addPage(docId);
-      useViewStore.getState().setPageCount(r.page_count);
-      await useDocStore.getState().loadDocuments();
-      window.setTimeout(() => useViewStore.getState().requestPageNav(r.page_no), 200);
-      toast(`已添加第 ${r.page_no} 页`, 'success');
+      if (op === 'add') {
+        const r = await api.addPage(docId);
+        await reloadPages(docId, r.page_count, r.page_no);
+        toast(`已添加第 ${r.page_no} 页`, 'success');
+      } else if (op === 'delete') {
+        const r = await api.deletePage(docId, currentPage);
+        await reloadPages(docId, r.page_count, Math.min(currentPage, r.page_count));
+        toast('这一页已删除', 'success');
+      } else {
+        const r = await api.movePage(docId, currentPage, currentPage + (op === 'up' ? -1 : 1));
+        await reloadPages(docId, r.page_count, r.page_no);
+        toast(`这一页现在是第 ${r.page_no} 页`, 'success');
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error');
     }
@@ -166,14 +190,62 @@ export default function EditTools() {
 
   return (
     <>
-      <button type="button" className="btn btn-icon-text" title="在这一页放一个文本框，自己写内容（放在原文一侧，可以拖动、改大小、设格式）" onClick={() => void addBox()}>
+      <button type="button" className={`btn btn-icon-text ${tool?.kind === 'text' ? 'active' : ''}`} aria-pressed={tool?.kind === 'text'} title="文本框：点一下这里，再到左边的页面上点一下（或拖出大小）" onClick={() => arm('text')}>
         <Icon name="textbox" size={15} />
         <span className="btn-label">文本框</span>
       </button>
-      <button type="button" className="btn btn-icon-text" title="在文档末尾加一张空白页" onClick={() => void addPage()}>
-        <Icon name="docPlus" size={15} />
-        <span className="btn-label">加一页</span>
+      <button type="button" className={`btn btn-icon-text ${tool?.kind === 'image' ? 'active' : ''}`} aria-pressed={tool?.kind === 'image'} title="图片：选一张图，再到左边的页面上点一下（或拖出大小）" onClick={() => (tool?.kind === 'image' ? setTool(null) : imgRef.current?.click())}>
+        <Icon name="picture" size={15} />
+        <span className="btn-label">图片</span>
       </button>
+      <input
+        ref={imgRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/bmp,image/webp"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          setTool({ kind: 'image', file });
+          toast('在左边的页面上点一下放这张图，或拖出想要的大小（Esc 取消）', 'info');
+        }}
+      />
+      <button type="button" className={`btn btn-icon-text ${tool?.kind === 'line' ? 'active' : ''}`} aria-pressed={tool?.kind === 'line'} title="线条：点一下这里，再到左边的页面上拖出一条线" onClick={() => arm('line')}>
+        <Icon name="line" size={15} />
+        <span className="btn-label">线条</span>
+      </button>
+      <div className="export-menu" ref={pagesRef}>
+        <button type="button" className="btn btn-icon-text" aria-expanded={pagesOpen} title="页面：加一页、删除这一页、调整顺序" onClick={() => { setPagesOpen(!pagesOpen); setConfirmDel(false); }}>
+          <Icon name="docPlus" size={15} />
+          <span className="btn-label">页面</span>
+          <Icon name="chevronDown" size={13} className="caret" />
+        </button>
+        {pagesOpen && (
+          <div className="menu" role="menu">
+            <button type="button" className="menu-item" onClick={() => void pageOp('add')}>
+              在末尾加一张空白页
+            </button>
+            <div className="menu-sep" />
+            <button type="button" className="menu-item" disabled={currentPage <= 1} onClick={() => void pageOp('up')}>
+              把第 {currentPage} 页往前移
+            </button>
+            <button type="button" className="menu-item" disabled={currentPage >= pageCount} onClick={() => void pageOp('down')}>
+              把第 {currentPage} 页往后移
+            </button>
+            <div className="menu-sep" />
+            {confirmDel ? (
+              <button type="button" className="menu-item is-danger" onClick={() => void pageOp('delete')}>
+                确认删除第 {currentPage} 页（不能撤销）
+              </button>
+            ) : (
+              <button type="button" className="menu-item" disabled={pageCount <= 1} onClick={() => setConfirmDel(true)}>
+                删除第 {currentPage} 页…
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       <button type="button" className="btn btn-icon-text" disabled={!canUndo} title="撤销（Ctrl+Z）" onClick={() => void undo()}>
         撤销
       </button>

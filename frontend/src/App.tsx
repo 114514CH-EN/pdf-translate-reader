@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-10';
+const EXPECTED_BACKEND = '2026.11.13-11';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -10,6 +10,7 @@ import { PageAbsoluteView } from './components/PageAbsoluteView';
 import { FlowTranslationPane } from './components/FlowTranslationPane';
 import { Sidebar } from './components/Sidebar';
 import { FormulaEditor } from './components/FormulaEditor';
+import { PlaceTool } from './components/PlaceTool';
 import { Icon } from './components/Icon';
 import { ProgressStrip } from './components/ProgressStrip';
 import { SearchBar } from './components/SearchBar';
@@ -24,7 +25,7 @@ import { useViewStore } from './stores/view';
 import { useTranslationStore } from './stores/translation';
 import { useSettingsStore } from './stores/settings';
 import { TOOLBAR_EVENT, actionFor, comboFromEvent, resolveShortcuts } from './lib/shortcuts';
-import { applyPageTone, applyTheme, nextTheme, type PageTone, type ThemeMode } from './lib/theme';
+import { applyEinkPages, applyPageTone, applyTheme, nextTheme, type PageTone, type ThemeMode } from './lib/theme';
 import { isPetMode } from './pet/mode';
 
 /** Only the pet build downloads this — the classic reader never fetches it. */
@@ -191,6 +192,8 @@ export default function App() {
   useEffect(() => applyTheme(theme), [theme]);
   const pageTone = ui?.pageTone as PageTone | undefined;
   useEffect(() => applyPageTone(pageTone), [pageTone]);
+  const einkPages = ui?.einkPages as string | undefined;
+  useEffect(() => applyEinkPages(einkPages), [einkPages]);
 
   // keyboard shortcuts (configurable in 设置 → 快捷键; ignored while typing)
   useEffect(() => {
@@ -460,6 +463,7 @@ export default function App() {
         </Suspense>
         <SelectionToolbar />
         <FormulaEditor />
+        <PlaceTool />
         {isPetMode() && (
           <Suspense fallback={null}>
             <PetAssistant />

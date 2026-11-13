@@ -30,6 +30,8 @@ interface TranslationState {
   getBlock: (blockId: string) => Block | undefined;
   setBlockTranslation: (blockId: string, text: string) => void;
   setBlockLayout: (blockId: string, layout: BlockLayout | null) => void;
+  /** where one of the reader's own blocks stands on its page */
+  setBlockBox: (blockId: string, bbox: [number, number, number, number]) => void;
   /** the reader's edit of the original text / its formatting (undefined: leave that part) */
   setBlockSource: (blockId: string, patch: { text?: string | null; layout?: BlockLayout | null }) => void;
   saveBlockTranslation: (blockId: string, text: string) => Promise<void>;
@@ -150,6 +152,21 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       if (idx >= 0) {
         const blocks = p.blocks.slice();
         blocks[idx] = { ...blocks[idx], layout };
+        pages[Number(key)] = { ...p, blocks };
+        set({ pages });
+        return;
+      }
+    }
+  },
+
+  setBlockBox(blockId, bbox) {
+    const pages = { ...get().pages };
+    for (const key of Object.keys(pages)) {
+      const p = pages[Number(key)];
+      const idx = p.blocks.findIndex((b) => String(b.id) === String(blockId));
+      if (idx >= 0) {
+        const blocks = p.blocks.slice();
+        blocks[idx] = { ...blocks[idx], bbox };
         pages[Number(key)] = { ...p, blocks };
         set({ pages });
         return;

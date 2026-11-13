@@ -109,6 +109,36 @@ export const api = {
     return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/blocks`, jsonInit('POST', { bbox, text, size }));
   },
 
+  /** move / resize one of the reader's own blocks (page points) */
+  putBlockBox(blockId: string, bbox: number[]): Promise<void> {
+    return request<void>(`/blocks/${encodeURIComponent(blockId)}/bbox`, jsonInit('PUT', { bbox }));
+  },
+  async addPicture(docId: string, pageNo: number, bbox: number[], file: File): Promise<{ block_id: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('bbox', JSON.stringify(bbox));
+    const res = await fetch(`${BASE}/documents/${encodeURIComponent(docId)}/pages/${pageNo}/images`, { method: 'POST', body: form });
+    if (!res.ok) {
+      let msg = `添加图片失败 (${res.status})`;
+      try {
+        msg = (await res.json()).detail ?? msg;
+      } catch {
+        /* keep the status */
+      }
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+  addLine(docId: string, pageNo: number, bbox: number[], dir: string): Promise<{ block_id: string }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/shapes`, jsonInit('POST', { bbox, dir }));
+  },
+  deletePage(docId: string, pageNo: number): Promise<{ page_count: number }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}`, { method: 'DELETE' });
+  },
+  movePage(docId: string, pageNo: number, to: number): Promise<{ page_no: number; page_count: number }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/move`, jsonInit('POST', { to }));
+  },
+
   documentFileUrl(id: string): string {
     return `${BASE}/documents/${encodeURIComponent(id)}/file`;
   },

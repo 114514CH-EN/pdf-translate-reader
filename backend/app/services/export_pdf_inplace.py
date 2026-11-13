@@ -24,6 +24,31 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             (lang, doc_id),
         ).fetchall()
 
+    # What the reader added themselves (text boxes, pictures, lines) is not in the PDF.
+    # Its place is the block's own box; "hidden" and the look of pictures / lines are kept with
+    # the original side ("__src__"); a text box nobody translated is written in its own words.
+    with get_db() as db:
+        own_src = {
+            r["block_id"]: (r["text"], json.loads(r["layout_json"] or "null") or {})
+            for r in db.execute(
+                "SELECT t.block_id, t.text, t.layout_json FROM translations t JOIN blocks b ON b.id=t.block_id"
+                " WHERE b.doc_id=? AND t.lang='__src__' AND b.meta_json LIKE '%\"user\"%'", (doc_id,))
+        }
+    own_hidden = {bid for bid, (_t, lay) in own_src.items() if lay.get("hidden")}
+    if lang != "__src__":
+        fixed = []
+        for r in blocks:
+            d = dict(r)
+            if '"user"' in (d["meta_json"] or "") and d["type"] != "image":
+                src_text, src_layout = own_src.get(d["id"], (None, {}))
+                if d["id"] in own_hidden:
+                    d["layout_json"] = json.dumps({**(json.loads(d["layout_json"] or "null") or {}), "hidden": True})
+                elif not d["translation"]:
+                    d["translation"] = src_text or d["text"]
+                    d["layout_json"] = json.dumps({k: v for k, v in src_layout.items() if k != "bbox"}) if src_layout else d["layout_json"]
+            fixed.append(d)
+        blocks = fixed
+
     if lang == "__src__":
         # the original with the reader's edits: a block that was only moved, restyled or hidden
         # (no new text) is redrawn from its own text
@@ -131,6 +156,28 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
                 if body is not None:
                     arch = mi.add_to(arch)
                 _draw_block(page, bbox, trans, style, arch, css, body)
+
+    # pictures and lines the reader put on the pages
+    for r in blocks:
+        if r["type"] != "image" or '"user"' not in (r["meta_json"] or "") or r["id"] in own_hidden:
+            continue
+        try:
+            meta = json.loads(r["meta_json"] or "{}")
+            page = pdf.load_page(r["page_no"] - 1)
+            box = fitz.Rect(json.loads(r["bbox_json"]))
+            if meta.get("shape") == "line":
+                colour = int((own_src.get(r["id"], (None, {}))[1]).get("color") or 0x1A1A1A)
+                rgb = ((colour >> 16 & 255) / 255, (colour >> 8 & 255) / 255, (colour & 255) / 255)
+                d, mx, my = meta.get("dir"), (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+                p1, p2 = {"h": ((box.x0, my), (box.x1, my)), "v": ((mx, box.y0), (mx, box.y1)),
+                          "d2": ((box.x0, box.y1), (box.x1, box.y0))}.get(d, ((box.x0, box.y0), (box.x1, box.y1)))
+                page.draw_line(fitz.Point(p1), fitz.Point(p2), color=rgb, width=float(meta.get("width") or 1.5), lineCap=1)
+            elif meta.get("file"):
+                png = doc_dir / "images" / str(meta["file"])
+                if png.exists():
+                    page.insert_image(box, filename=str(png), keep_proportion=False, overlay=True)
+        except Exception:
+            pass  # the export still works without this one
 
     # formulas the reader rewrote in edit mode: the picture of the new formula goes over the old one
     from . import formula_edit

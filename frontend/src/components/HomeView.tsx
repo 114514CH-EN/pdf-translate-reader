@@ -104,7 +104,8 @@ export default function HomeView() {
     const label = total === 0 ? '无文字' : pct >= 100 ? '已译完' : pct > 0 ? `已译 ${pct}%` : '未翻译';
     return { pct, label };
   };
-  const thumb = (d: DocumentRow, page = 1) => `/api/documents/${encodeURIComponent(d.id)}/pages/${page}/original.png`;
+  const thumb = (d: DocumentRow, page = 1) =>
+    `/api/documents/${encodeURIComponent(d.id)}/pages/${page}/original.png?r=${encodeURIComponent(d.updated_at ?? '')}`; // pages can be reordered
   const go = (d: DocumentRow) => {
     dropPeek(false);
     withTransition(() => {

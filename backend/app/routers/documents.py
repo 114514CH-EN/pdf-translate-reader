@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 import pymupdf as fitz
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
 from ..config import UPLOAD_DIR
@@ -199,6 +199,146 @@ def add_text_block(doc_id: int, page_no: int, payload: dict):
         ).lastrowid
         db.execute("INSERT INTO translations (block_id, lang, text, edited) VALUES (?, '__src__', ?, 1)", (block_id, text))
     return {"block_id": block_id}
+
+
+def _own_block(db, doc_id: int, page_no: int, bbox, meta: dict, min_side: float = 4.0) -> int:
+    """A picture or a line the reader put on a page: an image block that is not in the PDF."""
+    import uuid
+
+    try:
+        x0, y0, x1, y1 = (round(float(v), 2) for v in bbox)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "bbox 无效") from e
+    pg = db.execute("SELECT id, width, height FROM pages WHERE doc_id=? AND page_no=?", (doc_id, page_no)).fetchone()
+    if pg is None:
+        raise HTTPException(404, "页面不存在")
+    x0, x1 = max(0.0, min(x0, x1)), min(float(pg["width"]), max(x0, x1))
+    y0, y1 = max(0.0, min(y0, y1)), min(float(pg["height"]), max(y0, y1))
+    if x1 - x0 < min_side or y1 - y0 < min_side:
+        raise HTTPException(400, "太小了")
+    nxt = db.execute("SELECT COALESCE(MAX(order_idx), -1) + 1 FROM blocks WHERE page_id=?", (pg["id"],)).fetchone()[0]
+    return db.execute(
+        "INSERT INTO blocks (doc_id, page_id, page_no, order_idx, type, level, bbox_json, style_json, meta_json,"
+        " text, font_size, bold, list_marker, stable_key) VALUES (?,?,?,?, 'image', 0, ?, '{}', ?, '', NULL, 0, NULL, ?)",
+        (doc_id, pg["id"], page_no, nxt, json.dumps([x0, y0, x1, y1]), json.dumps({**meta, "user": True}),
+         f"user-{uuid.uuid4().hex[:12]}"),
+    ).lastrowid
+
+
+@router.post("/{doc_id}/pages/{page_no}/images")
+async def add_picture(doc_id: int, page_no: int, file: UploadFile, bbox: str = Form(...)):
+    """插入图片: the picture is stored as PNG next to the document's own images."""
+    import uuid
+
+    data = await file.read()
+    if not data or len(data) > 20_000_000:
+        raise HTTPException(400, "图片为空或太大（上限 20 MB）")
+    try:
+        pix = fitz.Pixmap(data)
+        if pix.width < 1 or pix.height < 1:
+            raise ValueError("empty")
+        if pix.colorspace is not None and pix.colorspace.n > 3:  # CMYK → RGB
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        while max(pix.width, pix.height) > 3000:
+            pix.shrink(1)
+        png = pix.tobytes("png")
+        w, h = pix.width, pix.height
+    except Exception as e:
+        raise HTTPException(400, "这个文件不是能识别的图片（支持 PNG、JPG、BMP、GIF 等）") from e
+    name = f"user_{uuid.uuid4().hex[:12]}.png"
+    img_dir = _doc_dir(doc_id) / "images"
+    try:
+        box = json.loads(bbox)
+    except ValueError as e:
+        raise HTTPException(400, "bbox 无效") from e
+    with get_db() as db:
+        block_id = _own_block(db, doc_id, page_no, box, {"file": name, "width": w, "height": h}, min_side=8)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    (img_dir / name).write_bytes(png)
+    return {"block_id": block_id, "file": name}
+
+
+@router.post("/{doc_id}/pages/{page_no}/shapes")
+def add_shape(doc_id: int, page_no: int, payload: dict):
+    """画线: a straight line. dir: h / v, or d1 (top-left → bottom-right) / d2 (bottom-left → top-right)."""
+    direction = payload.get("dir") if payload.get("dir") in ("h", "v", "d1", "d2") else "h"
+    try:
+        width = min(12.0, max(0.25, float(payload.get("width") or 1.5)))
+    except (TypeError, ValueError):
+        width = 1.5
+    with get_db() as db:
+        block_id = _own_block(db, doc_id, page_no, payload.get("bbox"), {"shape": "line", "dir": direction, "width": width})
+    return {"block_id": block_id}
+
+
+def _renumber(db, doc_id: int, order: list[int]) -> None:
+    """Pages now stand in ``order`` (old page numbers, in their new sequence)."""
+    new_of = {old: i + 1 for i, old in enumerate(order)}
+    # through negative numbers: (doc_id, page_no) is unique, two pages may not share a number even for a moment
+    db.execute("UPDATE pages SET page_no=-page_no WHERE doc_id=?", (doc_id,))
+    for old, new in new_of.items():
+        db.execute("UPDATE pages SET page_no=? WHERE doc_id=? AND page_no=?", (new, doc_id, -old))
+    for table in ("blocks", "notes", "highlights"):
+        db.execute(f"UPDATE {table} SET page_no=-page_no WHERE doc_id=? AND page_no IS NOT NULL", (doc_id,))
+        for old, new in new_of.items():
+            db.execute(f"UPDATE {table} SET page_no=? WHERE doc_id=? AND page_no=?", (new, doc_id, -old))
+    db.execute("UPDATE documents SET page_count=?, last_page=MIN(COALESCE(last_page, 1), ?), updated_at=datetime('now') WHERE id=?",
+               (len(order), max(1, len(order)), doc_id))
+
+
+def _rewrite_pages(doc_id: int, order: list[int], drop: int | None = None) -> None:
+    """Write the PDF with its pages in ``order`` and move every record that names a page."""
+    with get_db() as db:
+        row = db.execute("SELECT file_path FROM documents WHERE id=?", (doc_id,)).fetchone()
+    path = Path(row["file_path"])
+    pdf = fitz.open(path)
+    try:
+        pdf.select([n - 1 for n in order])
+        tmp = path.with_suffix(".tmp.pdf")
+        pdf.save(tmp, garbage=3, deflate=True)
+    finally:
+        pdf.close()
+    tmp.replace(path)
+    with get_db() as db:
+        if drop is not None:
+            db.execute("DELETE FROM notes WHERE doc_id=? AND page_no=?", (doc_id, drop))
+            db.execute("DELETE FROM highlights WHERE doc_id=? AND page_no=?", (doc_id, drop))
+            db.execute("DELETE FROM pages WHERE doc_id=? AND page_no=?", (doc_id, drop))  # its blocks go with it
+        _renumber(db, doc_id, order)
+    # everything cached per page number is stale now
+    shutil.rmtree(_doc_dir(doc_id) / "assets", ignore_errors=True)
+    shutil.rmtree(_doc_dir(doc_id) / "imgtr", ignore_errors=True)
+
+
+@router.delete("/{doc_id}/pages/{page_no}")
+def delete_page(doc_id: int, page_no: int):
+    """删除页面 (with everything on it). The last remaining page cannot be deleted."""
+    with get_db() as db:
+        nums = [r["page_no"] for r in db.execute("SELECT page_no FROM pages WHERE doc_id=? ORDER BY page_no", (doc_id,))]
+    if page_no not in nums:
+        raise HTTPException(404, "页面不存在")
+    if len(nums) <= 1:
+        raise HTTPException(400, "只剩一页了，不能再删")
+    _rewrite_pages(doc_id, [n for n in nums if n != page_no], drop=page_no)
+    return {"page_count": len(nums) - 1}
+
+
+@router.post("/{doc_id}/pages/{page_no}/move")
+def move_page(doc_id: int, page_no: int, payload: dict):
+    """调整页序: the page goes to position ``to`` (1-based)."""
+    with get_db() as db:
+        nums = [r["page_no"] for r in db.execute("SELECT page_no FROM pages WHERE doc_id=? ORDER BY page_no", (doc_id,))]
+    try:
+        to = int(payload.get("to"))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "to 无效") from e
+    if page_no not in nums or not 1 <= to <= len(nums):
+        raise HTTPException(404, "页面不存在")
+    if to != page_no:
+        order = [n for n in nums if n != page_no]
+        order.insert(to - 1, page_no)
+        _rewrite_pages(doc_id, order)
+    return {"page_no": to, "page_count": len(nums)}
 
 
 def _extract_document(doc_id: int, pdf_path: Path, db=None) -> None:

@@ -79,7 +79,7 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
             " WHERE b.doc_id=? AND b.page_no=? ORDER BY b.order_idx",
             (lang, doc_id, page_no),
         ).fetchall()
-        doc = db.execute("SELECT target_lang FROM documents WHERE id=?", (doc_id,)).fetchone()
+        doc = db.execute("SELECT target_lang, updated_at FROM documents WHERE id=?", (doc_id,)).fetchone()
 
     out = []
     for r in blocks:
@@ -102,7 +102,11 @@ def get_page_blocks(doc_id: int, page_no: int, lang: str = "zh"):
 
     _attach_sentences(out)
     meta = _page_meta(doc_id, page_no, out)
-    v = page_assets.ASSET_VER
+    # pages can be added, deleted and reordered: the pictures of "page 3" are only valid for one
+    # arrangement of the document, so their address changes with it (browsers cache them hard)
+    import zlib
+
+    v = f"{page_assets.ASSET_VER}.{zlib.crc32(str(doc['updated_at'] if doc else '').encode()) & 0xFFFF:x}"
     base = f"/api/documents/{doc_id}/pages/{page_no}"
     return {
         "page_no": page_no,

@@ -49,47 +49,52 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E");
 }
 
-/* ---------- #56 电子墨水 / 纸张 ----------
-   Black ink on warm paper, typography-first, thin ink rules, no shadows,
-   no colour, and no motion (e-ink panels don't animate). The PDF pages are
-   rendered greyscale on the same paper so the whole screen reads as one sheet. */
+/* ---------- 电子墨水 / 纸张 ----------
+   Made for long sittings, after e-readers: soft ink on warm paper rather than black on
+   white (about 12:1, not 21:1), grey hairlines instead of black rules, a plain sans face
+   for the controls and a serif for what you read, nothing that inverts or flashes when
+   pointed at, no shadows, no motion. Pages are shown in greyscale on the same paper —
+   or in their own colours (设置 → 界面 → 电子墨水主题下的页面). */
 :root[data-theme='eink'] {
-  --radius-sm: 0;
-  --paper: #f5f1eb;
-  --ink: #1a1a1a;
+  --paper: #f3f0e8;
+  --ink: #2b2a27;
   --bg: var(--paper);
-  --panel: var(--paper);
-  --panel-2: #ece6dc;
-  --border: var(--ink);
-  --border-soft: #cfc7b8;
+  --panel: #f6f4ed;
+  --panel-2: #ebe7dc;
+  --border: #c8c2b3;
+  --border-soft: #ddd8cb;
   --text: var(--ink);
-  --text-dim: #444444;
-  --text-faint: #666666;
-  --accent: var(--ink);
-  --accent-hover: #000000;
-  --accent-ink: var(--paper);
-  --accent-soft: rgba(26, 26, 26, 0.07);
-  --danger: #8f2424;
-  --ok: #2f5d3a;
-  --pane-bg: #ebe5da;
-  --page-shadow: 0 0 0 1px var(--ink);
-  --shadow: none;
-  --shadow-lg: none;
-  --radius: 0;
-  --radius-lg: 0;
-  --radius-btn: 0;
+  --text-dim: #5c5952;
+  --text-faint: #8b877d;
+  --accent: #3a3833;
+  --accent-hover: #2b2a27;
+  --accent-ink: #f6f4ed;
+  --accent-soft: rgb(43 42 39 / 0.07);
+  --danger: #8a3a2c;
+  --ok: #3f6247;
+  --pane-bg: #e9e5da;
+  --page-shadow: 0 0 0 1px #cfc9bb;
+  --shadow: 0 0 0 1px var(--border);
+  --shadow-md: 0 0 0 1px var(--border);
+  --shadow-lg: 0 0 0 1px var(--border), 0 6px 18px rgb(60 52 38 / 0.12);
+  --shadow-rgb: 60 52 38;
+  --radius: 3px;
+  --radius-lg: 4px;
+  --radius-btn: 3px;
+  --radius-sm: 2px;
   --btn-bg: transparent;
-  --btn-border: var(--ink);
-  --btn-hover-bg: var(--ink);
-  --btn-hover-border: var(--ink);
-  --btn-hover-text: var(--paper);
+  --btn-border: var(--border);
+  --btn-hover-bg: var(--panel-2);
+  --btn-hover-border: #a9a393;
+  --btn-hover-text: var(--ink);
   --btn-shadow: none;
   --btn-press: none;
   --focus: var(--ink);
-  --font-ui: 'Newsreader', Georgia, 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', SimSun, serif;
-  --font-read: var(--font-ui);
-  --font-num: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --font-ui: -apple-system, 'Segoe UI Variable Text', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-read: 'Newsreader', 'Charter', Georgia, 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', SimSun, serif;
+  --font-num: var(--font-ui);
   --ease: 0s;
+  --grain: none;
 }
 
 :root[data-theme='eink'] *,
@@ -100,99 +105,122 @@
   scroll-behavior: auto !important;
 }
 
-:root[data-theme='eink'] body::before {
-  /* faint paper grain */
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 :root[data-theme='eink'] ::selection {
-  background: var(--ink);
-  color: var(--paper);
+  background: rgb(43 42 39 / 0.2);
 }
 
-:root[data-theme='eink'] .pdf-page,
-:root[data-theme='eink'] .abs-view .abs-page {
-  filter: grayscale(1) contrast(1.06);
+/* pages: greyscale on the same paper (default) … */
+:root[data-theme='eink']:not([data-eink-pages='color']) .pdf-page,
+:root[data-theme='eink']:not([data-eink-pages='color']) .abs-view .abs-page {
+  /* black-and-white first, then warmed and dimmed to the paper of the interface: white lands on
+     about #f4f4eb, ink on a soft near-black. (A tint laid over the page would itself be turned
+     grey by the filter, which is why the paper colour is made inside it.) */
+  filter: grayscale(1) contrast(0.93) sepia(0.3) brightness(0.957);
 }
-
-:root[data-theme='eink'] .pdf-page::after,
-:root[data-theme='eink'] .abs-view .abs-page::after {
-  /* white page → paper, black ink stays black */
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-thumb img,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-now-sheet img,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-peek-sheet img {
+  filter: grayscale(1) contrast(0.93);
+}
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-thumb,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-now-sheet,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-peek-sheet {
   background: var(--paper);
+}
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-thumb img,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-now-sheet img,
+:root[data-theme='eink']:not([data-eink-pages='color']) .home-peek-sheet img {
   mix-blend-mode: multiply;
 }
+/* … or exactly as the document is: white sheets, their own colours (data-eink-pages='color') */
 
+/* controls: quiet at rest, a tone darker when pointed at — nothing turns black */
+:root[data-theme='eink'] .topbar,
+:root[data-theme='eink'] .toolbar,
+:root[data-theme='eink'] .statusbar,
+:root[data-theme='eink'] .sidebar {
+  background: var(--panel);
+}
 :root[data-theme='eink'] .segmented {
   background: transparent;
   padding: 0;
   gap: 0;
+  overflow: hidden;
 }
-
-:root[data-theme='eink'] .seg-btn.active {
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: none;
+:root[data-theme='eink'] .seg-btn {
+  border-radius: 0;
 }
-
 :root[data-theme='eink'] .seg-btn + .seg-btn {
-  border-left: 1px solid var(--ink);
+  border-left: 1px solid var(--border);
 }
-
+:root[data-theme='eink'] .seg-btn.active,
+:root[data-theme='eink'] .btn.active,
+:root[data-theme='eink'] .icon-btn.active {
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: none;
+  border-color: #a9a393;
+}
 :root[data-theme='eink'] .icon-btn.bordered:hover:not(:disabled),
-:root[data-theme='eink'] .zoom-label:hover {
-  background: var(--ink);
-  color: var(--paper);
+:root[data-theme='eink'] .zoom-label:hover,
+:root[data-theme='eink'] .menu-item:hover,
+:root[data-theme='eink'] .theme-item:hover {
+  background: var(--panel-2);
+  color: var(--ink);
 }
-
-:root[data-theme='eink'] .btn.active {
-  background: var(--ink);
-  color: var(--paper);
+:root[data-theme='eink'] .btn-primary,
+:root[data-theme='eink'] .btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
-
+:root[data-theme='eink'] .btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
 :root[data-theme='eink'] .doc-tab.active {
-  border-color: var(--ink);
+  border-color: var(--border);
+  background: var(--panel);
 }
-
-:root[data-theme='eink'] .topbar,
-:root[data-theme='eink'] .toolbar {
-  background: var(--paper);
-}
-
 :root[data-theme='eink'] .page-input,
 :root[data-theme='eink'] .lib-count {
   background: transparent;
   border-color: var(--border-soft);
 }
-
+:root[data-theme='eink'] .progress-seg {
+  background: var(--border-soft);
+}
 :root[data-theme='eink'] .jobs-progress {
   background: transparent;
-  border: 1px solid var(--ink);
-  border-radius: 0;
+  border: 1px solid var(--border);
+}
+:root[data-theme='eink'] .toast {
+  background: var(--ink);
+  color: var(--paper);
 }
 
-:root[data-theme='eink'] .jobs-progress-fill {
-  border-radius: 0;
+/* what you read is set in the serif, a little larger and looser */
+:root[data-theme='eink'] .flow-view,
+:root[data-theme='eink'] .note-content,
+:root[data-theme='eink'] .hl-quote,
+:root[data-theme='eink'] .md,
+:root[data-theme='eink'] .home-now-title {
+  font-family: var(--font-read);
 }
-
-:root[data-theme='eink'] .flow-pair {
-  border-radius: 0;
-}
-
 :root[data-theme='eink'] .flow-sent-tgt,
 :root[data-theme='eink'] .flow-tgt {
   font-size: 1.08em;
-  line-height: 1.7;
+  line-height: 1.8;
+}
+:root[data-theme='eink'] .note-content,
+:root[data-theme='eink'] .md {
+  line-height: 1.75;
+}
+:root[data-theme='eink'] .hl-quote span {
+  background: rgb(43 42 39 / 0.13); /* a pencil mark: the colours are gone with the rest */
+}
+:root[data-theme='eink'][data-eink-pages='color'] .hl-quote span {
+  background: color-mix(in srgb, var(--hl, #ffd633) 42%, transparent);
 }
 
 /* ---------- #50 瑞士现代主义 ----------

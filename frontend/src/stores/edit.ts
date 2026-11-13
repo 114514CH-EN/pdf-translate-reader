@@ -18,7 +18,12 @@ export interface Snap {
   text?: string | null;
   /** undefined: the formatting is not part of this change */
   layout?: BlockLayout | null;
+  /** the place of one of the reader's own blocks (undefined: not part of this change) */
+  bbox?: [number, number, number, number];
 }
+
+/** What 文本框 / 图片 / 线条 put on the page next (edit mode toolbar). */
+export type PlaceTool = { kind: 'text' } | { kind: 'line' } | { kind: 'image'; file: File };
 
 export interface Change {
   blockId: string;
@@ -32,6 +37,9 @@ interface EditState {
   selectedId: string | null;
   /** the formula being rewritten (公式编辑) */
   formula: { blockId: string; side: EditSide } | null;
+  /** armed tool: the next click / drag on a page of the original places it */
+  tool: PlaceTool | null;
+  setTool: (tool: PlaceTool | null) => void;
   editFormula: (blockId: string, side?: EditSide) => void;
   closeFormula: () => void;
   undoStack: Change[][];
@@ -76,6 +84,10 @@ export const selKey = (id: string | number, side: EditSide = 'tgt') => `${side}:
 /** Write one side of a change to the page and the server. */
 async function apply(blockId: string, snap: Snap, side: EditSide = 'tgt'): Promise<void> {
   const tr = useTranslationStore.getState();
+  if (snap.bbox) {
+    tr.setBlockBox(blockId, snap.bbox);
+    await api.putBlockBox(blockId, snap.bbox);
+  }
   if (side === 'src') {
     // edits of the original are stored like a translation into the pseudo language "__src__"
     tr.setBlockSource(blockId, snap);
@@ -105,6 +117,8 @@ async function applyAll(changes: Change[], side: 'before' | 'after'): Promise<vo
 export const useEditStore = create<EditState>((set, get) => ({
   selectedId: null,
   formula: null,
+  tool: null,
+  setTool: (tool) => set({ tool }),
   editFormula: (blockId, side = 'tgt') => set({ formula: { blockId: String(blockId), side }, selectedId: selKey(blockId, side) }),
   closeFormula: () => set({ formula: null }),
   undoStack: [],
@@ -127,6 +141,17 @@ export const useEditStore = create<EditState>((set, get) => ({
 
   async setLayout(blockId, patch, side = 'tgt') {
     const block = findBlock(blockId);
+    // pictures and lines keep their look with the original side, whichever pane they are touched in
+    if (block?.meta?.user && block.type === 'image') side = 'src';
+    if (block?.meta?.user && patch?.bbox) {
+      // the reader's own blocks are simply moved: their place is the same on both sides and in every export
+      const { bbox, ...rest } = patch;
+      const change: Change = { blockId, side, before: { bbox: block.bbox as [number, number, number, number] }, after: { bbox } };
+      set((s) => ({ undoStack: [...s.undoStack, [change]].slice(-LIMIT), redoStack: [] }));
+      await applyAll([change], 'after');
+      if (Object.keys(rest).length === 0) return;
+      patch = rest;
+    }
     const before = tidy(side === 'src' ? block?.src_edit?.layout : block?.layout);
     const after = patch === null ? null : tidy({ ...(before ?? {}), ...patch });
     if (JSON.stringify(before) === JSON.stringify(after)) return;
@@ -159,5 +184,5 @@ export const useEditStore = create<EditState>((set, get) => ({
     await applyAll(step, 'after');
   },
 
-  clearHistory: () => set({ undoStack: [], redoStack: [], selectedId: null, formula: null }),
+  clearHistory: () => set({ undoStack: [], redoStack: [], selectedId: null, formula: null, tool: null }),
 }));

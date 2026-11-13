@@ -24,7 +24,7 @@ const COLOURS: { name: string; value: number }[] = [
   { name: '绿', value: 0x1e8449 },
   { name: '橙', value: 0xc56a00 },
 ];
-const MIN = 10; // pt
+const MIN = 6; // pt
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
@@ -36,7 +36,10 @@ export default function EditFrame({
   page,
   onDrag,
   side = 'tgt',
+  kind = 'text',
 }: {
+  /** a picture or a line of the reader's own has no text to format */
+  kind?: 'text' | 'image' | 'line';
   /** the translation or the original text of the block */
   side?: EditSide;
   block: Block;
@@ -120,7 +123,23 @@ export default function EditFrame({
         <button type="button" className="edit-grip" title="拖动来移动这个段落。键盘：先按 Esc 退出打字，再用方向键微调（Shift 移得更远），Delete 隐藏" aria-label="移动" {...gripProps('move')}>
           ⠿
         </button>
-        {!hidden && (
+        {!hidden && kind === 'line' && (
+          <>
+            {COLOURS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                className={`edit-swatch ${(layout?.color ?? 0x1a1a1a) === c.value ? 'active' : ''}`}
+                style={{ background: hex(c.value) }}
+                title={`线条颜色：${c.name}`}
+                aria-label={`线条颜色：${c.name}`}
+                onClick={() => void setLayout(id, { color: c.value })}
+              />
+            ))}
+            <span className="edit-sep" />
+          </>
+        )}
+        {!hidden && kind === 'text' && (
           <>
             <button type="button" className="edit-btn" title="字号减小" aria-label="字号减小" disabled={scale <= 0.45} onClick={() => void setLayout(id, { scale: Math.round((scale / 1.1) * 1000) / 1000 })}>
               A−
@@ -169,12 +188,20 @@ export default function EditFrame({
             <span className="edit-sep" />
           </>
         )}
-        <button type="button" className="edit-btn is-text" title={hidden ? '重新显示这个段落' : '隐藏这个段落（导出时也不出现）'} onClick={() => void setLayout(id, { hidden: !hidden })}>
-          {hidden ? '显示' : '隐藏'}
-        </button>
-        <button type="button" className="edit-btn is-text" title="去掉这个段落的所有格式修改（字号、颜色、位置…）" disabled={!layout} onClick={() => void setLayout(id, null)}>
-          还原
-        </button>
+        {block.meta?.user ? (
+          <button type="button" className="edit-btn is-text" title={hidden ? '放回页面上' : '从页面上拿掉（可以撤销；导出时也不出现）'} onClick={() => void setLayout(id, { hidden: !hidden })}>
+            {hidden ? '放回' : '删除'}
+          </button>
+        ) : (
+          <button type="button" className="edit-btn is-text" title={hidden ? '重新显示这个段落' : '隐藏这个段落（导出时也不出现）'} onClick={() => void setLayout(id, { hidden: !hidden })}>
+            {hidden ? '显示' : '隐藏'}
+          </button>
+        )}
+        {kind === 'text' && (
+          <button type="button" className="edit-btn is-text" title="去掉这个段落的所有格式修改（字号、颜色、位置…）" disabled={!layout} onClick={() => void setLayout(id, null)}>
+            还原
+          </button>
+        )}
       </div>
       {(['nw', 'ne', 'sw', 'se'] as const).map((g) => (
         <span

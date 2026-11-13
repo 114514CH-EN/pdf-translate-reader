@@ -5165,3 +5165,76 @@ body.resizing .split-divider::after {
 .home-now-actions {
   flex-wrap: wrap;
 }
+
+/* ============================================================
+   从零编辑 (v1.14): placing text boxes / pictures / lines; the reader's own objects
+   ============================================================ */
+body.is-placing .abs-view.is-source .abs-page {
+  cursor: crosshair;
+}
+body.is-placing .abs-view.is-source .abs-page * {
+  pointer-events: none;
+}
+.place-band {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  border: 1.5px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+svg.place-band {
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  background: none;
+}
+svg.place-band line {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.abs-block.own-object {
+  position: absolute;
+}
+.abs-block.own-object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+}
+.abs-block.own-object.editable {
+  cursor: pointer;
+}
+.abs-block.own-object.editable:hover,
+.abs-block.own-object.selected {
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+.abs-block.own-object.is-hidden {
+  outline: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.menu-item.is-danger {
+  color: var(--danger);
+}
+.menu-item.is-danger:hover {
+  background: var(--danger) !important;
+  color: #fff !important;
+}
+.abs-block.own-object {
+  overflow: visible;
+  line-height: 0;
+}
+.abs-block.own-object svg {
+  display: block;
+}
+.abs-block.own-object.is-line::before {
+  /* a thin line is hard to hit: a wider band around it takes the click */
+  content: '';
+  position: absolute;
+  inset: -5px;
+}

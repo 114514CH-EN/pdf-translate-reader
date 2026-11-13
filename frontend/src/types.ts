@@ -89,6 +89,12 @@ export interface PageFigure {
 export interface BlockMeta {
   /** source text with formula placeholders {{mN}} */
   ph?: string;
+  /** put on the page by the reader (text box, picture, line): not part of the PDF */
+  user?: boolean;
+  /** a drawn shape instead of a picture */
+  shape?: 'line';
+  /** line direction: h / v, d1 (top-left → bottom-right), d2 (bottom-left → top-right) */
+  dir?: 'h' | 'v' | 'd1' | 'd2';
   /** formula blocks: the crop of the original page (padding included), short of the text lines around it */
   crop?: [number, number, number, number];
   math?: MathRun[];

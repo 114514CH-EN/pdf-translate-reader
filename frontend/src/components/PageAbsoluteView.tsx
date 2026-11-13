@@ -1,4 +1,5 @@
 import { FormulaTex } from './FormulaTex';
+import { api } from '../api/client';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import ImageBlock from './ImageBlock';
 import EditFrame from './EditFrame';
@@ -272,7 +273,9 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   // the reader's own formatting from edit mode (text blocks only): size, weight, colour,
   // alignment, a new place or size on the page, or hidden altogether
   const textual = block.type !== 'image' && block.type !== 'table' && block.type !== 'code' && block.type !== 'formula';
-  const layout = textual ? (block.layout ?? null) : null;
+  // a picture or a line the reader put on the page (not part of the PDF)
+  const ownObject = block.type === 'image' && !!block.meta?.user;
+  const layout = textual || ownObject ? (block.layout ?? null) : null;
   const side = useContext(SideContext);
   const selected = useEditStore((s) => editMode && s.selectedId === selKey(block.id, side));
   const [dragBox, setDragBox] = useState<[number, number, number, number] | null>(null);
@@ -316,6 +319,38 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
 
   // Image block — the page background already contains the image; ImageBlock adds
   // the optional copy with its text translated (设置 → 翻译 → 翻译图片文字).
+  if (ownObject) {
+    const gone = !!layout?.hidden;
+    if (gone && !editMode) return null;
+    const isLine = block.meta?.shape === 'line';
+    const colour = `#${(layout?.color ?? 0x1a1a1a).toString(16).padStart(6, '0')}`;
+    const d = block.meta?.dir ?? 'h';
+    const pts = { h: [0, boxH / 2, boxW, boxH / 2], v: [boxW / 2, 0, boxW / 2, boxH], d2: [0, boxH, boxW, 0] }[d as 'h' | 'v' | 'd2'] ?? [0, 0, boxW, boxH];
+    return (
+      <>
+        <div
+          className={cls(['own-object', isLine ? 'is-line' : '', selected ? 'selected' : '', gone ? 'is-hidden' : '', editMode ? 'editable' : ''])}
+          data-block-id={block.id}
+          style={box}
+          onClick={editMode ? select : undefined}
+        >
+          {gone ? (
+            <span className="abs-hidden-note">已删除</span>
+          ) : isLine ? (
+            <svg width={boxW} height={boxH} style={{ overflow: 'visible' }} aria-hidden="true">
+              <line x1={pts[0]} y1={pts[1]} x2={pts[2]} y2={pts[3]} stroke={colour} strokeWidth={((block.meta as { width?: number } | undefined)?.width ?? 1.5) * zoom} strokeLinecap="round" />
+            </svg>
+          ) : (
+            <img src={api.imageUrl(docId, String(block.meta?.file ?? ''))} alt="" draggable={false} />
+          )}
+        </div>
+        {selected && (
+          // the look of pictures and lines is kept with the original side, whichever pane they are touched in
+          <EditFrame side="src" kind={isLine ? 'line' : 'image'} block={block} layout={layout} box={[x0, y0, x1, y1]} zoom={zoom} page={page} onDrag={setDragBox} />
+        )}
+      </>
+    );
+  }
   if (block.type === 'image' && side === 'src') return null; // the page background shows it
   if (block.type === 'image') {
     return (
@@ -642,7 +677,14 @@ function AbsolutePage({
     () =>
       side === 'src'
         ? page.blocks.map((b) => ({ ...b, translation: b.src_edit?.text ?? null, layout: b.src_edit?.layout ?? null, translated: !!b.src_edit?.text, image_tr: null }))
-        : page.blocks,
+        : page.blocks.map((b) => {
+            // the reader's own content: pictures and lines look the same on both sides; a text box that
+            // was taken off the page is gone here too, and one nobody translated shows its own words
+            if (!b.meta?.user) return b;
+            if (b.type === 'image') return { ...b, layout: b.src_edit?.layout ?? null };
+            if (b.src_edit?.layout?.hidden) return { ...b, layout: { ...(b.layout ?? {}), hidden: true } };
+            return b.translation ? b : { ...b, translation: b.src_edit?.text ?? b.text, translated: true };
+          }),
     [side, page.blocks],
   );
   const img: PageImage = { url: origOk === false ? null : page.original, width: page.width, height: page.height };

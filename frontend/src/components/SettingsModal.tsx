@@ -933,6 +933,18 @@ function UiSettingsPane() {
         </select>
       </div>
       <p className="fieldset-hint">只在暗色主题（默认暗色、OLED 深色）里起作用；导出的 PDF 不受影响。</p>
+      <div className="form-row">
+        <label htmlFor="set-eink-pages">电子墨水主题下的页面</label>
+        <select
+          id="set-eink-pages"
+          value={(settings.ui?.einkPages as string) ?? 'gray'}
+          onChange={(e) => patchLocal({ ui: { ...settings.ui, einkPages: e.target.value } })}
+        >
+          <option value="gray">灰度（默认）：页面变成纸色、黑白，和界面融为一体</option>
+          <option value="color">原色：页面保持白纸和原来的颜色</option>
+        </select>
+      </div>
+      <p className="fieldset-hint">只在「电子墨水 / 纸张」主题里起作用；导出的 PDF 不受影响。</p>
       <div className="form-row form-row-top">
         <label>快捷键</label>
         <ShortcutEditor

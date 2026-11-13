@@ -96,6 +96,28 @@ def put_formula_image(block_id: int, payload: dict):
     return {"ok": True}
 
 
+@router.put("/api/blocks/{block_id}/bbox")
+def put_block_bbox(block_id: int, payload: dict):
+    """Where a text box / picture / line of the reader's own stands on its page (page points).
+    Blocks that come from the PDF keep their place; they are moved through their layout instead."""
+    import json as _json
+
+    try:
+        x0, y0, x1, y1 = (round(float(v), 2) for v in payload["bbox"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(400, "bbox 无效") from e
+    with get_db() as db:
+        row = db.execute("SELECT meta_json FROM blocks WHERE id=?", (block_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "块不存在")
+        if not _json.loads(row["meta_json"] or "{}").get("user"):
+            raise HTTPException(400, "只有自己添加的内容可以这样移动")
+        if x1 - x0 < 2 or y1 - y0 < 2 or not all(-2000 < v < 20000 for v in (x0, y0, x1, y1)):
+            raise HTTPException(400, "bbox 无效")
+        db.execute("UPDATE blocks SET bbox_json=? WHERE id=?", (_json.dumps([x0, y0, x1, y1]), block_id))
+    return {"ok": True, "bbox": [x0, y0, x1, y1]}
+
+
 LAYOUT_ALIGN = ("left", "center", "right", "justify")
 
 
