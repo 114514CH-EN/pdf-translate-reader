@@ -187,6 +187,36 @@ def _open_when_ready(port: int) -> None:
         time.sleep(0.25)
 
 
+def _ver_key(v: str) -> tuple[int, ...]:
+    """'2026.11.13-3' → (2026, 11, 13, 3), so versions compare in release order."""
+    import re
+
+    return tuple(int(n) for n in re.findall(r"\d+", v)[:5])
+
+
+def _hand_over_to_main() -> bool:
+    """PDFTranslate-Pet.exe is a copy of PDFTranslate.exe. If an update replaced the original
+    and could not refresh the copy, the copy still holds the old program: start the
+    original in pet mode instead (it remakes the copy), and step aside."""
+    if not FROZEN or os.name != "nt":
+        return False
+    me = Path(sys.executable)
+    if not me.stem.lower().endswith("-pet"):
+        return False
+    main_exe = me.with_name(me.stem[: -len("-pet")] + ".exe")
+    try:
+        a, b = main_exe.stat(), me.stat()
+        if a.st_size == b.st_size and int(a.st_mtime) == int(b.st_mtime):
+            return False
+        import subprocess
+
+        args = [x for x in sys.argv[1:] if x != "--pet"]
+        subprocess.Popen([str(main_exe), "--pet", *args], cwd=str(me.parent), close_fds=True)
+        return True
+    except Exception:
+        return False
+
+
 def _pick_port(version: str, base: Path, data_dir: Path) -> int | None:
     """Port to start on; None when this version is already running (browser opened); -1: no port."""
     # this version may already run on a spare port (an old copy kept 8765 busy last time)
@@ -208,6 +238,12 @@ def _pick_port(version: str, base: Path, data_dir: Path) -> int | None:
         return None
     if info is None:
         print(f"端口 {DEFAULT_PORT} 被其他程序占用。")
+    elif _ver_key(str(info.get("version") or "")) > _ver_key(version):
+        # this exe is the stale one (a copy left behind by an update): never replace a newer
+        # server with older code — the page it serves would not match it
+        print(f"已有更新的版本（{info.get('version')}）在运行，直接打开它：{_url(DEFAULT_PORT)}{PATH}")
+        _open(DEFAULT_PORT)
+        return None
     else:
         print(f"检测到旧版本服务（{info.get('version') or '未知版本'}）仍在运行，正在关闭它…")
         # an old server would serve the new page with old backend code
@@ -233,18 +269,32 @@ def _pet_copy() -> None:
     if me.stem.lower().endswith("-pet"):
         return
     twin = me.with_name(me.stem + "-Pet.exe")
-    try:
-        a = me.stat()
-        if twin.exists():
-            b = twin.stat()
-            if b.st_size == a.st_size and int(b.st_mtime) == int(a.st_mtime):
-                return
-            twin.unlink()
-        import shutil
 
-        shutil.copy2(me, twin)
-    except Exception:
-        pass  # in use, or a read-only folder: 启动桌宠版.bat still works
+    def attempt() -> bool:
+        try:
+            a = me.stat()
+            if twin.exists():
+                b = twin.stat()
+                if b.st_size == a.st_size and int(b.st_mtime) == int(a.st_mtime):
+                    return True
+                twin.unlink()
+            import shutil
+
+            shutil.copy2(me, twin)
+            return True
+        except Exception:
+            return False  # in use, or a read-only folder: 启动桌宠版.bat still works
+
+    if attempt():
+        return
+
+    def later() -> None:  # the old twin may be the process that just started us and is still closing
+        for _ in range(10):
+            time.sleep(1.5)
+            if attempt():
+                return
+
+    threading.Thread(target=later, daemon=True).start()
 
 
 def _windowed() -> bool:
@@ -378,6 +428,8 @@ def main() -> None:
         sys.stdout = sys.stderr = open(os.devnull, "w")  # noqa: SIM115
     _safe_output()
     _console_title()
+    if _hand_over_to_main():
+        return
     _pet_copy()
     from backend.app.config import APP_VERSION, BASE_DIR, DATA_DIR
 

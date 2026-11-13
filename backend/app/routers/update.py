@@ -179,6 +179,7 @@ setlocal
 cd /d "%~dp0.."
 set PID=__PID__
 set EXE=__EXE__
+set PETARG=__PET__
 set N=0
 :wait
 tasklist /FI "PID eq %PID%" 2>nul | find " %PID% " >nul
@@ -208,9 +209,17 @@ echo update failed> "_update\failed.txt"
 start "" "%EXE%" --no-browser
 exit /b 1
 :copied
+set TRY=0
+:twin
 copy /Y "PDFTranslate.exe" "PDFTranslate-Pet.exe" >nul 2>&1
+if not errorlevel 1 goto twinned
+set /a TRY+=1
+if %TRY% GEQ 5 goto twinned
+ping -n 2 127.0.0.1 >nul
+goto twin
+:twinned
 if exist "_internal.old" rmdir /S /Q "_internal.old" >nul 2>&1
-start "" "%EXE%" --no-browser
+start "" "PDFTranslate.exe" --no-browser %PETARG%
 rmdir /S /Q "_update\PDFTranslate" >nul 2>&1
 del /Q "_update\*.zip" >nul 2>&1
 (goto) 2>nul & rmdir /S /Q "_update" >nul 2>&1
@@ -226,7 +235,8 @@ def _start_swap(folder: Path) -> None:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+\.exe", exe):
         exe = f"{APP_NAME}.exe"
     bat = folder / "apply_update.bat"
-    bat.write_text(APPLY_BAT.replace("__PID__", str(os.getpid())).replace("__EXE__", exe).replace("\n", "\r\n"),
+    bat.write_text(APPLY_BAT.replace("__PID__", str(os.getpid())).replace("__EXE__", exe)
+                   .replace("__PET__", "--pet" if exe.lower().endswith("-pet.exe") or "--pet" in sys.argv else "").replace("\n", "\r\n"),
                    encoding="ascii")
     flags = 0x00000200 | 0x08000000  # CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW: outlives this process
     # the restarted exe must not think it is a child of this one (PyInstaller passes state by env)
