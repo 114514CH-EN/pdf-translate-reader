@@ -37,6 +37,7 @@ function press(fn: () => void) {
 
 export function Toolbar() {
   const mode = useViewStore((s) => s.mode);
+  const homeOpen = useViewStore((s) => s.homeOpen);
   const setMode = useViewStore((s) => s.setMode);
   const currentPage = useViewStore((s) => s.currentPage);
   const pageCount = useViewStore((s) => s.pageCount);
@@ -239,7 +240,7 @@ export function Toolbar() {
         }}
       />
     )}
-    <div className={`toolbar ${activeId ? '' : 'is-home'}`}>
+    <div className={`toolbar ${activeId && !homeOpen ? '' : 'is-home'}`}>
       <div className="segmented" role="group" aria-label="视图模式">
         <button
           type="button"

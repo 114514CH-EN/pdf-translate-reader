@@ -13,6 +13,9 @@ interface ViewState {
   zoomFit: boolean;
   editMode: boolean;
   sidebarOpen: boolean;
+  /** the home page is shown over the open documents */
+  homeOpen: boolean;
+  setHomeOpen: (on: boolean) => void;
   sidebarTab: SidebarTab;
   settingsOpen: boolean;
   settingsTab: SettingsTab;
@@ -66,6 +69,8 @@ export const useViewStore = create<ViewState>((set, get) => ({
   zoomFit: true,
   editMode: false,
   sidebarOpen: true,
+  homeOpen: false,
+  setHomeOpen: (on) => set({ homeOpen: on }),
   sidebarTab: 'assistant',
   settingsOpen: false,
   settingsTab: 'translate',

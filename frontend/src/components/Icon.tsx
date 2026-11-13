@@ -16,6 +16,7 @@ const PATHS: Record<string, string> = {
   translate: 'M4 5h8M8 3v2M6 5c0 4 2.5 7 5.5 8.5M10 5c-.5 3.5-2.8 6.6-6 8.5M13 20l4-9 4 9M14.5 17h5',
   chevronDown: 'M6 9l6 6 6-6',
   close: 'M6 6l12 12M18 6L6 18',
+  home: 'M4 11l8-7 8 7M6 10v9h4v-5h4v5h4v-9',
   library: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.8 1 -3.6 14.5-3.8-1z',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
   check: 'M5 12.5l4.5 4.5L19 7',

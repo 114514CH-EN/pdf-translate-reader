@@ -83,6 +83,7 @@ export const useDocStore = create<DocState>((set, get) => ({
     // before App's, so they would otherwise request the old doc's page range)
     if (get().activeId !== id) useViewStore.setState({ currentPage: 1, pageCount: 0 });
     get().ensureOpen(id);
+    useViewStore.setState({ homeOpen: false }); // going to a document leaves the home page
     set({ activeId: id, error: null });
     try {
       const detail = await api.getDocument(id);
@@ -144,6 +145,7 @@ export const useDocStore = create<DocState>((set, get) => ({
   setActive(id) {
     if (get().activeId !== id) useViewStore.setState({ currentPage: 1, pageCount: 0 });
     if (id) get().ensureOpen(id);
+    if (id) useViewStore.setState({ homeOpen: false });
     set({ activeId: id });
     if (id) void get().openDocument(id);
     else set({ detail: null });

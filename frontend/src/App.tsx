@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-4';
+const EXPECTED_BACKEND = '2026.11.13-5';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -61,6 +61,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
 export default function App() {
   const documents = useDocStore((s) => s.documents);
   const activeId = useDocStore((s) => s.activeId);
+  const homeOpen = useViewStore((s) => s.homeOpen);
   const loadDocuments = useDocStore((s) => s.loadDocuments);
   const openDocument = useDocStore((s) => s.openDocument);
 
@@ -329,7 +330,7 @@ export default function App() {
 
   return (
     <UploadDropZone>
-      <div className="app">
+      <div className={`app ${homeOpen && activeId ? 'at-home' : ''}`}>
         <header className="topbar">
           <DocumentTabs />
         </header>
@@ -407,6 +408,12 @@ export default function App() {
           </div>
 
           <Sidebar docId={activeId} />
+          {homeOpen && (
+            // over the open document, which stays as it is underneath (scroll position, edits)
+            <div className="home-over">
+              <HomeView />
+            </div>
+          )}
           </>
           )}
         </main>
@@ -414,13 +421,13 @@ export default function App() {
         {/* hint bar */}
         <footer className="statusbar">
           <span>
-            {!activeId
+            {!activeId || homeOpen
               ? '把 PDF 拖进窗口就能添加'
               : editMode
                 ? '编辑模式：点击原文或译文即可修改，Ctrl+Z 撤销'
                 : '←/→ 翻页，拖拽分隔线调整布局'}
           </span>
-          {activeId && (
+          {activeId && !homeOpen && (
             <span>
               {mode === 'page' ? '整页预览' : '逐句对照'}，第 {currentPage} 页
             </span>

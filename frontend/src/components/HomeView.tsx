@@ -1,4 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { useViewStore } from '../stores/view';
+import type { DocumentRow } from '../types';
 import { useDocStore } from '../stores/doc';
 import { Icon } from './Icon';
 
@@ -8,12 +10,17 @@ import { Icon } from './Icon';
  *
  * (It used to be two grey panes saying 「请先上传 PDF」 three times.)
  */
+type Sort = 'recent' | 'name' | 'progress' | 'pages';
+
 export default function HomeView() {
   const documents = useDocStore((s) => s.documents);
   const openDocument = useDocStore((s) => s.openDocument);
   const uploadFile = useDocStore((s) => s.uploadFile);
   const uploading = useDocStore((s) => s.uploading);
   const fileRef = useRef<HTMLInputElement>(null);
+  const setHomeOpen = useViewStore((s) => s.setHomeOpen);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<Sort>('recent');
 
   const pick = () => fileRef.current?.click();
   const input = (
@@ -52,42 +59,124 @@ export default function HomeView() {
     );
   }
 
+  const state = (d: DocumentRow) => {
+    const total = d.blocks_total ?? 0;
+    const pct = total > 0 ? Math.round(((d.blocks_done ?? 0) / total) * 100) : 0;
+    const label = total === 0 ? '无文字' : pct >= 100 ? '已译完' : pct > 0 ? `已译 ${pct}%` : '未翻译';
+    return { pct, label };
+  };
+  const thumb = (d: DocumentRow, page = 1) => `/api/documents/${encodeURIComponent(d.id)}/pages/${page}/original.png`;
+  const go = (d: DocumentRow) => {
+    setHomeOpen(false);
+    void openDocument(String(d.id));
+  };
+
+  // the list arrives most-recently-opened first: the first one is where the reader left off
+  const current = documents[0];
+  const at = Math.min(Math.max(current.last_page ?? 1, 1), current.page_count || 1);
+  const started = !!current.last_opened_at;
+  const cur = state(current);
+
+  const q = query.trim().toLowerCase();
+  const rest = documents
+    .filter((d) => !q || d.title.toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (sort === 'name') return a.title.localeCompare(b.title, 'zh');
+      if (sort === 'progress') return state(b).pct - state(a).pct;
+      if (sort === 'pages') return b.page_count - a.page_count;
+      return 0; // recent: the order the server gave
+    });
+
   return (
     <div className="home">
       {input}
       <div className="home-inner">
-        <div className="home-head">
-          <h1 className="home-title">继续阅读</h1>
-          <span className="home-count">{documents.length} 份文档</span>
-        </div>
-        <div className="home-grid">
-          {documents.map((d) => {
-            const total = d.blocks_total ?? 0;
-            const pct = total > 0 ? Math.round(((d.blocks_done ?? 0) / total) * 100) : 0;
-            return (
-              <button key={d.id} type="button" className="home-card" onClick={() => void openDocument(d.id)} title={d.title}>
-                <span className="home-thumb">
-                  <img src={`/api/documents/${encodeURIComponent(d.id)}/pages/1/original.png`} alt="" loading="lazy" draggable={false} />
-                </span>
-                <span className="home-card-title">{d.title}</span>
-                <span className="home-card-meta">
-                  <span>{d.page_count} 页</span>
-                  <span>{total === 0 ? '无文字' : pct >= 100 ? '已译完' : pct > 0 ? `已译 ${pct}%` : '未翻译'}</span>
-                </span>
-                <span className="home-card-bar" aria-hidden="true">
-                  <span style={{ width: `${pct}%` }} />
-                </span>
-              </button>
-            );
-          })}
-          <button type="button" className="home-card home-add" onClick={pick} disabled={uploading}>
-            <span className="home-thumb">
-              <Icon name="plus" size={26} />
-            </span>
-            <span className="home-card-title">{uploading ? '正在上传…' : '添加 PDF'}</span>
-            <span className="home-card-meta">点击选择，或拖到窗口里</span>
+        {/* one thing in front: the document being read, shown at the page it was left on */}
+        <section className="home-now" aria-label="继续阅读">
+          <button type="button" className="home-now-sheet" onClick={() => go(current)} title={`打开 ${current.title}`}>
+            <img src={thumb(current, at)} alt="" draggable={false} />
           </button>
-        </div>
+          <div className="home-now-body">
+            <div className="home-now-kicker">{!started ? '刚添加' : at > 1 ? '上次读到' : '最近打开'}</div>
+            <h1 className="home-now-title">{current.title}</h1>
+            <div className="home-now-meta">
+              <span>
+                第 {at} 页，共 {current.page_count} 页
+              </span>
+              <span>{cur.label}</span>
+            </div>
+            <div className="home-now-bar" aria-hidden="true">
+              <span style={{ width: `${(at / Math.max(current.page_count, 1)) * 100}%` }} />
+            </div>
+            <div className="home-now-actions">
+              <button type="button" className="btn btn-primary home-now-go" onClick={() => go(current)}>
+                {at > 1 ? '继续阅读' : '开始阅读'}
+              </button>
+              <button type="button" className="btn" onClick={pick} disabled={uploading}>
+                <Icon name="upload" size={15} />
+                {uploading ? '正在上传…' : '添加 PDF'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="home-lib" aria-label="全部文档">
+          <div className="home-head">
+            <h2 className="home-title">全部文档</h2>
+            <span className="home-count">{q ? `${rest.length} / ${documents.length}` : documents.length} 份</span>
+            <span className="home-head-gap" />
+            <label className="home-search">
+              <Icon name="search" size={13} />
+              <input
+                placeholder="按名称找…"
+                aria-label="按名称找文档"
+                spellCheck={false}
+                autoComplete="off"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            <select className="home-sort" aria-label="排序" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              <option value="recent">最近打开</option>
+              <option value="name">名称</option>
+              <option value="progress">翻译进度</option>
+              <option value="pages">页数</option>
+            </select>
+          </div>
+          <div className="home-grid">
+            {rest.map((d) => {
+              const st = state(d);
+              const page = Math.min(Math.max(d.last_page ?? 1, 1), d.page_count || 1);
+              return (
+                <button key={d.id} type="button" className="home-card" onClick={() => go(d)} title={d.title}>
+                  <span className="home-thumb">
+                    <img src={thumb(d)} alt="" loading="lazy" draggable={false} />
+                    {/* what you get by opening it, shown when the card is pointed at */}
+                    <span className="home-thumb-note">{page > 1 ? `读到第 ${page} 页` : '从头开始读'}</span>
+                  </span>
+                  <span className="home-card-title">{d.title}</span>
+                  <span className="home-card-meta">
+                    <span>{d.page_count} 页</span>
+                    <span>{st.label}</span>
+                  </span>
+                  <span className="home-card-bar" aria-hidden="true">
+                    <span style={{ width: `${st.pct}%` }} />
+                  </span>
+                </button>
+              );
+            })}
+            {!q && (
+              <button type="button" className="home-card home-add" onClick={pick} disabled={uploading}>
+                <span className="home-thumb">
+                  <Icon name="plus" size={26} />
+                </span>
+                <span className="home-card-title">{uploading ? '正在上传…' : '添加 PDF'}</span>
+                <span className="home-card-meta">点击选择，或拖到窗口里</span>
+              </button>
+            )}
+          </div>
+          {q && rest.length === 0 && <div className="empty-hint">没有名称里带「{query.trim()}」的文档</div>}
+        </section>
       </div>
     </div>
   );

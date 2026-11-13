@@ -30,7 +30,7 @@ def list_documents():
     with get_db() as db:
         rows = db.execute(
             "SELECT d.id, d.title, d.page_count, d.source_lang, d.target_lang, d.domain_guess, d.status,"
-            " d.created_at, d.updated_at, d.last_opened_at,"
+            " d.created_at, d.updated_at, d.last_opened_at, d.last_page,"
             # how far the translation has got (the library cards show it)
             " (SELECT COUNT(*) FROM blocks b WHERE b.doc_id=d.id AND b.type NOT IN ('image','formula')"
             "   AND trim(b.text)!='') AS blocks_total,"

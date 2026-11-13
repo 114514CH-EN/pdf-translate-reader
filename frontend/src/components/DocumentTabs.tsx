@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDocStore } from '../stores/doc';
+import { useViewStore } from '../stores/view';
 import { Icon } from './Icon';
 
 /**
@@ -19,6 +20,9 @@ export function DocumentTabs() {
   const [libOpen, setLibOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const libRef = useRef<HTMLDivElement>(null);
+  const homeOpen = useViewStore((s) => s.homeOpen);
+  const setHomeOpen = useViewStore((s) => s.setHomeOpen);
+  const atHome = homeOpen || !activeId;
 
   const byId = new Map(documents.map((d) => [String(d.id), d]));
   const tabs = openIds.map((id) => byId.get(id)).filter((d): d is NonNullable<typeof d> => !!d);
@@ -57,6 +61,19 @@ export function DocumentTabs() {
 
   return (
     <div className="doc-tabs">
+      <button
+        type="button"
+        className={`btn btn-ghost btn-sm home-tab ${atHome ? 'active' : ''}`}
+        aria-pressed={atHome}
+        title="首页：所有文档和上次读到的地方"
+        onClick={() => {
+          setHomeOpen(true);
+          void useDocStore.getState().loadDocuments();
+        }}
+      >
+        <Icon name="home" size={15} />
+        首页
+      </button>
       <div className="lib-menu" ref={libRef}>
         <button
           type="button"
@@ -130,8 +147,8 @@ export function DocumentTabs() {
             <div
               key={id}
               role="tab"
-              aria-selected={id === String(activeId)}
-              className={`doc-tab ${id === String(activeId) ? 'active' : ''}`}
+              aria-selected={!homeOpen && id === String(activeId)}
+              className={`doc-tab ${!homeOpen && id === String(activeId) ? 'active' : ''}`}
               onClick={() => setActive(id)}
               onAuxClick={(e) => {
                 if (e.button === 1) closeDocument(id); // middle-click closes, like a browser

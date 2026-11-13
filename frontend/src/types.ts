@@ -18,6 +18,8 @@ export interface DocumentRow {
   /** text blocks in the document / translated so far (document list only) */
   blocks_total?: number;
   blocks_done?: number;
+  /** the page the reader stopped on (document list and detail) */
+  last_page?: number | null;
 }
 
 export interface DocDetail extends DocumentRow {
