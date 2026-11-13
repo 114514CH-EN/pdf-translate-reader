@@ -341,7 +341,7 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
               <line x1={pts[0]} y1={pts[1]} x2={pts[2]} y2={pts[3]} stroke={colour} strokeWidth={((block.meta as { width?: number } | undefined)?.width ?? 1.5) * zoom} strokeLinecap="round" />
             </svg>
           ) : (
-            <img src={api.imageUrl(docId, String(block.meta?.file ?? ''))} alt="" draggable={false} />
+            <img src={api.imageUrl(String((block as { doc_id?: string | number }).doc_id ?? docId), String(block.meta?.file ?? ''))} alt="" draggable={false} />
           )}
         </div>
         {selected && (
