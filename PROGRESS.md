@@ -471,6 +471,15 @@ v1.10.1 把质感全砍了，方向错了。这一版按几篇公认的做法重
 - 暗色下首页的页面缩略图和阅读区一样压暗
 - `APP_VERSION` → `2026.11.13-5`，`VERSION` → 1.11.0
 
+### M46 工具栏和字号按 Apple HIG 重排 + 专注阅读 + v1.11.1（2026-11-13）✅
+读了 Apple Human Interface Guidelines 的 Toolbars / Layout / Typography 三篇和 Microsoft Fluent 2 的 Layout：
+- **工具栏三段式**（HIG：leading / center / trailing，最多三组）：左边是「在看什么」（整页预览 / 逐句对照），中间是「怎么走」（翻页、缩放，真正居中），右边是「做什么」。`Toolbar.tsx` 加了 `.tb-lead` / `.tb-center` 包裹层（其它主题里是 `display: contents`，不受影响）；窗口 ≤1100px 或编辑模式时退回原来的流式排列
+- **只有一个主操作，放在最右**（HIG：one primary action, trailing side）：「翻译全文」移到工具栏末尾
+- **工具栏项不带边框**（HIG：toolbar items don't include a bezel；prefer symbols without borders）：编辑译文、导出、主题、设置去掉描边和底色，指到才显出底色；翻页和缩放两组不再描边，用一块浅底当容器（Fluent：用留白分组，少用分隔线）
+- **字号收敛到 macOS 的文字样式**：10 / 11 / 12 / 13（正文）/ 15 / 17 / 22 / 26，去掉 10.5、11.5、12.5、13.5 这些半级（共 42 处）
+- **专注阅读**（HIG：consider temporarily hiding toolbars for a distraction-free experience）：按 F 或点工具栏的 ⛶，标签栏、工具栏、进度条、侧栏、状态栏都收起，只留两页纸；Esc 或右上角按钮退出。快捷键可在设置里改
+- `APP_VERSION` → `2026.11.13-6`，`VERSION` → 1.11.1
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

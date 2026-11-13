@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-5';
+const EXPECTED_BACKEND = '2026.11.13-6';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -62,6 +62,7 @@ export default function App() {
   const documents = useDocStore((s) => s.documents);
   const activeId = useDocStore((s) => s.activeId);
   const homeOpen = useViewStore((s) => s.homeOpen);
+  const focusMode = useViewStore((s) => s.focusMode);
   const loadDocuments = useDocStore((s) => s.loadDocuments);
   const openDocument = useDocStore((s) => s.openDocument);
 
@@ -201,6 +202,13 @@ export default function App() {
         window.dispatchEvent(new Event('pdftr:focus-search'));
         return;
       }
+      {
+        const v = useViewStore.getState();
+        if (e.key === 'Escape' && v.focusMode && !v.editMode && !v.settingsOpen && !isTypingTarget(e.target)) {
+          v.setFocusMode(false);
+          return;
+        }
+      }
       if (isTypingTarget(e.target)) return;
       const action = actionFor(combo, map);
       if (!action) return;
@@ -218,6 +226,9 @@ export default function App() {
           break;
         case 'toggleEdit':
           view.setEditMode(!view.editMode);
+          break;
+        case 'focusMode':
+          if (useDocStore.getState().activeId && !view.homeOpen) view.setFocusMode(!view.focusMode);
           break;
         case 'zoomIn':
           view.zoomIn();
@@ -330,7 +341,7 @@ export default function App() {
 
   return (
     <UploadDropZone>
-      <div className={`app ${homeOpen && activeId ? 'at-home' : ''}`}>
+      <div className={`app ${homeOpen && activeId ? 'at-home' : ''} ${focusMode && activeId && !homeOpen ? 'is-focus' : ''}`}>
         <header className="topbar">
           <DocumentTabs />
         </header>
@@ -417,6 +428,12 @@ export default function App() {
           </>
           )}
         </main>
+
+        {focusMode && activeId && !homeOpen && (
+          <button type="button" className="focus-exit" onClick={() => useViewStore.getState().setFocusMode(false)}>
+            退出专注阅读
+          </button>
+        )}
 
         {/* hint bar */}
         <footer className="statusbar">

@@ -15,6 +15,9 @@ interface ViewState {
   sidebarOpen: boolean;
   /** the home page is shown over the open documents */
   homeOpen: boolean;
+  /** reading with every bar put away */
+  focusMode: boolean;
+  setFocusMode: (on: boolean) => void;
   setHomeOpen: (on: boolean) => void;
   sidebarTab: SidebarTab;
   settingsOpen: boolean;
@@ -70,6 +73,11 @@ export const useViewStore = create<ViewState>((set, get) => ({
   editMode: false,
   sidebarOpen: true,
   homeOpen: false,
+  focusMode: false,
+  setFocusMode: (on) => {
+    set({ focusMode: on });
+    if (on) get().toast('专注阅读：按 Esc 退出', 'info');
+  },
   setHomeOpen: (on) => set({ homeOpen: on }),
   sidebarTab: 'assistant',
   settingsOpen: false,

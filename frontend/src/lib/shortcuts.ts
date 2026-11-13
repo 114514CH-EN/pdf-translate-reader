@@ -12,7 +12,8 @@ export type ShortcutAction =
   | 'fitWidth'
   | 'toggleTheme'
   | 'openSettings'
-  | 'search';
+  | 'search'
+  | 'focusMode';
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   prevPage: '上一页',
@@ -27,6 +28,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   toggleTheme: '切换暗色模式',
   openSettings: '打开设置',
   search: '在文档中搜索',
+  focusMode: '专注阅读 开/关',
 };
 
 export const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
@@ -42,6 +44,7 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
   toggleTheme: 'Shift+D',
   openSettings: 'Ctrl+,',
   search: 'Ctrl+F',
+  focusMode: 'F',
 };
 
 /** Canonical combo string for a keyboard event, e.g. "Ctrl+Shift+T". null for bare modifiers. */
