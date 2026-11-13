@@ -174,7 +174,7 @@ export function SearchBar() {
               onClick={() => go(i)}
             >
               <span className="search-hit-meta">
-                第 {h.page_no} 页 · {h.field === 'src' ? '原文' : '译文'}
+                {h.field === 'src' ? '原文' : '译文'}第 {h.page_no} 页
               </span>
               <span className="search-hit-text">
                 {h.pre}

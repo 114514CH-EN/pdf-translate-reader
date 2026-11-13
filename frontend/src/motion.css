@@ -42,18 +42,17 @@
 .auth-card,
 .crash-card,
 .drop-overlay-card {
-  animation: ui-dialog var(--motion-slow) var(--ease-out);
+  animation: ui-fade var(--motion-fast) ease-out;
 }
 .menu,
 .lib-dropdown,
 .search-results,
 .sel-panel {
-  animation: ui-pop var(--motion-fast) var(--ease-out);
-  transform-origin: top center;
+  animation: ui-fade 0.08s ease-out;
 }
 .sel-bar,
 .edit-bar {
-  animation: ui-pop var(--motion-fast) var(--ease-spring);
+  animation: ui-fade var(--motion-fast) ease-out;
 }
 .search-bar,
 .stale-banner,
@@ -64,15 +63,6 @@
   animation: ui-slide-left var(--motion) var(--ease-out);
 }
 
-/* ---- switching: a tab's content, a settings section, the reading view ---- */
-.sidebar-body > *,
-.settings-body > *,
-.flow-pair {
-  animation: ui-fade var(--motion) ease-out;
-}
-.doc-tab {
-  animation: ui-rise var(--motion) var(--ease-out);
-}
 
 /* ---- pages: the sheet fades in when its picture has arrived ---- */
 .abs-page-bg {
@@ -87,9 +77,6 @@
 .abs-block.just-translated {
   animation: block-arrived 1.1s ease-out;
 }
-.abs-block.just-translated .abs-block-content {
-  animation: ui-rise var(--motion-slow) var(--ease-out);
-}
 
 /* ---- edit mode ---- */
 .abs-page.is-editing .abs-block {
@@ -99,26 +86,14 @@
   animation: ui-fade var(--motion-fast) ease-out;
   transition: scale var(--motion-fast) ease-out;
 }
-.edit-handle:hover {
-  scale: 1.35;
-}
-.edit-swatch,
-.img-tr-btn {
-  transition: scale var(--motion-fast) var(--ease-spring), box-shadow var(--motion-fast) ease-out;
-}
-.edit-swatch:hover {
-  scale: 1.2;
-}
+
+
+
 .img-tr {
   animation: ui-fade var(--motion-slow) ease-out;
 }
 
 /* ---- controls ---- */
-.btn:active:not(:disabled),
-.icon-btn:active:not(:disabled),
-.seg-btn:active:not(:disabled) {
-  scale: 0.96;
-}
 .btn,
 .icon-btn,
 .seg-btn {
@@ -184,20 +159,6 @@
   box-shadow: var(--shadow);
   pointer-events: none;
   transition: left var(--motion-slow) var(--ease-out);
-}
-
-/* the library cards arrive one after another (first twelve; the rest are simply there) */
-.home-card {
-  animation: ui-rise var(--motion-slow) var(--ease-out) backwards;
-}
-.home-card:nth-child(2) { animation-delay: 30ms; }
-.home-card:nth-child(3) { animation-delay: 60ms; }
-.home-card:nth-child(4) { animation-delay: 90ms; }
-.home-card:nth-child(5) { animation-delay: 120ms; }
-.home-card:nth-child(6) { animation-delay: 150ms; }
-.home-card:nth-child(n + 7) { animation-delay: 180ms; }
-.home-drop {
-  animation: ui-dialog var(--motion-slow) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {

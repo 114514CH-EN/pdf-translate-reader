@@ -81,8 +81,7 @@ export function AssistantTab({ docId }: { docId: string }) {
         <div className="assistant-scroll">
           <div className="card setup-card">
             <div className="card-title">
-              <Icon name="sparkle" size={15} />
-              先给阅读助手配置一个 AI
+              阅读助手还没有配置模型
             </div>
             <p>
               阅读助手和翻译分开配置：可以给它用一个更擅长讲解、推理的模型，用量也分开统计。需要填写服务商、API Key 和模型。

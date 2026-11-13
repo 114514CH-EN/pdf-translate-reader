@@ -71,7 +71,8 @@ export default function HomeView() {
                 </span>
                 <span className="home-card-title">{d.title}</span>
                 <span className="home-card-meta">
-                  {d.page_count} 页 · {total === 0 ? '无文字' : pct >= 100 ? '已译完' : pct > 0 ? `已译 ${pct}%` : '未翻译'}
+                  <span>{d.page_count} 页</span>
+                  <span>{total === 0 ? '无文字' : pct >= 100 ? '已译完' : pct > 0 ? `已译 ${pct}%` : '未翻译'}</span>
                 </span>
                 <span className="home-card-bar" aria-hidden="true">
                   <span style={{ width: `${pct}%` }} />

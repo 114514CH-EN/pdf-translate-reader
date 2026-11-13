@@ -418,7 +418,7 @@ export function SelectionToolbar() {
                 }}
               />
             ))}
-            <span className="sel-hl-page">第 {hl.page_no} 页 · {hl.pane === 'src' ? '原文' : '译文'}</span>
+            <span className="sel-hl-page">{hl.pane === 'src' ? '原文' : '译文'}第 {hl.page_no} 页</span>
           </div>
           <div className="sel-quote">{hl.text.length > 160 ? hl.text.slice(0, 160) + '…' : hl.text}</div>
           <textarea

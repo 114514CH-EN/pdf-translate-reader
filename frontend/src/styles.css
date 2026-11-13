@@ -1,33 +1,30 @@
 /* ===== PDF 双语翻译阅读器 — light theme ===== */
 :root {
-  /* surfaces & ink — "paper and ink": a warm, quiet desk; white sheets with a real
-     shadow; near-white chrome drawn in hairlines; one deep ink blue, used sparingly */
-  --bg: #f5f4f1;
-  --panel: #fdfdfc;
-  --panel-2: #f1f0ed;
-  --border: #dcdad4;
-  --border-soft: #e9e7e2;
-  --text: #1a1c21;
-  --text-dim: #575c67;
-  --text-faint: #8c909a;
-  --accent: #2a49bd;
-  --accent-hover: #213b9f;
+  /* a plain working tool: neutral greys, white chrome, hairlines for structure,
+     one ordinary blue. Depth is kept for things that really float (menus, dialogs). */
+  --bg: #f0f1f2;
+  --panel: #ffffff;
+  --panel-2: #f3f4f5;
+  --border: #cfd2d6;
+  --border-soft: #e2e4e7;
+  --text: #1d1f23;
+  --text-dim: #555a62;
+  --text-faint: #868b93;
+  --accent: #1c63c7;
+  --accent-hover: #164f9f;
   --accent-ink: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
-  --danger: #c93a3a;
-  --ok: #1b8f50;
-  --pane-bg: #e8e6e1;
-  /* a sheet lying on the desk: a hairline edge, a tight contact shadow, a wide soft one */
-  --page-shadow: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 1px 1px rgba(24, 24, 32, 0.04),
-    0 8px 14px -6px rgba(24, 24, 32, 0.1), 0 26px 44px -22px rgba(24, 24, 32, 0.22);
-  --shadow: 0 0 0 1px rgba(24, 24, 32, 0.04), 0 1px 2px rgba(24, 24, 32, 0.06), 0 4px 10px -3px rgba(24, 24, 32, 0.08);
-  --shadow-lg: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 10px 22px -8px rgba(24, 24, 32, 0.14),
-    0 32px 64px -24px rgba(24, 24, 32, 0.3);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --danger: #c0392b;
+  --ok: #1f7a45;
+  --pane-bg: #dfe1e4;
+  --page-shadow: 0 0 0 1px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.12);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 6px 24px rgba(0, 0, 0, 0.18);
   /* shape */
-  --radius: 8px;
-  --radius-lg: 12px;
-  --radius-btn: 8px;
-  --radius-sm: 5px;
+  --radius: 4px;
+  --radius-lg: 6px;
+  --radius-btn: 4px;
+  --radius-sm: 3px;
   --bw: 1px;
   --control-h: 30px;
   /* buttons */
@@ -37,12 +34,12 @@
   --btn-hover-bg: var(--panel-2);
   --btn-hover-border: color-mix(in srgb, var(--text) 20%, var(--border));
   --btn-hover-text: var(--text);
-  --btn-shadow: 0 1px 1px rgba(24, 24, 32, 0.04);
+  --btn-shadow: none;
   --btn-active-shadow: none;
-  --btn-press: translateY(1px);
-  --focus: color-mix(in srgb, var(--accent) 42%, transparent);
-  /* type: Inter for Latin and figures, the system's own face for Chinese */
-  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --btn-press: none;
+  --focus: var(--accent);
+  /* the system's own interface face, so the window reads as part of the desktop */
+  --font-ui: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, 'PingFang SC', sans-serif;
   --font-read: var(--font-ui);
   --font-num: var(--font-ui);
   --ease: 0.14s ease;
@@ -3529,8 +3526,7 @@ textarea {
   background: #fff;
   border: var(--bw) solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  transition: translate var(--motion, 0.2s) var(--ease-out, ease), box-shadow var(--motion, 0.2s) ease, border-color var(--motion, 0.2s) ease;
+  border-radius: 2px;
 }
 .home-thumb img {
   width: 100%;
@@ -3540,9 +3536,8 @@ textarea {
 }
 .home-card:hover .home-thumb,
 .home-card:focus-visible .home-thumb {
-  translate: 0 -3px;
-  box-shadow: var(--shadow-lg);
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .home-card:focus-visible {
   outline: none;
@@ -3643,35 +3638,25 @@ textarea {
 }
 
 /* ============================================================================
-   Craft — the last layer of finish on the two default themes (亮色 / 暗色).
-   The other themes have their own character and keep it.
+   Finish — details shared by every theme, then the two default themes (亮色 / 暗色).
+   Flat on purpose: no gradients, no glow, no blur; hairlines carry the structure.
    ============================================================================ */
-:root {
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-body {
-  font-feature-settings: 'cv11', 'ss03', 'calt';
-  letter-spacing: -0.003em;
-}
 ::selection {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
-/* thinner scrollbars that stay out of the way until used */
 ::-webkit-scrollbar {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
-  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 22%, transparent);
   border: 3px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text) 34%, transparent);
-  border: 2px solid transparent;
+  background: color-mix(in srgb, var(--text) 40%, transparent);
+  border: 3px solid transparent;
   background-clip: content-box;
 }
 
@@ -3691,7 +3676,6 @@ body {
   left: 4px;
   width: 1px;
   background: var(--border);
-  transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
 }
 .split-divider:hover {
   background: transparent;
@@ -3700,17 +3684,15 @@ body {
 body.resizing .split-divider::after {
   left: 3px;
   width: 3px;
-  border-radius: 2px;
   background: var(--accent);
 }
 
-/* fields: one height, one radius, a ring instead of a hard outline */
+/* fields */
 .cell-input,
 .form-row input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
 .form-row select,
 .form-row textarea {
   border-radius: var(--radius-sm);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .cell-input:focus,
 .form-row input:focus-visible,
@@ -3718,118 +3700,94 @@ body.resizing .split-divider::after {
 .form-row textarea:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-/* dialogs: the page behind steps back */
 .modal-backdrop {
-  background: color-mix(in srgb, #14151a 34%, transparent);
-  backdrop-filter: blur(5px) saturate(120%);
-  -webkit-backdrop-filter: blur(5px) saturate(120%);
+  background: rgba(0, 0, 0, 0.38);
 }
 .modal {
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
 .modal-head {
-  padding: 14px 18px;
+  padding: 12px 16px;
 }
 .modal-head h2 {
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .menu,
 .lib-dropdown {
-  padding: 5px;
-  border-color: var(--border-soft);
+  padding: 4px;
 }
 .menu-item {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 :root:is([data-theme='light'], [data-theme='dark'], :not([data-theme])) {
-  /* chrome */
   .topbar {
-    background: var(--panel-2);
+    background: var(--bg);
     border-bottom-color: var(--border);
   }
   .doc-tab {
-    border-radius: 8px 8px 0 0;
-  }
-  .doc-tab.active {
-    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.6) inset, 0 -2px 6px -3px rgba(24, 24, 32, 0.12);
+    border-radius: var(--radius) var(--radius) 0 0;
   }
   .toolbar {
-    padding: 8px 14px;
-    border-bottom-color: var(--border-soft);
-    box-shadow: 0 1px 0 var(--border-soft), 0 6px 12px -10px rgba(24, 24, 32, 0.18);
+    padding: 7px 12px;
+    border-bottom-color: var(--border);
     position: relative;
     z-index: 3;
   }
   .statusbar {
-    border-top-color: var(--border-soft);
     background: var(--bg);
   }
-  .sidebar {
-    border-left-color: var(--border-soft);
-    box-shadow: -8px 0 14px -14px rgba(24, 24, 32, 0.2);
+  .menu,
+  .lib-dropdown,
+  .modal {
+    border: 1px solid var(--border);
   }
 
-  /* buttons: a faint top light on the raised ones, real depth on the primary */
-  .btn {
-    box-shadow: var(--btn-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  /* one bordered group; the chosen view is simply filled in */
+  .segmented {
+    background: var(--panel);
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
   }
-  .btn-primary {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  .seg-btn {
+    border-radius: 0;
+    height: calc(var(--control-h) - 2px);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+  .seg-btn + .seg-btn {
+    border-left: 1px solid var(--border);
   }
-  .btn:disabled {
+  .seg-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
     box-shadow: none;
   }
-  .segmented {
-    border-color: transparent;
-    background: color-mix(in srgb, var(--text) 6%, transparent);
-    box-shadow: inset 0 1px 2px rgba(24, 24, 32, 0.06);
-  }
-  .seg-btn.active {
-    box-shadow: 0 0 0 1px rgba(24, 24, 32, 0.05), 0 1px 2px rgba(24, 24, 32, 0.12);
+
+  /* panel tabs: text with a rule under the current one */
+  .sidebar-head {
+    padding: 0 6px 0 4px;
+    border-bottom-color: var(--border);
   }
   .sidebar-tab {
-    border-radius: 7px;
-    transition: background 0.14s ease, color 0.14s ease;
+    border-radius: 0;
+    padding: 9px 6px 8px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
   }
   .sidebar-tab:hover:not(.active) {
-    background: color-mix(in srgb, var(--text) 5%, transparent);
     color: var(--text);
   }
-}
-
-:root[data-theme='dark'] {
-  .doc-tab.active {
-    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.05) inset;
+  .sidebar-tab.active {
+    background: none;
+    color: var(--text);
+    border-bottom-color: var(--accent);
   }
-  .toolbar {
-    box-shadow: 0 1px 0 var(--border-soft), 0 8px 14px -10px rgba(0, 0, 0, 0.6);
-  }
-  .sidebar {
-    box-shadow: -10px 0 16px -14px rgba(0, 0, 0, 0.7);
-  }
-  .btn {
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  }
-  .btn-primary {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  }
-  .segmented {
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
-  .seg-btn.active {
-    background: var(--panel-2);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.5);
+  .sidebar-tab.active .icon {
+    color: var(--accent);
   }
 }
 
@@ -3883,22 +3841,11 @@ body.resizing .split-divider::after {
     bottom: 0;
     z-index: 40;
     width: min(var(--sidebar-w, 340px), calc(100vw - 56px));
-    box-shadow: -18px 0 40px -12px rgb(0 0 0 / 0.28);
-    animation: sidebar-slide 0.18s ease-out;
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
   }
   .sidebar.collapsed {
     width: 40px;
-  }
-}
-@keyframes sidebar-slide {
-  from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sidebar.open {
-    animation: none;
   }
 }
 
@@ -3921,11 +3868,10 @@ body.resizing .split-divider::after {
   border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--text-faint);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .glossary-search:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .glossary-search input {
   flex: 1;
@@ -3962,10 +3908,8 @@ body.resizing .split-divider::after {
 }
 .glossary-new {
   flex: none;
-  margin: 10px 10px 0;
-  padding: 8px;
-  border: var(--bw) dashed var(--border);
-  border-radius: var(--radius);
+  padding: 10px 10px 10px;
+  border-bottom: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -4010,11 +3954,6 @@ body.resizing .split-divider::after {
   border-radius: var(--radius);
   background: var(--panel);
   padding: 5px 6px 4px;
-  border-left: 3px solid var(--border);
-  transition: border-color 0.14s ease, opacity 0.14s ease;
-}
-.term-card.is-approved {
-  border-left-color: var(--ok);
 }
 .term-card.is-rejected {
   opacity: 0.55;
@@ -4026,10 +3965,6 @@ body.resizing .split-divider::after {
 .term-card:focus-within {
   opacity: 1;
   border-color: var(--border);
-}
-.term-card.is-approved:hover,
-.term-card.is-approved:focus-within {
-  border-left-color: var(--ok);
 }
 /* the fields read as text until touched */
 .term-input {
@@ -4050,7 +3985,6 @@ body.resizing .split-divider::after {
   outline: none;
   background: var(--panel);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .term-src {
   font-weight: 600;
@@ -4083,7 +4017,7 @@ body.resizing .split-divider::after {
   flex: none;
   height: 20px;
   border: var(--bw) solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: transparent;
   font-size: 11px;
   color: var(--text-faint);
@@ -4194,4 +4128,28 @@ body.resizing .split-divider::after {
   font-size: 12px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+
+/* small labels are rectangles, not pills */
+.badge {
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+}
+.home-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-card-bar,
+.home-card-bar span {
+  border-radius: 0;
+  height: 2px;
+}
+.statusbar > span:first-child kbd,
+.statusbar .sep {
+  margin: 0 8px;
+  color: var(--border);
+}
+.progress-thumb {
+  box-shadow: none;
 }

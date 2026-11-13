@@ -159,7 +159,7 @@ export function NotesTab({ docId }: { docId: string }) {
                       setActiveHl(h.id);
                     }}
                   >
-                    第 {h.page_no} 页 · {h.pane === 'src' ? '原文' : '译文'}
+                    {h.pane === 'src' ? '原文' : '译文'}第 {h.page_no} 页
                   </button>
                 </div>
                 <div className="hl-quote">“{h.text.length > 220 ? h.text.slice(0, 220) + '…' : h.text}”</div>

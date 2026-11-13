@@ -932,7 +932,7 @@ function UiSettingsPane() {
           <option value="paper">原样：保持白纸</option>
         </select>
       </div>
-      <p className="fieldset-hint">只在暗色主题（默认 · 暗色、OLED 深色）里起作用；导出的 PDF 不受影响。</p>
+      <p className="fieldset-hint">只在暗色主题（默认暗色、OLED 深色）里起作用；导出的 PDF 不受影响。</p>
       <div className="form-row form-row-top">
         <label>快捷键</label>
         <ShortcutEditor

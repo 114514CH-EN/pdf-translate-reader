@@ -153,7 +153,6 @@ export function GlossaryTab({ docId }: { docId: string }) {
           <input placeholder="筛选术语" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="筛选术语" />
         </label>
         <button type="button" className="btn btn-sm" title="让模型从这份文档里找出专业术语" onClick={() => void extract()}>
-          <Icon name="sparkle" size={13} />
           提取术语
         </button>
       </div>
@@ -204,7 +203,7 @@ export function GlossaryTab({ docId }: { docId: string }) {
       <div className="glossary-list">
         {terms.length > 0 && (
           <div className="glossary-count">
-            {f ? `${shown.length} / ${terms.length} 个术语` : `${terms.length} 个术语`} · 已采用 {approved}
+            {f ? `${shown.length} / ${terms.length} 个术语` : `${terms.length} 个术语`}，已采用 {approved}
           </div>
         )}
         {loading && terms.length === 0 && <div className="empty-hint">加载中…</div>}

@@ -93,7 +93,7 @@ export function DocumentTabs() {
                     <Icon name="page" size={14} />
                     <span className="lib-title">{d.title}</span>
                     <span className="lib-meta">
-                      {d.page_count} 页{isOpen ? ' · 已打开' : ''}
+                      {d.page_count} 页{isOpen ? '，已打开' : ''}
                     </span>
                   </button>
                   {confirming ? (

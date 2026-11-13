@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.12-11';
+const EXPECTED_BACKEND = '2026.11.13-1';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -367,7 +367,7 @@ export default function App() {
                 title="这份文档的原文被你修改过。可以在「修改后的原文」和「原始 PDF」之间切换"
                 onClick={() => setSrcOriginal((v) => !v)}
               >
-                {srcOriginal ? '原始 PDF · 点击看修改后的原文' : '修改后的原文 · 点击看原始 PDF'}
+                {srcOriginal ? '正在看原始 PDF，点击看修改后的原文' : '正在看修改后的原文，点击看原始 PDF'}
               </button>
             )}
           </section>
@@ -412,12 +412,11 @@ export default function App() {
               ? '把 PDF 拖进窗口就能添加'
               : editMode
                 ? '编辑模式：点击原文或译文即可修改，Ctrl+Z 撤销'
-                : '←/→ 翻页 · 拖拽分隔线调整布局'}
+                : '←/→ 翻页，拖拽分隔线调整布局'}
           </span>
           {activeId && (
             <span>
-              第 {currentPage} 页
-              {mode === 'page' ? ' · 整页预览' : ' · 逐句对照'}
+              {mode === 'page' ? '整页预览' : '逐句对照'}，第 {currentPage} 页
             </span>
           )}
         </footer>
