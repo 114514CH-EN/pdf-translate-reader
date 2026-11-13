@@ -17,9 +17,9 @@ export interface ThemeInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: 'system', name: '跟随系统', note: '默认亮色 / 暗色自动切换', swatch: ['#f0f1f2', '#1f1f1f', '#1c63c7'] },
-  { id: 'light', name: '默认亮色', note: '白底灰框，和系统窗口一个样子', swatch: ['#f0f1f2', '#1d1f23', '#1c63c7'] },
-  { id: 'dark', name: '默认暗色', note: '夜间使用，中性深灰', swatch: ['#1f1f1f', '#e6e6e6', '#5b9ef0'], dark: true },
+  { id: 'system', name: '跟随系统', note: '默认亮色 / 暗色自动切换', swatch: ['#f3f4f7', '#17181c', '#2557d6'] },
+  { id: 'light', name: '默认亮色', note: '冷灰桌面、白色面板、钴蓝', swatch: ['#f3f4f7', '#16181d', '#2557d6'] },
+  { id: 'dark', name: '默认暗色', note: '夜间使用，层次靠明暗区分', swatch: ['#17181c', '#e7e8ec', '#7aa2ff'], dark: true },
   { id: 'eink', name: '电子墨水 / 纸张', note: '墨黑纸白、衬线、无动画', swatch: ['#f5f1eb', '#1a1a1a', '#1a1a1a'] },
   { id: 'mint', name: '护眼豆沙绿', note: '页面和界面都是柔和的淡绿，适合久读', swatch: ['#d6ecd6', '#223328', '#2c7a53'] },
   { id: 'swiss', name: '瑞士现代主义', note: '网格、无衬线、信号红', swatch: ['#ffffff', '#000000', '#e4002b'] },

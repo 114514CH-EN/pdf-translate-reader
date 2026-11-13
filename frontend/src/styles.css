@@ -1,30 +1,41 @@
 /* ===== PDF 双语翻译阅读器 — light theme ===== */
 :root {
-  /* a plain working tool: neutral greys, white chrome, hairlines for structure,
-     one ordinary blue. Depth is kept for things that really float (menus, dialogs). */
-  --bg: #f0f1f2;
-  --panel: #ffffff;
-  --panel-2: #f3f4f5;
-  --border: #cfd2d6;
-  --border-soft: #e2e4e7;
-  --text: #1d1f23;
-  --text-dim: #555a62;
-  --text-faint: #868b93;
-  --accent: #1c63c7;
-  --accent-hover: #164f9f;
+  /* Neutral greys carrying a trace of the accent's hue (so the chrome and the blue belong
+     together), white working surfaces, one cobalt. Light falls from above, a little left:
+     every shadow in the app shares that direction (x : y = 1 : 2) and takes its colour
+     from the surface it lands on instead of plain black. */
+  --bg: #f3f4f7;
+  --panel: #fdfdfe;
+  --panel-2: #eef0f4;
+  --border: #d3d7de;
+  --border-soft: #e5e8ed;
+  --text: #16181d;
+  --text-dim: #4f545e;
+  --text-faint: #858b97;
+  --accent: #2557d6;
+  --accent-hover: #1d48b8;
   --accent-ink: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --danger: #c0392b;
-  --ok: #1f7a45;
-  --pane-bg: #dfe1e4;
-  --page-shadow: 0 0 0 1px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.12);
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  --shadow-lg: 0 6px 24px rgba(0, 0, 0, 0.18);
-  /* shape */
-  --radius: 4px;
-  --radius-lg: 6px;
-  --radius-btn: 4px;
-  --radius-sm: 3px;
+  --danger: #c63a32;
+  --ok: #1d8049;
+  --pane-bg: #e2e5ea;
+  --shadow-rgb: 38 46 66;
+  --page-shadow: 0 0 0 0.5px rgb(var(--shadow-rgb) / 0.28), 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.09),
+    1.5px 3px 4px rgb(var(--shadow-rgb) / 0.08), 4px 8px 12px rgb(var(--shadow-rgb) / 0.07),
+    9px 18px 28px rgb(var(--shadow-rgb) / 0.06);
+  --shadow: 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.1), 1px 2px 3px rgb(var(--shadow-rgb) / 0.08);
+  --shadow-md: 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.08), 1.5px 3px 4px rgb(var(--shadow-rgb) / 0.08),
+    3px 6px 10px rgb(var(--shadow-rgb) / 0.08);
+  --shadow-lg: 0 0 0 0.5px rgb(var(--shadow-rgb) / 0.2), 1px 2px 2px rgb(var(--shadow-rgb) / 0.07),
+    2px 4px 6px rgb(var(--shadow-rgb) / 0.07), 5px 10px 14px rgb(var(--shadow-rgb) / 0.08),
+    11px 22px 32px rgb(var(--shadow-rgb) / 0.1);
+  /* a little tooth for the desk the pages lie on, so it is a material and not a fill */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .12 0 0 0 0 .18 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E");
+  /* shape: paper has square corners, controls are slightly eased, things that float a bit more */
+  --radius: 6px;
+  --radius-lg: 9px;
+  --radius-btn: 6px;
+  --radius-sm: 4px;
   --bw: 1px;
   --control-h: 30px;
   /* buttons */
@@ -34,9 +45,9 @@
   --btn-hover-bg: var(--panel-2);
   --btn-hover-border: color-mix(in srgb, var(--text) 20%, var(--border));
   --btn-hover-text: var(--text);
-  --btn-shadow: none;
+  --btn-shadow: 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.09);
   --btn-active-shadow: none;
-  --btn-press: none;
+  --btn-press: scale(0.97);
   --focus: var(--accent);
   /* the system's own interface face, so the window reads as part of the desktop */
   --font-ui: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, 'PingFang SC', sans-serif;
@@ -3537,7 +3548,6 @@ textarea {
 .home-card:hover .home-thumb,
 .home-card:focus-visible .home-thumb {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
 }
 .home-card:focus-visible {
   outline: none;
@@ -3651,6 +3661,7 @@ textarea {
 }
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--text) 22%, transparent);
+  border-radius: 6px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -3676,6 +3687,7 @@ textarea {
   left: 4px;
   width: 1px;
   background: var(--border);
+  transition: background var(--motion-fast, 0.14s) ease, width var(--motion-fast, 0.14s) ease, left var(--motion-fast, 0.14s) ease;
 }
 .split-divider:hover {
   background: transparent;
@@ -3700,11 +3712,11 @@ body.resizing .split-divider::after {
 .form-row textarea:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .modal-backdrop {
-  background: rgba(0, 0, 0, 0.38);
+  background: rgb(var(--shadow-rgb, 0 0 0) / 0.42);
 }
 .modal {
   border-radius: var(--radius-lg);
@@ -3725,6 +3737,15 @@ body.resizing .split-divider::after {
 }
 
 :root:is([data-theme='light'], [data-theme='dark'], :not([data-theme])) {
+  /* the desk */
+  .pdf-pane,
+  .translation-pane,
+  .abs-view,
+  .home {
+    background-image: var(--grain);
+  }
+
+  /* chrome: the tab strip sits back, the toolbar is the lit surface in front of it */
   .topbar {
     background: var(--bg);
     border-bottom-color: var(--border);
@@ -3735,48 +3756,102 @@ body.resizing .split-divider::after {
   .toolbar {
     padding: 7px 12px;
     border-bottom-color: var(--border);
+    box-shadow: 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.06), 1.5px 3px 5px rgb(var(--shadow-rgb) / 0.05);
     position: relative;
     z-index: 3;
   }
   .statusbar {
     background: var(--bg);
   }
-  .menu,
-  .lib-dropdown,
-  .modal {
-    border: 1px solid var(--border);
+
+  /* keys: lit from above, a shade of their own colour underneath, and they go down when pressed */
+  .btn {
+    box-shadow: var(--btn-shadow), inset 0 1px 0 rgb(255 255 255 / 0.7);
+  }
+  .btn-primary {
+    box-shadow: 0.5px 1px 1px color-mix(in srgb, var(--accent) 55%, transparent),
+      1px 2px 4px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.2),
+      inset 0 -1px 0 rgb(0 0 0 / 0.16);
+  }
+  .btn:active:not(:disabled) {
+    box-shadow: inset 0 1px 2px rgb(var(--shadow-rgb) / 0.18);
+  }
+  .btn-primary:active:not(:disabled) {
+    box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.3);
+  }
+  .btn:disabled {
+    box-shadow: none;
+  }
+  .split-btn .btn-primary + .split-caret {
+    border-left-color: rgb(255 255 255 / 0.24);
   }
 
-  /* one bordered group; the chosen view is simply filled in */
-  .segmented {
+  /* view switch: a recessed track; the thumb slides to the chosen side */
+  .toolbar .segmented {
+    position: relative;
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    border-color: transparent;
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+    box-shadow: inset 0.5px 1px 2px rgb(var(--shadow-rgb) / 0.12);
+  }
+  .toolbar .segmented::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    width: calc((100% - 6px) / 2);
+    border-radius: calc(var(--radius-btn) - 2px);
     background: var(--panel);
-    padding: 0;
-    gap: 0;
-    overflow: hidden;
+    box-shadow: var(--shadow), inset 0 1px 0 rgb(255 255 255 / 0.7);
+    transition: translate var(--motion, 0.2s) var(--ease-out, ease);
   }
-  .seg-btn {
-    border-radius: 0;
-    height: calc(var(--control-h) - 2px);
+  .toolbar .segmented:has(.seg-btn:nth-child(2).active)::before {
+    translate: calc(100% + 2px) 0;
   }
-  .seg-btn + .seg-btn {
-    border-left: 1px solid var(--border);
+  .toolbar .seg-btn {
+    position: relative;
+    justify-content: center;
   }
-  .seg-btn.active {
-    background: var(--accent-soft);
-    color: var(--accent);
+  .toolbar .seg-btn.active {
+    background: none;
     box-shadow: none;
   }
 
-  /* panel tabs: text with a rule under the current one */
+  /* panel tabs: a rule under the current one that travels when you switch */
   .sidebar-head {
     padding: 0 6px 0 4px;
     border-bottom-color: var(--border);
   }
+  .sidebar-tabs {
+    position: relative;
+    gap: 0;
+  }
+  .sidebar-tabs::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    width: calc(100% / 3);
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--accent);
+    transition: translate var(--motion, 0.2s) var(--ease-out, ease);
+  }
+  .sidebar-tabs:not(:has(.sidebar-tab:nth-child(3)))::after {
+    width: 50%;
+  }
+  .sidebar-tabs:has(.sidebar-tab:nth-child(2).active)::after {
+    translate: 100% 0;
+  }
+  .sidebar-tabs:has(.sidebar-tab:nth-child(3).active)::after {
+    translate: 200% 0;
+  }
   .sidebar-tab {
     border-radius: 0;
     padding: 9px 6px 8px;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
+    transition: color var(--motion-fast, 0.14s) ease;
   }
   .sidebar-tab:hover:not(.active) {
     color: var(--text);
@@ -3784,10 +3859,57 @@ body.resizing .split-divider::after {
   .sidebar-tab.active {
     background: none;
     color: var(--text);
-    border-bottom-color: var(--accent);
   }
   .sidebar-tab.active .icon {
     color: var(--accent);
+  }
+
+  /* library: a sheet you can pick up */
+  .home-thumb {
+    border-color: transparent;
+    box-shadow: var(--page-shadow);
+    transition: translate var(--motion, 0.2s) var(--ease-out, ease), box-shadow var(--motion, 0.2s) var(--ease-out, ease);
+  }
+  .home-card:hover .home-thumb,
+  .home-card:focus-visible .home-thumb {
+    translate: -1px -3px;
+    border-color: transparent;
+    box-shadow: 0 0 0 0.5px rgb(var(--shadow-rgb) / 0.3), 1px 2px 2px rgb(var(--shadow-rgb) / 0.08),
+      3px 6px 8px rgb(var(--shadow-rgb) / 0.08), 7px 14px 20px rgb(var(--shadow-rgb) / 0.09),
+      14px 28px 40px rgb(var(--shadow-rgb) / 0.08);
+  }
+  .home-card:active .home-thumb {
+    translate: 0 -1px;
+    transition-duration: 0.08s;
+  }
+  .home-add .home-thumb,
+  .home-add:hover .home-thumb {
+    border-color: var(--border);
+    box-shadow: none;
+    translate: none;
+  }
+  .home-add:hover .home-thumb {
+    border-color: var(--accent);
+  }
+}
+
+:root[data-theme='dark'] {
+  .btn {
+    box-shadow: 0.5px 1px 1px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+  .btn-primary {
+    box-shadow: 0.5px 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.28), inset 0 -1px 0 rgb(0 0 0 / 0.2);
+  }
+  .toolbar {
+    box-shadow: 0.5px 1px 2px rgb(0 0 0 / 0.35), 1.5px 3px 8px rgb(0 0 0 / 0.25);
+  }
+  .toolbar .segmented {
+    background: rgb(0 0 0 / 0.3);
+    box-shadow: inset 0.5px 1px 2px rgb(0 0 0 / 0.5);
+  }
+  .toolbar .segmented::before {
+    background: var(--panel-2);
+    box-shadow: 0.5px 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
 }
 
@@ -3871,7 +3993,7 @@ body.resizing .split-divider::after {
 }
 .glossary-search:focus-within {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .glossary-search input {
   flex: 1;
@@ -4150,6 +4272,6 @@ body.resizing .split-divider::after {
   margin: 0 8px;
   color: var(--border);
 }
-.progress-thumb {
-  box-shadow: none;
+:root .toolbar.is-home > .segmented {
+  display: none;
 }

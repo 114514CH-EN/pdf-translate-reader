@@ -24,25 +24,30 @@
 
 /* ---------- 默认 · 暗色 ---------- */
 :root[data-theme='dark'] {
-  /* the same tool with the lights off: neutral greys, no tint */
-  --bg: #1f1f1f;
-  --panel: #262626;
-  --panel-2: #2e2e2e;
-  --border: #3f3f3f;
-  --border-soft: #333333;
-  --text: #e6e6e6;
-  --text-dim: #a8a8a8;
-  --text-faint: #7c7c7c;
-  --accent: #5b9ef0;
-  --accent-hover: #7db3f5;
-  --accent-ink: #0b1420;
-  --danger: #e5786d;
-  --ok: #5fb884;
-  --pane-bg: #171717;
-  --btn-hover-bg: #343434;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.6);
-  --page-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
+  /* the same room at night: surfaces step up in lightness as they come forward,
+     a thin light edge stands in for the shadow that darkness swallows */
+  --bg: #17181c;
+  --panel: #1e2025;
+  --panel-2: #26282e;
+  --border: #353840;
+  --border-soft: #2b2e35;
+  --text: #e7e8ec;
+  --text-dim: #a4a9b3;
+  --text-faint: #777d89;
+  --accent: #7aa2ff;
+  --accent-hover: #96b6ff;
+  --accent-ink: #0b1226;
+  --danger: #ee7a70;
+  --ok: #5cc08a;
+  --pane-bg: #0f1013;
+  --btn-hover-bg: #2d3037;
+  --shadow-rgb: 0 0 0;
+  --shadow: 0.5px 1px 2px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 0 0 0.5px rgb(255 255 255 / 0.06), 1.5px 3px 6px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 0 0 0.5px rgb(255 255 255 / 0.1), 2px 4px 6px rgb(0 0 0 / 0.4), 6px 12px 20px rgb(0 0 0 / 0.45),
+    12px 24px 44px rgb(0 0 0 / 0.5);
+  --page-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 1.5px 3px 4px rgb(0 0 0 / 0.5), 5px 10px 18px rgb(0 0 0 / 0.5);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E");
 }
 
 /* ---------- #56 电子墨水 / 纸张 ----------
