@@ -22,7 +22,7 @@ PROMPT_VER = "v2"
 
 # Bumped on every backend change the frontend depends on. The launcher and the
 # web page compare it to detect an old server process that is still running.
-APP_VERSION = "2026.11.13-9"
+APP_VERSION = "2026.11.13-10"
 
 for d in (DATA_DIR, UPLOAD_DIR):
     d.mkdir(parents=True, exist_ok=True)

@@ -97,6 +97,18 @@ export const api = {
     return request<void>(`/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
+  /** 从零开始: a document of empty pages */
+  createBlank(title: string): Promise<{ doc_id: string }> {
+    return request<{ doc_id: string }>('/documents/blank', jsonInit('POST', { title }));
+  },
+  addPage(docId: string): Promise<{ page_no: number; page_count: number }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages`, jsonInit('POST', {}));
+  },
+  /** a text box of the reader's own on a page (kept like an edit of the original) */
+  addTextBlock(docId: string, pageNo: number, bbox: number[], text: string, size = 12): Promise<{ block_id: string }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/blocks`, jsonInit('POST', { bbox, text, size }));
+  },
+
   documentFileUrl(id: string): string {
     return `${BASE}/documents/${encodeURIComponent(id)}/file`;
   },

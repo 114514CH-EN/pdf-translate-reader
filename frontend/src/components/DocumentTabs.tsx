@@ -3,6 +3,7 @@ import { useDocStore } from '../stores/doc';
 import { useViewStore } from '../stores/view';
 import { Icon } from './Icon';
 import { withTransition } from '../lib/transition';
+import { getLang, setLang } from '../lib/i18n';
 
 /**
  * Tab strip of open documents. × closes the tab (the document stays in the
@@ -173,6 +174,15 @@ export function DocumentTabs() {
           );
         })}
       </div>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm lang-switch"
+        title={getLang() === 'en' ? '切换到中文界面' : 'Switch the interface to English'}
+        onClick={() => setLang(getLang() === 'en' ? 'zh' : 'en')}
+      >
+        <Icon name="globe" size={15} />
+        {getLang() === 'en' ? '中文' : 'EN'}
+      </button>
       <button
         type="button"
         className="btn btn-ghost btn-sm doc-tab-add"

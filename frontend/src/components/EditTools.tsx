@@ -6,6 +6,7 @@ import { useTranslationStore } from '../stores/translation';
 import { useViewStore } from '../stores/view';
 import type { EditSide, ReplaceResult } from '../types';
 import { blockBox } from './PageAbsoluteView';
+import { Icon } from './Icon';
 
 /**
  * Toolbar tools that appear in edit mode: 撤销 / 重做 and 查找替换.
@@ -130,8 +131,49 @@ export default function EditTools() {
     }
   };
 
+  // 从零编辑: a text box of one's own on the page being read, and more pages
+  const addBox = async () => {
+    const docId = useDocStore.getState().activeId;
+    if (!docId) return;
+    const pageNo = useViewStore.getState().currentPage;
+    const tr = useTranslationStore.getState();
+    const page = tr.pages[pageNo];
+    const w = page?.width ?? 595;
+    const mine = (page?.blocks ?? []).filter((b) => (b.meta as { user?: boolean } | undefined)?.user).length;
+    const top = 96 + (mine % 12) * 44;
+    try {
+      const { block_id } = await api.addTextBlock(docId, pageNo, [72, top, w - 72, top + 34], '在这里输入文字');
+      await tr.refreshPage(docId, pageNo);
+      useEditStore.getState().select(String(block_id), 'src');
+      window.dispatchEvent(new Event('pdftr:translations-changed'));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    }
+  };
+  const addPage = async () => {
+    const docId = useDocStore.getState().activeId;
+    if (!docId) return;
+    try {
+      const r = await api.addPage(docId);
+      useViewStore.getState().setPageCount(r.page_count);
+      await useDocStore.getState().loadDocuments();
+      window.setTimeout(() => useViewStore.getState().requestPageNav(r.page_no), 200);
+      toast(`已添加第 ${r.page_no} 页`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    }
+  };
+
   return (
     <>
+      <button type="button" className="btn btn-icon-text" title="在这一页放一个文本框，自己写内容（放在原文一侧，可以拖动、改大小、设格式）" onClick={() => void addBox()}>
+        <Icon name="textbox" size={15} />
+        <span className="btn-label">文本框</span>
+      </button>
+      <button type="button" className="btn btn-icon-text" title="在文档末尾加一张空白页" onClick={() => void addPage()}>
+        <Icon name="docPlus" size={15} />
+        <span className="btn-label">加一页</span>
+      </button>
       <button type="button" className="btn btn-icon-text" disabled={!canUndo} title="撤销（Ctrl+Z）" onClick={() => void undo()}>
         撤销
       </button>

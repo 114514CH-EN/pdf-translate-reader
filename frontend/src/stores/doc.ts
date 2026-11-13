@@ -37,6 +37,8 @@ interface DocState {
   loadDocuments: () => Promise<void>;
   openDocument: (id: string) => Promise<void>;
   closeDocument: (id: string) => void;
+  /** 从零开始: a new document of one empty page, opened in edit mode */
+  createBlank: (title: string) => Promise<void>;
   ensureOpen: (id: string) => void;
   uploadFile: (file: File) => Promise<string | null>;
   deleteDocument: (id: string) => Promise<void>;
@@ -113,6 +115,20 @@ export const useDocStore = create<DocState>((set, get) => ({
       const next = rest[idx] ?? rest[idx - 1] ?? null;
       if (next) get().setActive(next);
       else set({ activeId: null, detail: null });
+    }
+  },
+
+  async createBlank(title) {
+    set({ uploading: true, error: null });
+    try {
+      const { doc_id } = await api.createBlank(title);
+      await get().loadDocuments();
+      await get().openDocument(String(doc_id));
+      useViewStore.getState().setEditMode(true); // an empty document is there to be written in
+      set({ uploading: false });
+      useViewStore.getState().toast('空白文档已建好：点工具栏的「文本框」开始写', 'info');
+    } catch (e) {
+      set({ uploading: false, error: errMsg(e) });
     }
   },
 

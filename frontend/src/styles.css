@@ -1,25 +1,24 @@
 /* ===== PDF 双语翻译阅读器 — light theme ===== */
 :root {
-  /* Neutral greys carrying a trace of the accent's hue (so the chrome and the blue belong
-     together), white working surfaces, one cobalt. Light falls from above, a little left:
-     every shadow in the app shares that direction (x : y = 1 : 2) and takes its colour
-     from the surface it lands on instead of plain black. */
-  --bg: #f3f4f7;
-  --panel: #fdfdfe;
-  --panel-2: #eef0f4;
-  --border: #d3d7de;
-  --border-soft: #e5e8ed;
-  --text: #16181d;
-  --text-dim: #4f545e;
-  --text-faint: #858b97;
-  --accent: #2557d6;
-  --accent-hover: #1d48b8;
+  /* After apple.com and macOS: the light grey of the site (#f5f5f7) behind white working
+     surfaces, near-black text with two quieter greys, hairlines instead of boxes, and the
+     one system blue for anything you can act on. */
+  --bg: #f5f5f7;
+  --panel: #ffffff;
+  --panel-2: #f0f0f3;
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+  --text: #1d1d1f;
+  --text-dim: #515154;
+  --text-faint: #86868b;
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
   --accent-ink: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --danger: #c63a32;
-  --ok: #1d8049;
-  --pane-bg: #e2e5ea;
-  --shadow-rgb: 38 46 66;
+  --danger: #d70015;
+  --ok: #1f8a3d;
+  --pane-bg: #e8e8ed;
+  --shadow-rgb: 0 0 0;
   --page-shadow: 0 0 0 0.5px rgb(var(--shadow-rgb) / 0.28), 0.5px 1px 1px rgb(var(--shadow-rgb) / 0.09),
     1.5px 3px 4px rgb(var(--shadow-rgb) / 0.08), 4px 8px 12px rgb(var(--shadow-rgb) / 0.07),
     9px 18px 28px rgb(var(--shadow-rgb) / 0.06);
@@ -32,10 +31,10 @@
   /* a little tooth for the desk the pages lie on, so it is a material and not a fill */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .12 0 0 0 0 .18 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E");
   /* shape: paper has square corners, controls are slightly eased, things that float a bit more */
-  --radius: 6px;
-  --radius-lg: 9px;
-  --radius-btn: 6px;
-  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-btn: 8px;
+  --radius-sm: 6px;
   --bw: 1px;
   --control-h: 30px;
   /* buttons */
@@ -50,7 +49,8 @@
   --btn-press: scale(0.97);
   --focus: var(--accent);
   /* the system's own interface face, so the window reads as part of the desktop */
-  --font-ui: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, 'PingFang SC', sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   --font-read: var(--font-ui);
   --font-num: var(--font-ui);
   --ease: 0.14s ease;
@@ -4976,4 +4976,192 @@ body.resizing .split-divider::after {
 .formula-preview > span.formula-empty,
 .formula-preview > span.formula-error {
   width: auto;
+}
+
+/* ============================================================
+   Closer to Apple (v1.13), default light / dark themes:
+   capsule for the one primary action, materials (a translucent, blurred surface) for
+   things that float over the page, tight bold titles, hairlines.
+   ============================================================ */
+:root:is([data-theme='light'], [data-theme='dark'], :not([data-theme])) {
+  .toolbar {
+    box-shadow: none;
+    border-bottom-color: var(--border);
+  }
+  .topbar {
+    background: var(--bg);
+  }
+  /* the primary action is a capsule, as on apple.com */
+  .btn-primary {
+    border-radius: 980px;
+    padding-left: 15px;
+    padding-right: 15px;
+    box-shadow: none;
+    font-weight: 500;
+  }
+  .btn-primary:active:not(:disabled) {
+    box-shadow: none;
+    filter: brightness(0.92);
+  }
+  .split-btn .btn-primary:first-child {
+    border-radius: 980px 0 0 980px;
+    padding-right: 10px;
+  }
+  .split-btn .btn-primary.split-caret {
+    border-radius: 0 980px 980px 0;
+    padding-left: 7px;
+    padding-right: 10px;
+  }
+  .btn {
+    box-shadow: none;
+  }
+  .btn:active:not(:disabled) {
+    box-shadow: none;
+  }
+  .toolbar .segmented {
+    box-shadow: none;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+
+  /* materials: what floats lets the page show through, softened */
+  .menu,
+  .lib-dropdown,
+  .formula-editor,
+  .focus-exit,
+  .sel-bar,
+  .edit-bar,
+  .home-peek {
+    background: color-mix(in srgb, var(--panel) 78%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  .toast {
+    background: color-mix(in srgb, var(--text) 78%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-radius: 980px;
+    padding: 8px 16px 8px 14px;
+  }
+  .modal-backdrop {
+    background: rgb(0 0 0 / 0.32);
+  }
+  .modal {
+    border-radius: 14px;
+  }
+  .menu-item:hover,
+  .theme-item:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+  .menu-item:hover .menu-kbd,
+  .theme-item:hover small {
+    color: rgb(255 255 255 / 0.8);
+  }
+
+  /* titles: large, bold, tight */
+  .home-now-title {
+    font-weight: 700;
+    letter-spacing: -0.022em;
+  }
+  .home-head .home-title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .modal-head h2 {
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+  .home-thumb,
+  .home-now-sheet {
+    border-radius: 4px;
+  }
+}
+
+/* ---- 悬停预览: the card you rest on comes forward, showing the page you stopped at ---- */
+.home-peek {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid rgb(var(--shadow-rgb, 0 0 0) / 0.12);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  animation: peek-in 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes peek-in {
+  from {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+.home-peek-sheet {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: #fff;
+  aspect-ratio: 1 / 0.78;
+  overflow: hidden;
+  cursor: pointer;
+}
+.home-peek-sheet img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+:root[data-scheme='dark'] .home-peek-sheet img {
+  filter: brightness(0.86) contrast(0.97);
+}
+.home-peek-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.home-peek-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home-peek-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.home-peek-actions .btn {
+  height: 30px;
+  padding: 0 18px;
+}
+@media (hover: none) {
+  .home-peek {
+    display: none;
+  }
+}
+.home-blank {
+  margin-top: -10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none !important;
+}
+.home-blank:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+.home-now-actions {
+  flex-wrap: wrap;
 }

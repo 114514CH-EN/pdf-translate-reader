@@ -103,6 +103,104 @@ async def upload_document(file: UploadFile):
     return {"doc_id": doc_id, "warning": warning}
 
 
+PAPER = {"a4": (595.0, 842.0), "letter": (612.0, 792.0), "a4-landscape": (842.0, 595.0)}
+
+
+@router.post("/blank")
+async def create_blank_document(payload: dict | None = None):
+    """从零开始: a document of empty pages, to be written in edit mode (text boxes, formulas)."""
+    payload = payload or {}
+    title = "".join(ch for ch in str(payload.get("title") or "").strip() if ch not in '\\/:*?"<>|')[:120] or "未命名文档"
+    w, h = PAPER.get(str(payload.get("paper") or "a4").lower(), PAPER["a4"])
+    try:
+        n = min(50, max(1, int(payload.get("pages") or 1)))
+    except (TypeError, ValueError):
+        n = 1
+    pdf = fitz.open()
+    for _ in range(n):
+        pdf.new_page(width=w, height=h)
+    data = pdf.tobytes()
+    pdf.close()
+    with get_db() as db:
+        doc_id = db.execute("INSERT INTO documents (title, file_path, status) VALUES (?, ?, ?)", (title, "", "extracting")).lastrowid
+    doc_dir = _doc_dir(doc_id)
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = doc_dir / "original.pdf"
+    pdf_path.write_bytes(data)
+    await run_in_threadpool(_extract_document, doc_id, pdf_path)
+    with get_db() as db:
+        db.execute(
+            "UPDATE documents SET file_path=?, status='ready', updated_at=datetime('now'), last_opened_at=datetime('now') WHERE id=?",
+            (str(pdf_path), doc_id),
+        )
+    return {"doc_id": doc_id}
+
+
+@router.post("/{doc_id}/pages")
+def add_blank_page(doc_id: int):
+    """One more empty page at the end (same size as the last one)."""
+    with get_db() as db:
+        row = db.execute("SELECT file_path, page_count FROM documents WHERE id=?", (doc_id,)).fetchone()
+        last = db.execute("SELECT width, height FROM pages WHERE doc_id=? ORDER BY page_no DESC LIMIT 1", (doc_id,)).fetchone()
+    if row is None or not row["file_path"] or not Path(row["file_path"]).exists():
+        raise HTTPException(404, "文档不存在")
+    if (row["page_count"] or 0) >= 500:
+        raise HTTPException(400, "页数太多了")
+    path = Path(row["file_path"])
+    w, h = (last["width"], last["height"]) if last else PAPER["a4"]
+    pdf = fitz.open(path)
+    try:
+        pdf.new_page(width=w, height=h)
+        n = pdf.page_count
+        tmp = path.with_suffix(".tmp.pdf")
+        pdf.save(tmp, garbage=0, deflate=True)
+    finally:
+        pdf.close()
+    tmp.replace(path)
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO pages (doc_id, page_no, width, height, extract_json, status) VALUES (?, ?, ?, ?, ?, 'done')",
+            (doc_id, n, w, h, json.dumps({"width": w, "height": h, "blocks": [], "images": []})),
+        )
+        db.execute("UPDATE documents SET page_count=?, updated_at=datetime('now') WHERE id=?", (n, doc_id))
+    return {"page_no": n, "page_count": n}
+
+
+@router.post("/{doc_id}/pages/{page_no}/blocks")
+def add_text_block(doc_id: int, page_no: int, payload: dict):
+    """A text box of the reader's own. It is kept like an edit of the original ("__src__"),
+    so it shows on the original side, can be moved / restyled / translated like any block,
+    and is written into the exported PDFs."""
+    import uuid
+
+    text = str(payload.get("text") or "").strip()[:4000]
+    if not text:
+        raise HTTPException(400, "text 必填")
+    try:
+        x0, y0, x1, y1 = (round(float(v), 2) for v in payload["bbox"])
+        size = min(72.0, max(6.0, float(payload.get("size") or 12)))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(400, "bbox 无效") from e
+    with get_db() as db:
+        pg = db.execute("SELECT id, width, height FROM pages WHERE doc_id=? AND page_no=?", (doc_id, page_no)).fetchone()
+        if pg is None:
+            raise HTTPException(404, "页面不存在")
+        x0, x1 = max(0.0, min(x0, x1)), min(float(pg["width"]), max(x0, x1))
+        y0, y1 = max(0.0, min(y0, y1)), min(float(pg["height"]), max(y0, y1))
+        if x1 - x0 < 8 or y1 - y0 < 8:
+            raise HTTPException(400, "文本框太小")
+        nxt = db.execute("SELECT COALESCE(MAX(order_idx), -1) + 1 FROM blocks WHERE page_id=?", (pg["id"],)).fetchone()[0]
+        style = {"size": size, "font": "helv", "bold": False, "italic": False, "color": 0, "align": "left"}
+        block_id = db.execute(
+            "INSERT INTO blocks (doc_id, page_id, page_no, order_idx, type, level, bbox_json, style_json, meta_json,"
+            " text, font_size, bold, list_marker, stable_key) VALUES (?,?,?,?, 'paragraph', 0, ?,?,?,?,?, 0, NULL, ?)",
+            (doc_id, pg["id"], page_no, nxt, json.dumps([x0, y0, x1, y1]), json.dumps(style),
+             json.dumps({"user": True, "ph": text}, ensure_ascii=False), text, size, f"user-{uuid.uuid4().hex[:12]}"),
+        ).lastrowid
+        db.execute("INSERT INTO translations (block_id, lang, text, edited) VALUES (?, '__src__', ?, 1)", (block_id, text))
+    return {"block_id": block_id}
+
+
 def _extract_document(doc_id: int, pdf_path: Path, db=None) -> None:
     if db is None:
         with get_db() as conn:
@@ -186,8 +284,21 @@ def reextract_document(doc_id: int) -> int:
             "SELECT id, block_id FROM notes WHERE doc_id=? AND block_id IS NOT NULL", (doc_id,)
         ).fetchall()
         old_runs = _page_runs(db, doc_id)
+        # text boxes the reader added themselves are not in the PDF: carry them across
+        own = [dict(r) for r in db.execute("SELECT * FROM blocks WHERE doc_id=? AND meta_json LIKE '%\"user\"%'", (doc_id,))]
 
         _extract_document(doc_id, Path(row["file_path"]), db)
+        for b in own:
+            pg = db.execute("SELECT id FROM pages WHERE doc_id=? AND page_no=?", (doc_id, b["page_no"])).fetchone()
+            if pg is None:
+                continue
+            nxt = db.execute("SELECT COALESCE(MAX(order_idx), -1) + 1 FROM blocks WHERE page_id=?", (pg["id"],)).fetchone()[0]
+            db.execute(
+                "INSERT INTO blocks (doc_id, page_id, page_no, order_idx, type, level, bbox_json, style_json, meta_json,"
+                " text, font_size, bold, list_marker, stable_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (doc_id, pg["id"], b["page_no"], nxt, b["type"], b["level"], b["bbox_json"], b["style_json"], b["meta_json"],
+                 b["text"], b["font_size"], b["bold"], b["list_marker"], b["stable_key"]),
+            )
 
         new_ids: dict[tuple, list[int]] = {}
         for r in db.execute("SELECT id, page_no, type, text FROM blocks WHERE doc_id=? ORDER BY page_no, order_idx", (doc_id,)):

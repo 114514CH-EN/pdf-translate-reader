@@ -26,6 +26,9 @@ import '../motion.css';
 import '../themes.css';
 import { useViewStore } from '../stores/view';
 import { setPetMode } from './mode';
+import { startEnglish } from '../lib/i18n';
+
+startEnglish();
 
 // decided before the first render: the sidebar drops its 阅读助手 tab and the
 // pet takes over, so it opens on 笔记 instead

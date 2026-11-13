@@ -24,23 +24,22 @@
 
 /* ---------- 默认 · 暗色 ---------- */
 :root[data-theme='dark'] {
-  /* the same room at night: surfaces step up in lightness as they come forward,
-     a thin light edge stands in for the shadow that darkness swallows */
-  --bg: #17181c;
-  --panel: #1e2025;
-  --panel-2: #26282e;
-  --border: #353840;
-  --border-soft: #2b2e35;
-  --text: #e7e8ec;
-  --text-dim: #a4a9b3;
-  --text-faint: #777d89;
-  --accent: #7aa2ff;
-  --accent-hover: #96b6ff;
-  --accent-ink: #0b1226;
-  --danger: #ee7a70;
-  --ok: #5cc08a;
-  --pane-bg: #0f1013;
-  --btn-hover-bg: #2d3037;
+  /* macOS at night: true black behind, greys stepping forward, the brighter system blue */
+  --bg: #1c1c1e;
+  --panel: #242426;
+  --panel-2: #2c2c2e;
+  --border: #3a3a3c;
+  --border-soft: #2f2f31;
+  --text: #f5f5f7;
+  --text-dim: #aeaeb2;
+  --text-faint: #8e8e93;
+  --accent: #2997ff;
+  --accent-hover: #47a6ff;
+  --accent-ink: #ffffff;
+  --danger: #ff453a;
+  --ok: #30d158;
+  --pane-bg: #111112;
+  --btn-hover-bg: #343436;
   --shadow-rgb: 0 0 0;
   --shadow: 0.5px 1px 2px rgb(0 0 0 / 0.45);
   --shadow-md: 0 0 0 0.5px rgb(255 255 255 / 0.06), 1.5px 3px 6px rgb(0 0 0 / 0.5);

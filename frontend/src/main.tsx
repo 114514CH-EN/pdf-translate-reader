@@ -25,6 +25,9 @@ import '@fontsource/cormorant-garamond/latin-600.css';
 import './styles.css';
 import './motion.css';
 import './themes.css';
+import { startEnglish } from './lib/i18n';
+
+startEnglish();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('root 元素不存在');

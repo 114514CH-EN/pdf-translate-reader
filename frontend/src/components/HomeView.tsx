@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useViewStore } from '../stores/view';
 import type { DocumentRow } from '../types';
 import { useDocStore } from '../stores/doc';
@@ -13,6 +13,18 @@ import { withTransition } from '../lib/transition';
  */
 type Sort = 'recent' | 'name' | 'progress' | 'pages';
 
+/** "今天" / "昨天" / "3 天前" / "2026-10-02" — when a document was last opened (the server keeps UTC) */
+function ago(v: string | null): string {
+  if (!v) return '还没打开过';
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) || !v.includes(' ') ? v : v.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(d.getTime())) return '';
+  const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
+  if (days <= 0) return '今天打开过';
+  if (days === 1) return '昨天打开过';
+  if (days < 30) return `${days} 天前打开过`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 打开过`;
+}
+
 export default function HomeView() {
   const documents = useDocStore((s) => s.documents);
   const openDocument = useDocStore((s) => s.openDocument);
@@ -22,8 +34,30 @@ export default function HomeView() {
   const setHomeOpen = useViewStore((s) => s.setHomeOpen);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
+  // 悬停预览: rest the pointer on a card for a moment and it comes forward with more to see
+  const [peek, setPeek] = useState<{ id: string; x: number; y: number; w: number } | null>(null);
+  const peekTimer = useRef(0);
+  const armPeek = (id: string, el: HTMLElement) => {
+    window.clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      setPeek({ id, x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width });
+    }, 480);
+  };
+  const dropPeek = (soon = true) => {
+    window.clearTimeout(peekTimer.current);
+    if (soon) peekTimer.current = window.setTimeout(() => setPeek(null), 120);
+    else setPeek(null);
+  };
+  useEffect(() => () => window.clearTimeout(peekTimer.current), []);
 
   const pick = () => fileRef.current?.click();
+  const newBlank = () => {
+    const d = new Date();
+    const title = `新文档 ${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    useViewStore.getState().setHomeOpen(false);
+    void useDocStore.getState().createBlank(title);
+  };
   const input = (
     <input
       ref={fileRef}
@@ -50,6 +84,10 @@ export default function HomeView() {
             <span className="home-drop-title">{uploading ? '正在上传…' : '把 PDF 拖到这里'}</span>
             <span className="home-drop-sub">或者点击选择文件</span>
           </button>
+          <button type="button" className="btn home-blank" onClick={newBlank} disabled={uploading}>
+            <Icon name="docPlus" size={15} />
+            或者从一张空白页开始，自己写一份
+          </button>
           <ol className="home-steps">
             <li>上传一份 PDF（论文、课件、手册都可以）</li>
             <li>在 ⚙ 设置里填好翻译 API，点「翻译全文」</li>
@@ -68,6 +106,7 @@ export default function HomeView() {
   };
   const thumb = (d: DocumentRow, page = 1) => `/api/documents/${encodeURIComponent(d.id)}/pages/${page}/original.png`;
   const go = (d: DocumentRow) => {
+    dropPeek(false);
     withTransition(() => {
       setHomeOpen(false);
       void openDocument(String(d.id));
@@ -119,6 +158,10 @@ export default function HomeView() {
                 <Icon name="upload" size={15} />
                 {uploading ? '正在上传…' : '添加 PDF'}
               </button>
+              <button type="button" className="btn" onClick={newBlank} disabled={uploading} title="从一张空白页开始，自己写一份 PDF">
+                <Icon name="docPlus" size={15} />
+                新建空白文档
+              </button>
             </div>
           </div>
         </section>
@@ -151,7 +194,14 @@ export default function HomeView() {
               const st = state(d);
               const page = Math.min(Math.max(d.last_page ?? 1, 1), d.page_count || 1);
               return (
-                <button key={d.id} type="button" className="home-card" onClick={() => go(d)} title={d.title}>
+                <button
+                  key={d.id}
+                  type="button"
+                  className="home-card"
+                  onClick={() => go(d)}
+                  onMouseEnter={(e) => armPeek(String(d.id), e.currentTarget)}
+                  onMouseLeave={() => dropPeek()}
+                >
                   <span className="home-thumb">
                     <img src={thumb(d)} alt="" loading="lazy" draggable={false} />
                     {/* what you get by opening it, shown when the card is pointed at */}
@@ -181,6 +231,41 @@ export default function HomeView() {
           {q && rest.length === 0 && <div className="empty-hint">没有名称里带「{query.trim()}」的文档</div>}
         </section>
       </div>
+      {(() => {
+        const d = peek && documents.find((x) => String(x.id) === peek.id);
+        if (!peek || !d) return null;
+        const st = state(d);
+        const page = Math.min(Math.max(d.last_page ?? 1, 1), d.page_count || 1);
+        const w = Math.max(300, Math.round(peek.w * 1.55));
+        const left = Math.min(Math.max(12, peek.x - w / 2), window.innerWidth - w - 12);
+        const h = w * 0.78 + 150;
+        const top = Math.min(Math.max(12, peek.y - h / 2), window.innerHeight - h - 12);
+        return (
+          <div
+            className="home-peek"
+            style={{ left, top, width: w }}
+            onMouseEnter={() => window.clearTimeout(peekTimer.current)}
+            onMouseLeave={() => dropPeek()}
+          >
+            <button type="button" className="home-peek-sheet" onClick={() => go(d)} aria-label={`打开 ${d.title}`}>
+              <img src={thumb(d, page)} alt="" draggable={false} />
+            </button>
+            <div className="home-peek-body">
+              <div className="home-peek-title">{d.title}</div>
+              <div className="home-peek-meta">
+                <span>{page > 1 ? `读到第 ${page} 页，共 ${d.page_count} 页` : `共 ${d.page_count} 页`}</span>
+                <span>{st.label}</span>
+                <span>{ago(d.last_opened_at)}</span>
+              </div>
+              <div className="home-peek-actions">
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => go(d)}>
+                  {page > 1 ? '继续阅读' : '开始阅读'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

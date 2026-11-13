@@ -186,7 +186,7 @@ export function PdfPane({
 
     (async () => {
       try {
-        const res = await fetch(api.documentFileUrl(docId));
+        const res = await fetch(api.documentFileUrl(docId), { cache: 'no-store' }); // pages may have been added
         if (!res.ok) throw new Error(`获取 PDF 失败 (${res.status})`);
         const data = await res.arrayBuffer();
         if (cancelled) return;
