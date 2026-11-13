@@ -1180,12 +1180,10 @@ textarea {
 
 .flow-sent {
   padding: 3px 6px;
-  border-left: 2px solid var(--border-soft);
   border-radius: var(--radius-sm);
 }
 
 .flow-sent:hover {
-  border-left-color: var(--accent);
   background: var(--accent-soft);
 }
 
@@ -1223,7 +1221,7 @@ textarea {
 }
 
 .flow-pair.failed {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 70%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
 }
 
 .orig-figure {
@@ -1313,7 +1311,7 @@ textarea {
 }
 
 .flow-pair + .flow-pair {
-  border-top: 1px dashed var(--border-soft);
+  border-top: 1px solid var(--border-soft);
 }
 
 .flow-pair.hovered {
@@ -1950,7 +1948,6 @@ textarea {
 .toast {
   background: var(--panel);
   border: var(--bw) solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 9px 12px;
@@ -1959,13 +1956,7 @@ textarea {
   animation: toast-in 0.18s ease;
 }
 
-.toast.error {
-  border-left-color: var(--danger);
-}
 
-.toast.success {
-  border-left-color: var(--ok);
-}
 
 @keyframes toast-in {
   from {
@@ -2362,8 +2353,6 @@ textarea {
 .sel-quote {
   font-size: 12px;
   color: var(--text-dim);
-  border-left: 3px solid var(--border);
-  padding-left: 8px;
   line-height: 1.5;
 }
 .sel-loading {
@@ -2835,9 +2824,9 @@ textarea {
 }
 .md blockquote {
   margin: 4px 0;
-  padding: 2px 0 2px 8px;
-  border-left: 3px solid var(--border);
+  padding: 2px 0 2px 14px;
   color: var(--text-dim);
+  font-style: italic;
   font-size: 12px;
   white-space: pre-wrap;
 }
@@ -2878,14 +2867,11 @@ textarea {
   gap: 4px;
   padding: 2px 10px 8px;
 }
-.hl-item {
-  border-left-width: 4px !important;
-}
-.hl-border-yellow { border-left-color: #ffd633 !important; }
-.hl-border-green { border-left-color: #78d66e !important; }
-.hl-border-blue { border-left-color: #6eb0ff !important; }
-.hl-border-pink { border-left-color: #ff8cbe !important; }
-.hl-border-orange { border-left-color: #ffa846 !important; }
+.hl-border-yellow { --hl: #ffd633; }
+.hl-border-green { --hl: #78d66e; }
+.hl-border-blue { --hl: #6eb0ff; }
+.hl-border-pink { --hl: #ff8cbe; }
+.hl-border-orange { --hl: #ffa846; }
 .hl-quote {
   font-size: 13px;
   line-height: 1.55;
@@ -2935,8 +2921,7 @@ textarea {
 }
 .thinking-box .thinking-text {
   white-space: pre-wrap;
-  border-left: 2px solid var(--border);
-  padding: 4px 0 4px 8px;
+  padding: 4px 0;
   margin-top: 4px;
   max-height: 220px;
   overflow: auto;
@@ -4686,4 +4671,140 @@ body.resizing .split-divider::after {
 
 :root .app.is-focus .toolbar {
   display: none !important;
+}
+
+/* ============================================================
+   No boxed cards with a coloured edge (v1.11.2).
+   Lists are rows told apart by space and a hairline; a highlight shows its colour the way
+   a highlighter does — on the words; a message is a small dark bar with a sign in front.
+   ============================================================ */
+
+/* ---- notes and highlights: rows, not cards ---- */
+.notes-list {
+  gap: 0;
+  padding: 0 12px 12px;
+}
+.notes-list > .note-item {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.notes-list > .note-item:last-child {
+  border-bottom: 0;
+}
+.note-meta {
+  margin-bottom: 6px;
+}
+.note-meta .badge {
+  padding: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.note-meta .badge-btn:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.hl-quote {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.hl-quote span {
+  padding: 2px 1px;
+  background: color-mix(in srgb, var(--hl, #ffd633) 42%, transparent);
+  border-radius: 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+:root[data-scheme='dark'] .hl-quote span {
+  background: color-mix(in srgb, var(--hl, #ffd633) 30%, transparent);
+}
+.note-item .note-content {
+  color: var(--text);
+  line-height: 1.6;
+}
+.note-item .note-actions {
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity var(--motion-fast, 0.14s) ease;
+}
+.note-item:hover .note-actions,
+.note-item:focus-within .note-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .note-item .note-actions {
+    opacity: 1;
+  }
+}
+
+/* ---- glossary: rows as well ---- */
+.glossary-list {
+  gap: 0;
+  padding: 8px 10px 12px;
+}
+.glossary-list > .term-card {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 7px 0 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.glossary-list > .term-card:last-child {
+  border-bottom: 0;
+}
+.glossary-list > .term-card:hover,
+.glossary-list > .term-card:focus-within {
+  border-color: var(--border-soft);
+}
+.glossary-count {
+  padding-bottom: 4px;
+}
+
+/* ---- the assistant's set-up note: text and two buttons, no frame ---- */
+.setup-card {
+  border: 0;
+  background: none;
+  padding: 6px 4px;
+}
+
+/* ---- messages: one small bar at the bottom, dark on light and light on dark ---- */
+.toasts {
+  left: 50%;
+  right: auto;
+  bottom: 44px;
+  transform: translateX(-50%);
+  align-items: center;
+  max-width: min(520px, calc(100vw - 32px));
+}
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--text) 92%, var(--panel));
+  color: var(--panel);
+  padding: 8px 14px 8px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-lg);
+}
+.toast-icon {
+  flex: none;
+}
+.toast.success .toast-icon {
+  color: color-mix(in srgb, var(--ok) 45%, #b9f5d0);
+}
+.toast.error .toast-icon {
+  color: color-mix(in srgb, var(--danger) 40%, #ffc9c2);
+}
+:root[data-scheme='dark'] .toast.success .toast-icon {
+  color: #1d8049;
+}
+:root[data-scheme='dark'] .toast.error .toast-icon {
+  color: #c63a32;
 }

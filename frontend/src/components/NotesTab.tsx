@@ -168,7 +168,9 @@ export function NotesTab({ docId }: { docId: string }) {
                     {h.pane === 'src' ? '原文' : '译文'}第 {h.page_no} 页
                   </button>
                 </div>
-                <div className="hl-quote">“{h.text.length > 220 ? h.text.slice(0, 220) + '…' : h.text}”</div>
+                <div className="hl-quote">
+                  <span>{h.text.length > 220 ? h.text.slice(0, 220) + '…' : h.text}</span>
+                </div>
                 {hlEditing === h.id ? (
                   <>
                     <textarea className="notes-input" rows={3} autoFocus value={hlText} onChange={(e) => setHlText(e.target.value)} />

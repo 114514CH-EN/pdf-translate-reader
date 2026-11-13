@@ -20,6 +20,7 @@ const PATHS: Record<string, string> = {
   home: 'M4 11l8-7 8 7M6 10v9h4v-5h4v5h4v-9',
   library: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.8 1 -3.6 14.5-3.8-1z',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
+  alert: 'M12 8v5M12 16.2v.3M12 3a9 9 0 100 18 9 9 0 000-18z',
   check: 'M5 12.5l4.5 4.5L19 7',
   upload: 'M12 20V9M7 14l5-5 5 5M5 4h14',
   page: 'M6 3h9l4 4v14H6zM14 3v5h5',

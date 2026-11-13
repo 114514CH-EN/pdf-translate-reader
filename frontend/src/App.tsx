@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-6';
+const EXPECTED_BACKEND = '2026.11.13-7';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -9,6 +9,7 @@ import { Toolbar } from './components/Toolbar';
 import { PageAbsoluteView } from './components/PageAbsoluteView';
 import { FlowTranslationPane } from './components/FlowTranslationPane';
 import { Sidebar } from './components/Sidebar';
+import { Icon } from './components/Icon';
 import { ProgressStrip } from './components/ProgressStrip';
 import { SearchBar } from './components/SearchBar';
 import { SelectionToolbar } from './components/SelectionToolbar';
@@ -39,8 +40,10 @@ function Toasts() {
   return (
     <div className="toasts">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`} onClick={() => dismiss(t.id)}>
-          {t.text}
+        <div key={t.id} className={`toast ${t.kind}`} role="status" onClick={() => dismiss(t.id)}>
+          {t.kind === 'success' && <Icon name="check" size={14} className="toast-icon" />}
+          {t.kind === 'error' && <Icon name="alert" size={14} className="toast-icon" />}
+          <span>{t.text}</span>
         </div>
       ))}
     </div>

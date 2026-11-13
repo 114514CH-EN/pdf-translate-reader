@@ -70,7 +70,7 @@
   animation: ui-drop var(--motion) var(--ease-out);
 }
 .toast {
-  animation: ui-slide-left var(--motion) var(--ease-out);
+  animation: ui-rise var(--motion) var(--ease-out);
 }
 
 

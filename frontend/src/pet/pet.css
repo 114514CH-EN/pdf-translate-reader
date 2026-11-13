@@ -641,9 +641,7 @@
 .pet-quote {
   display: block;
   margin-bottom: 3px;
-  padding-left: 7px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-size: 11.5px;
   white-space: normal;
 }
