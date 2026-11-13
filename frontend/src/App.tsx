@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-2';
+const EXPECTED_BACKEND = '2026.11.13-3';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -80,6 +80,12 @@ export default function App() {
     void api.getDocument(id).then((d) => useDocStore.getState().patchDetail({ src_edits: d.src_edits ?? 0 })).catch(() => undefined);
   }, [editMode]);
   useEffect(() => setSrcOriginal(false), [activeId]);
+  // the window / tab is named after what is being read
+  useEffect(() => {
+    const base = isPetMode() ? 'PDF 双语翻译阅读器（桌宠版）' : 'PDF 双语翻译阅读器';
+    const doc = documents.find((d) => String(d.id) === String(activeId));
+    document.title = doc ? `${doc.title} - ${base}` : base;
+  }, [activeId, documents]);
   const showSrcEdited = mode === 'page' && (editMode || (srcEdits > 0 && !srcOriginal));
 
   const job = useTranslationStore((s) => s.job);

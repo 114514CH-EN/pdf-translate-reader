@@ -43,7 +43,7 @@
 .auth-card,
 .crash-card,
 .drop-overlay-card {
-  animation: ui-dialog 0.22s var(--ease-out);
+  animation: ui-dialog 0.2s var(--ease-out);
 }
 /* menus grow out of the button that opened them, not out of their own middle */
 .menu {
@@ -125,13 +125,12 @@
   transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
 }
 
-/* ---- changing the theme: colours cross-fade instead of snapping ---- */
+/* ---- changing the theme: every surface changes in the same frame, nothing trails behind ---- */
 :root.theme-switching,
 :root.theme-switching *,
 :root.theme-switching *::before,
 :root.theme-switching *::after {
-  transition: background-color var(--motion-slow) ease, color var(--motion-slow) ease,
-    border-color var(--motion-slow) ease, box-shadow var(--motion-slow) ease, filter var(--motion-slow) ease !important;
+  transition: none !important;
 }
 
 /* ---- translation progress: one bar across the window, a marker on the page being read ---- */

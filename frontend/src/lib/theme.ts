@@ -50,12 +50,18 @@ export function applyTheme(mode: ThemeMode): void {
   const set = () => {
     const id = resolveTheme(mode);
     if (root.dataset.theme && root.dataset.theme !== id) {
-      // colours cross-fade for a moment instead of snapping (motion.css)
+      // a new theme arrives whole: nothing animates while the colours change (motion.css)
       root.classList.add('theme-switching');
-      window.setTimeout(() => root.classList.remove('theme-switching'), 380);
+      window.setTimeout(() => root.classList.remove('theme-switching'), 60);
     }
     root.dataset.theme = id;
     root.dataset.scheme = THEMES.find((t) => t.id === id)?.dark ? 'dark' : 'light';
+    // the browser's own chrome (title bar of an installed app, mobile address bar) takes the page colour
+    window.requestAnimationFrame(() => {
+      const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (bg && meta) meta.setAttribute('content', bg);
+    });
   };
   mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   listener = set;

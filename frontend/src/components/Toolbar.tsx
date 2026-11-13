@@ -23,6 +23,18 @@ const EXPORT_ITEMS: { format: ExportFormat; label: string; suffix: string }[] = 
 
 type TranslateAction = 'doc' | 'page' | 'page_force' | 'doc_force' | 'polish';
 
+/** A menu button answers the press itself; `click` is kept for the keyboard (detail === 0). */
+function press(fn: () => void) {
+  return {
+    onMouseDown: (e: React.MouseEvent) => {
+      if (e.button === 0) fn();
+    },
+    onClick: (e: React.MouseEvent) => {
+      if (e.detail === 0) fn();
+    },
+  };
+}
+
 export function Toolbar() {
   const mode = useViewStore((s) => s.mode);
   const setMode = useViewStore((s) => s.setMode);
@@ -366,7 +378,7 @@ export function Toolbar() {
             disabled={!activeId || busy || jobActive}
             aria-label="更多翻译选项"
             aria-expanded={trOpen}
-            onClick={() => setTrOpen(!trOpen)}
+            {...press(() => setTrOpen(!trOpen))}
           >
             <Icon name="chevronDown" size={14} />
           </button>
@@ -406,7 +418,7 @@ export function Toolbar() {
             className="btn"
             disabled={!activeId}
             aria-expanded={exportOpen}
-            onClick={() => setExportOpen(!exportOpen)}
+            {...press(() => setExportOpen(!exportOpen))}
           >
             <Icon name="download" />
             <span className="btn-label">导出</span>
@@ -434,7 +446,7 @@ export function Toolbar() {
             title="界面风格"
             aria-label="界面风格"
             aria-expanded={themeOpen}
-            onClick={() => setThemeOpen(!themeOpen)}
+            {...press(() => setThemeOpen(!themeOpen))}
           >
             <Icon name="palette" />
           </button>

@@ -66,10 +66,12 @@ export function AssistantTab({ docId }: { docId: string }) {
     setInput('');
     await send(msg, page());
   };
+  const [copied, setCopied] = useState<string | null>(null);
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast('已复制', 'success');
+      setCopied(text);
+      window.setTimeout(() => setCopied((c) => (c === text ? null : c)), 1400);
     } catch {
       toast('复制失败：浏览器不允许访问剪贴板', 'error');
     }
@@ -193,8 +195,8 @@ export function AssistantTab({ docId }: { docId: string }) {
                     </span>
                   )}
                   <span className="chat-foot-actions">
-                    <button type="button" className="icon-btn" title="复制回答" aria-label="复制回答" onClick={() => void copy(m.content)}>
-                      <Icon name="copy" size={13} />
+                    <button type="button" className="icon-btn" title={copied === m.content ? '已复制' : '复制回答'} aria-label="复制回答" onClick={() => void copy(m.content)}>
+                      <Icon name={copied === m.content ? 'check' : 'copy'} size={13} className={copied === m.content ? 'copied-mark' : undefined} />
                     </button>
                     {i === lastAssistant && (
                       <button

@@ -98,9 +98,15 @@ export function NotesTab({ docId }: { docId: string }) {
         <textarea
           className="notes-input"
           rows={3}
-          placeholder="记点什么…"
+          placeholder="记点什么…（Ctrl+Enter 添加）"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && draft.trim()) {
+              e.preventDefault();
+              void addNote();
+            }
+          }}
         />
         <div className="notes-compose-row">
           <label className="check-label">

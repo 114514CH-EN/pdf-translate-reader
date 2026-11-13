@@ -87,19 +87,25 @@ export function GlossaryTab({ docId }: { docId: string }) {
     id: string,
     body: Partial<Pick<GlossaryTerm, 'src_term' | 'tgt_term' | 'note' | 'status'>> & { scope?: 'global' | 'doc'; doc_id?: string },
   ) => {
+    // the row changes at once; the server catches up, and a refusal puts the old row back
+    const before = terms;
+    setTerms((rows) => rows.map((t) => (t.id === id ? ({ ...t, ...body } as GlossaryTerm) : t)));
     try {
       await api.updateGlossary(id, body);
       await refresh();
     } catch (e) {
+      setTerms(before);
       toast(`更新术语失败：${errMsg(e)}`, 'error');
     }
   };
 
   const remove = async (id: string) => {
+    const before = terms;
+    setTerms((rows) => rows.filter((t) => t.id !== id));
     try {
       await api.deleteGlossary(id);
-      await refresh();
     } catch (e) {
+      setTerms(before);
       toast(`删除术语失败：${errMsg(e)}`, 'error');
     }
   };
@@ -142,7 +148,10 @@ export function GlossaryTab({ docId }: { docId: string }) {
 
   const ORIGIN: Record<string, string> = { manual: '手动', extract: '提取', extracted: '提取', import: '导入', csv: '导入', selection: '划词' };
   const f = filter.trim().toLowerCase();
-  const shown = terms.filter((t) => !f || t.src_term.toLowerCase().includes(f) || t.tgt_term.toLowerCase().includes(f));
+  // in the order they were added: a card stays where it is when it is made global or its status changes
+  const shown = terms
+    .filter((t) => !f || t.src_term.toLowerCase().includes(f) || t.tgt_term.toLowerCase().includes(f))
+    .sort((a, b) => Number(a.id) - Number(b.id));
   const approved = terms.filter((t) => t.status === 'approved').length;
 
   return (
@@ -150,7 +159,7 @@ export function GlossaryTab({ docId }: { docId: string }) {
       <div className="glossary-head">
         <label className="glossary-search">
           <Icon name="search" size={13} />
-          <input placeholder="筛选术语" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="筛选术语" />
+          <input placeholder="筛选术语…" spellCheck={false} autoComplete="off" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="筛选术语" />
         </label>
         <button type="button" className="btn btn-sm" title="让模型从这份文档里找出专业术语" onClick={() => void extract()}>
           提取术语
@@ -188,9 +197,9 @@ export function GlossaryTab({ docId }: { docId: string }) {
         }}
       >
         <div className="term-pair">
-          <input className="cell-input" placeholder="源术语" value={newSrc} onChange={(e) => setNewSrc(e.target.value)} />
+          <input className="cell-input" placeholder="源术语" spellCheck={false} autoComplete="off" value={newSrc} onChange={(e) => setNewSrc(e.target.value)} />
           <Icon name="next" size={12} className="term-arrow" />
-          <input className="cell-input" placeholder="目标译法" value={newTgt} onChange={(e) => setNewTgt(e.target.value)} />
+          <input className="cell-input" placeholder="目标译法" spellCheck={false} autoComplete="off" value={newTgt} onChange={(e) => setNewTgt(e.target.value)} />
         </div>
         <div className="glossary-new-foot">
           <input className="cell-input" placeholder="备注（可选）" value={newNote} onChange={(e) => setNewNote(e.target.value)} />
@@ -221,6 +230,7 @@ export function GlossaryTab({ docId }: { docId: string }) {
               <div className="term-pair">
                 <input
                   className="term-input term-src"
+                  spellCheck={false}
                   defaultValue={t.src_term}
                   aria-label="源术语"
                   title={t.src_term}
@@ -232,6 +242,7 @@ export function GlossaryTab({ docId }: { docId: string }) {
                 <Icon name="next" size={12} className="term-arrow" />
                 <input
                   className="term-input term-tgt"
+                  spellCheck={false}
                   defaultValue={t.tgt_term}
                   aria-label="目标译法"
                   title={t.tgt_term}

@@ -4275,3 +4275,99 @@ body.resizing .split-divider::after {
 :root .toolbar.is-home > .segmented {
   display: none;
 }
+
+/* ============================================================
+   Interface details (v1.10.3) — after Vercel's and Rauno Freiberg's
+   web interface guidelines
+   ============================================================ */
+
+/* numbers that change in place keep their width */
+.page-input,
+.page-total,
+.zoom-label,
+.progress-label,
+.statusbar,
+.lib-count,
+.chip,
+.badge {
+  font-variant-numeric: tabular-nums;
+}
+
+/* a selected state changes colour, never weight: bold text is wider and the row would twitch */
+.sidebar-tab,
+.sidebar-tab.active,
+.settings-nav-btn,
+.settings-nav-btn.active {
+  font-weight: 500;
+}
+.term-chip.on,
+.term-status.is-approved {
+  font-weight: inherit;
+}
+
+/* scrolling inside a panel stays inside it; lists do not jump when a scrollbar appears */
+.modal,
+.menu,
+.lib-dropdown,
+.search-results,
+.sidebar .assistant-scroll,
+.notes-list,
+.glossary-list,
+.settings-body {
+  overscroll-behavior: contain;
+}
+.notes-list,
+.glossary-list,
+.sidebar .assistant-scroll {
+  scrollbar-gutter: stable;
+}
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+
+/* small targets are easier to hit than they look (at least 24px) */
+.term-del,
+.term-chip,
+.doc-tab-close,
+.note-actions .btn {
+  position: relative;
+}
+.term-del::after,
+.term-chip::after,
+.doc-tab-close::after,
+.note-actions .btn::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+/* floating surfaces: a see-through edge on top of the shadow keeps the outline crisp on any
+   background; inner corners follow the outer one (inner radius = outer radius - padding) */
+:root:is([data-theme='light'], [data-theme='dark'], :not([data-theme])) {
+  .menu,
+  .lib-dropdown,
+  .modal {
+    border: 1px solid rgb(var(--shadow-rgb) / 0.14);
+    background-clip: padding-box;
+  }
+  .menu-item,
+  .theme-item,
+  .lib-row {
+    border-radius: calc(var(--radius-lg) - 4px);
+  }
+}
+:root[data-theme='dark'] {
+  .menu,
+  .lib-dropdown,
+  .modal {
+    border-color: rgb(255 255 255 / 0.1);
+  }
+}
+
+/* "copied" is answered where the click happened */
+.copied-mark {
+  color: var(--ok);
+  animation: ui-pop 0.16s var(--ease-out, ease-out);
+}
