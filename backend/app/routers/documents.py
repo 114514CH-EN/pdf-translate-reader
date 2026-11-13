@@ -260,14 +260,20 @@ async def add_picture(doc_id: int, page_no: int, file: UploadFile, bbox: str = F
 
 @router.post("/{doc_id}/pages/{page_no}/shapes")
 def add_shape(doc_id: int, page_no: int, payload: dict):
-    """画线: a straight line. dir: h / v, or d1 (top-left → bottom-right) / d2 (bottom-left → top-right)."""
+    """画形状: line / arrow / rect / ellipse.
+    A line or an arrow lies in its box along ``dir``: h / v, or d1 (top-left → bottom-right) /
+    d2 (bottom-left → top-right); ``rev`` turns it round (an arrow points at its end)."""
+    kind = payload.get("kind") if payload.get("kind") in ("line", "arrow", "rect", "ellipse") else "line"
     direction = payload.get("dir") if payload.get("dir") in ("h", "v", "d1", "d2") else "h"
     try:
         width = min(12.0, max(0.25, float(payload.get("width") or 1.5)))
     except (TypeError, ValueError):
         width = 1.5
     with get_db() as db:
-        block_id = _own_block(db, doc_id, page_no, payload.get("bbox"), {"shape": "line", "dir": direction, "width": width})
+        meta = {"shape": kind, "width": width}
+        if kind in ("line", "arrow"):
+            meta.update({"dir": direction, "rev": bool(payload.get("rev"))})
+        block_id = _own_block(db, doc_id, page_no, payload.get("bbox"), meta)
     return {"block_id": block_id}
 
 

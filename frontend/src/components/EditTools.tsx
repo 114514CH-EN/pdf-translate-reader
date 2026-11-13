@@ -7,6 +7,8 @@ import { useViewStore } from '../stores/view';
 import type { EditSide, ReplaceResult } from '../types';
 import { blockBox } from './PageAbsoluteView';
 import { Icon } from './Icon';
+import { PageOrganizer } from './PageOrganizer';
+import type { ShapeKind } from '../stores/edit';
 
 /**
  * Toolbar tools that appear in edit mode: 撤销 / 重做 and 查找替换.
@@ -135,10 +137,36 @@ export default function EditTools() {
   const tool = useEditStore((s) => s.tool);
   const setTool = useEditStore((s) => s.setTool);
   const imgRef = useRef<HTMLInputElement>(null);
-  const arm = (kind: 'text' | 'line') => {
+  const SHAPES: { kind: ShapeKind; name: string; icon: string }[] = [
+    { kind: 'line', name: '直线', icon: 'line' },
+    { kind: 'arrow', name: '箭头', icon: 'arrow' },
+    { kind: 'rect', name: '矩形', icon: 'rect' },
+    { kind: 'ellipse', name: '椭圆', icon: 'ellipse' },
+  ];
+  const shapeArmed = SHAPES.find((x) => x.kind === tool?.kind);
+  const [shapesOpen, setShapesOpen] = useState(false);
+  const shapesRef = useRef<HTMLDivElement>(null);
+  const [organizing, setOrganizing] = useState(false);
+  useEffect(() => {
+    if (!shapesOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (shapesRef.current && !shapesRef.current.contains(e.target as Node)) setShapesOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [shapesOpen]);
+  const arm = (kind: 'text' | ShapeKind) => {
+    setShapesOpen(false);
     if (tool?.kind === kind) return setTool(null);
     setTool({ kind });
-    toast(kind === 'text' ? '在左边的页面上点一下放文本框，或拖出想要的大小（Esc 取消）' : '在左边的页面上拖出一条线（Esc 取消）', 'info');
+    toast(
+      kind === 'text'
+        ? '在左边的页面上点一下放文本框，或拖出想要的大小（Esc 取消）'
+        : kind === 'rect' || kind === 'ellipse'
+          ? '在左边的页面上拖出它的大小（Esc 取消）'
+          : '在左边的页面上从起点拖到终点（Esc 取消）',
+      'info',
+    );
   };
   // 页面: add / delete / reorder
   const [pagesOpen, setPagesOpen] = useState(false);
@@ -211,10 +239,29 @@ export default function EditTools() {
           toast('在左边的页面上点一下放这张图，或拖出想要的大小（Esc 取消）', 'info');
         }}
       />
-      <button type="button" className={`btn btn-icon-text ${tool?.kind === 'line' ? 'active' : ''}`} aria-pressed={tool?.kind === 'line'} title="线条：点一下这里，再到左边的页面上拖出一条线" onClick={() => arm('line')}>
-        <Icon name="line" size={15} />
-        <span className="btn-label">线条</span>
-      </button>
+      <div className="export-menu" ref={shapesRef}>
+        <button
+          type="button"
+          className={`btn btn-icon-text ${shapeArmed ? 'active' : ''}`}
+          aria-expanded={shapesOpen}
+          title="形状：直线、箭头、矩形、椭圆"
+          onClick={() => (shapeArmed ? setTool(null) : setShapesOpen(!shapesOpen))}
+        >
+          <Icon name={shapeArmed?.icon ?? 'line'} size={15} />
+          <span className="btn-label">{shapeArmed?.name ?? '形状'}</span>
+          <Icon name="chevronDown" size={13} className="caret" />
+        </button>
+        {shapesOpen && (
+          <div className="menu" role="menu">
+            {SHAPES.map((x) => (
+              <button key={x.kind} type="button" className="menu-item" onClick={() => arm(x.kind)}>
+                <Icon name={x.icon} size={15} />
+                {x.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="export-menu" ref={pagesRef}>
         <button type="button" className="btn btn-icon-text" aria-expanded={pagesOpen} title="页面：加一页、删除这一页、调整顺序" onClick={() => { setPagesOpen(!pagesOpen); setConfirmDel(false); }}>
           <Icon name="docPlus" size={15} />
@@ -225,6 +272,17 @@ export default function EditTools() {
           <div className="menu" role="menu">
             <button type="button" className="menu-item" onClick={() => void pageOp('add')}>
               在末尾加一张空白页
+            </button>
+            <button
+              type="button"
+              className="menu-item"
+              disabled={pageCount <= 1}
+              onClick={() => {
+                setPagesOpen(false);
+                setOrganizing(true);
+              }}
+            >
+              整理页面：拖动排序…
             </button>
             <div className="menu-sep" />
             <button type="button" className="menu-item" disabled={currentPage <= 1} onClick={() => void pageOp('up')}>
@@ -246,6 +304,7 @@ export default function EditTools() {
           </div>
         )}
       </div>
+      {organizing && <PageOrganizer onClose={() => setOrganizing(false)} reload={reloadPages} />}
       <button type="button" className="btn btn-icon-text" disabled={!canUndo} title="撤销（Ctrl+Z）" onClick={() => void undo()}>
         撤销
       </button>

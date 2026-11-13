@@ -5238,3 +5238,124 @@ svg.place-band line {
   position: absolute;
   inset: -5px;
 }
+
+/* ---- shapes, 整理页面 (v1.15) ---- */
+.place-band.is-round {
+  border-radius: 50%;
+}
+.menu-item > .icon {
+  margin-right: 8px;
+  flex: none;
+}
+.page-organizer {
+  width: min(880px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+}
+.organizer-hint {
+  flex: 1;
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.organizer-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 18px 14px;
+  padding: 18px;
+  background: var(--pane-bg);
+}
+.organizer-grid.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.organizer-page {
+  position: relative;
+  cursor: grab;
+}
+.organizer-page.is-dragged {
+  opacity: 0.35;
+}
+.organizer-page.drop-before::before,
+.organizer-page.drop-after::before {
+  /* where the page will land */
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 28px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.organizer-page.drop-before::before {
+  left: -9px;
+}
+.organizer-page.drop-after::before {
+  right: -9px;
+}
+.organizer-sheet {
+  aspect-ratio: 3 / 4;
+  background: #fff;
+  overflow: hidden;
+  border-radius: 2px;
+  box-shadow: var(--page-shadow);
+}
+.organizer-sheet img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  pointer-events: none;
+}
+.organizer-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+.organizer-no {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.organizer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.organizer-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+.organizer-btn:disabled {
+  opacity: 0.35;
+}
+.organizer-btn.is-danger {
+  background: var(--danger);
+  color: #fff;
+}
+.organizer-sheet {
+  position: relative;
+}
+.organizer-own {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

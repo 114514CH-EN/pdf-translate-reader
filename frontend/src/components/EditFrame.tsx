@@ -125,6 +125,13 @@ export default function EditFrame({
         </button>
         {!hidden && kind === 'line' && (
           <>
+            <button type="button" className="edit-btn is-text" title="线条变细" aria-label="线条变细" disabled={scale <= 0.45} onClick={() => void setLayout(id, { scale: Math.round((scale / 1.35) * 1000) / 1000 })}>
+              细
+            </button>
+            <button type="button" className="edit-btn is-text" title="线条变粗" aria-label="线条变粗" disabled={scale >= 2.9} onClick={() => void setLayout(id, { scale: Math.round(Math.min(3, scale * 1.35) * 1000) / 1000 })}>
+              粗
+            </button>
+            <span className="edit-sep" />
             {COLOURS.map((c) => (
               <button
                 key={c.value}

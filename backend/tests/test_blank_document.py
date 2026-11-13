@@ -77,3 +77,31 @@ def test_pictures_lines_and_pages():
         assert [b["type"] for b in c.get(f"{base}/pages/2/blocks").json()["blocks"]] == ["image"]
         assert c.delete(f"{base}/pages/2").status_code == 200 and c.delete(f"{base}/pages/1").status_code == 400  # the last page stays
         assert fitz.open(stream=c.get(f"{base}/file").content, filetype="pdf").page_count == 1
+
+
+def test_shapes_are_drawn_in_the_export():
+    with TestClient(app) as c:
+        doc_id = c.post("/api/documents/blank", json={"title": "shapes"}).json()["doc_id"]
+        base = f"/api/documents/{doc_id}"
+        rect = c.post(f"{base}/pages/1/shapes", json={"kind": "rect", "bbox": [100, 100, 200, 160]}).json()["block_id"]
+        c.post(f"{base}/pages/1/shapes", json={"kind": "ellipse", "bbox": [250, 100, 350, 160]})
+        arrow = c.post(f"{base}/pages/1/shapes", json={"kind": "arrow", "bbox": [100, 300, 300, 306], "dir": "h", "rev": True}).json()["block_id"]
+        c.post(f"{base}/pages/1/shapes", json={"kind": "nonsense", "bbox": [100, 400, 300, 406]})  # falls back to a line
+        metas = [b["meta"] for b in c.get(f"{base}/pages/1/blocks").json()["blocks"]]
+        assert [m["shape"] for m in metas] == ["rect", "ellipse", "arrow", "line"] and metas[2]["rev"] is True
+        # thickness is the shape's "scale"; colour as for text
+        c.put(f"/api/blocks/{rect}/layout", json={"lang": "__src__", "layout": {"scale": 2.5, "color": 0x0000CC}})
+        c.put(f"/api/blocks/{arrow}/layout", json={"lang": "__src__", "layout": {"color": 0xCC0000}})
+        page = fitz.open(stream=c.post(f"{base}/export", json={"format": "pdf_source_edited"}).content, filetype="pdf")[0]
+
+        def has(clip, test):
+            pix = page.get_pixmap(clip=fitz.Rect(clip), matrix=fitz.Matrix(2, 2))
+            return any(test(pix.samples[i], pix.samples[i + 1], pix.samples[i + 2]) for i in range(0, len(pix.samples), pix.n))
+
+        blue = lambda r, g, b: b > 150 and r < 80  # noqa: E731
+        red = lambda r, g, b: r > 150 and g < 80  # noqa: E731
+        dark = lambda r, g, b: r < 90 and g < 90 and b < 90  # noqa: E731
+        assert has((98, 98, 202, 104), blue) and not has((120, 115, 180, 145), blue)  # an outline, not a filled box
+        assert has((250, 125, 256, 135), dark)  # the ellipse's left edge
+        # the arrow was drawn right-to-left: its head (wider than the shaft) is at the left end
+        assert has((100, 298, 108, 300.5), red) and not has((290, 298, 300, 300.5), red)

@@ -66,26 +66,35 @@ export function PlaceTool() {
           const box = dragged ? [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by, Math.min(ay, by) + 20)] : fit(ax, ay - 12, Math.min(280, pg.width - 40), 30);
           if (box[2] - box[0] < 40) box[2] = box[0] + 40;
           id = (await api.addTextBlock(docId, s.pageNo, box, '在这里输入文字')).block_id;
-        } else if (tool.kind === 'line') {
+        } else if (tool.kind === 'rect' || tool.kind === 'ellipse') {
+          const box = dragged
+            ? [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx, Math.min(ax, bx) + 12), Math.max(ay, by, Math.min(ay, by) + 12)]
+            : fit(ax - 70, ay - 45, 140, 90);
+          id = (await api.addShape(docId, s.pageNo, { kind: tool.kind, bbox: box })).block_id;
+        } else if (tool.kind === 'line' || tool.kind === 'arrow') {
           const dx = bx - ax;
           const dy = by - ay;
           let box: number[];
           let dir: string;
+          let rev = false; // the drag ran against the box's own direction (an arrow points where the drag ended)
           if (!dragged) {
             box = fit(ax, ay - 3, 160, 6);
             dir = 'h';
           } else if (Math.abs(dy) * zoom < 8) {
             box = [Math.min(ax, bx), (ay + by) / 2 - 3, Math.max(ax, bx), (ay + by) / 2 + 3];
             dir = 'h';
+            rev = dx < 0;
           } else if (Math.abs(dx) * zoom < 8) {
             box = [(ax + bx) / 2 - 3, Math.min(ay, by), (ax + bx) / 2 + 3, Math.max(ay, by)];
             dir = 'v';
+            rev = dy < 0;
           } else {
             box = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
             dir = dx * dy > 0 ? 'd1' : 'd2';
+            rev = dx < 0;
           }
-          id = (await api.addLine(docId, s.pageNo, box, dir)).block_id;
-        } else {
+          id = (await api.addShape(docId, s.pageNo, { kind: tool.kind, bbox: box, dir, rev })).block_id;
+        } else if (tool.kind === 'image') {
           let w = 240;
           let h = 180;
           try {
@@ -105,6 +114,8 @@ export function PlaceTool() {
           }
           const box = dragged ? fit(Math.min(ax, bx), Math.min(ay, by), w, h) : fit(ax - w / 2, ay - h / 2, w, h);
           id = (await api.addPicture(docId, s.pageNo, box, tool.file)).block_id;
+        } else {
+          return;
         }
         await tr.refreshPage(docId, s.pageNo);
         useEditStore.getState().select(String(id), 'src');
@@ -134,7 +145,7 @@ export function PlaceTool() {
   }, [tool]);
 
   if (!tool || !band) return null;
-  if (tool.kind === 'line') {
+  if (tool.kind === 'line' || tool.kind === 'arrow') {
     return (
       <svg className="place-band is-line" aria-hidden="true">
         <line x1={band.x0} y1={band.y0} x2={band.x1} y2={band.y1} />
@@ -143,7 +154,7 @@ export function PlaceTool() {
   }
   return (
     <div
-      className="place-band"
+      className={`place-band ${tool.kind === 'ellipse' ? 'is-round' : ''}`}
       aria-hidden="true"
       style={{ left: Math.min(band.x0, band.x1), top: Math.min(band.y0, band.y1), width: Math.abs(band.x1 - band.x0), height: Math.abs(band.y1 - band.y0) }}
     />

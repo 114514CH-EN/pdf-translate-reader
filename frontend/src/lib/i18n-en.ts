@@ -149,4 +149,41 @@ export const EN: Record<string, string> = {
   '在左边的页面上拖出一条线（Esc 取消）': 'Drag a line on the page on the left (Esc cancels)',
   '在左边的页面上点一下放这张图，或拖出想要的大小（Esc 取消）': 'Click on the page on the left to place the picture, or drag its size (Esc cancels)',
   放回: 'Put back', 已删除: 'Deleted',
+  // shapes, page organiser
+  形状: 'Shape', 直线: 'Line', 箭头: 'Arrow', 矩形: 'Rectangle', 椭圆: 'Ellipse', '形状：直线、箭头、矩形、椭圆': 'Shapes: line, arrow, rectangle, ellipse',
+  '在左边的页面上拖出它的大小（Esc 取消）': 'Drag its size on the page on the left (Esc cancels)',
+  '在左边的页面上从起点拖到终点（Esc 取消）': 'Drag from start to end on the page on the left (Esc cancels)',
+  细: 'Thinner', 粗: 'Thicker', 线条变细: 'Thinner line', 线条变粗: 'Thicker line',
+  '整理页面：拖动排序…': 'Organise pages: drag to reorder…', 整理页面: 'Organise pages', '把一页拖到另一页的位置上，它就排到那里': 'Drag a page onto another page’s place to move it there',
+  往前一位: 'One place earlier', 往后一位: 'One place later', 删除这一页: 'Delete this page', '确认删除（不能撤销）': 'Really delete (cannot be undone)', 确认: 'Confirm',
+  // settings: the longer explanations
+  'DeepSeek V4 默认开启思考模式，会多花不少时间和输出 token；翻译、术语抽取、润色和划词查询默认把它关掉。其他服务商忽略此项。':
+    'DeepSeek V4 thinks by default, which costs time and output tokens; translation, term extraction, the consistency pass and look-ups switch it off unless you say otherwise. Other providers ignore this.',
+  '翻译图片文字（图表、截图、示意图里的文字）': 'Translate text in pictures (charts, screenshots, diagrams)',
+  '打开后，在译文页把鼠标移到一张图片上会出现「翻译图片文字」按钮——翻哪张由你决定，不会自动翻译所有图片。 文字识别在本机完成，只把识别出的文字发给翻译 API；译文按原来的位置、字号、颜色和方向画回图片，数字和符号保持原样。 译好的图片可以随时「看原图」对比、「重新翻译」或「恢复原图」，导出「原位替换」PDF 时也会带上。':
+    'When on, pointing at a picture on the translation side shows a “Translate text in picture” button: you choose which pictures, nothing is translated automatically. The text is recognised on this computer and only the recognised text goes to the translation API; the translation is painted back at the same place, size, colour and direction, and numbers and symbols are kept. A translated picture can be compared with the original, retranslated or restored at any time, and is included in the translated PDF export.',
+  '阅读助手（问答、总结、解释选中内容）只用这里的配置，不会使用翻译 API。适合给它配一个更擅长推理讲解的模型。':
+    'The assistant (questions, summaries, explaining a selection) only uses the settings here, never the translation API. A model that is good at reasoning and explaining suits it.',
+  '还没有配置。可以直接填写下面的信息，或': 'Not set up yet. Fill in the fields below, or ', '先复制翻译 API 的配置': 'copy the translation API settings', '再修改。': ' and change them.',
+  '阅读助手自己的 API Key': 'The assistant’s own API key', '例如 deepseek-v4-pro / deepseek-flash': 'e.g. deepseek-v4-pro / deepseek-flash',
+  '价格经常调整，请按服务商官网填写；用中转服务（第三方 API）时按中转商的价格填。填好后用量和「翻译全文」前的估算都会显示费用。':
+    'Prices change often: take them from the provider’s site, or from your reseller if you use one. Once entered, the usage figures and the estimate before translating show the cost.',
+  '填入 DeepSeek 官方价格（': 'Fill in DeepSeek’s official prices (',
+  '按 DeepSeek 峰谷时段计价：北京时间周一至周五 9:00–12:00、14:00–18:00 为高峰（价格 × 高峰倍率），其余为空闲':
+    'Price by DeepSeek’s peak hours: Monday to Friday 9:00–12:00 and 14:00–18:00 Beijing time are peak (price × peak multiplier), the rest is off-peak',
+  'deepseek-flash / deepseek-v4-pro 的官方价格，含缓存命中价和高峰翻倍': 'Official prices of deepseek-flash / deepseek-v4-pro, with the cached price and the peak multiplier',
+  同未命中: 'same as not cached', 'token（最近': 'tokens (last ', '天）': ' days)',
+  '每次启动时自动备份文档库（译文、笔记、高亮、术语、设置；最多一小时一次），保留最近': 'The library is backed up each time the program starts (translations, notes, highlights, terms, settings; at most once an hour), keeping the last ',
+  '份。 恢复方法：关闭程序，用备份文件替换 data\\pdf_translate.db 后重新打开程序。': ' copies. To restore: quit, replace data\\pdf_translate.db with a backup file, and start the program again.',
+  '关闭后台服务（和右键任务栏图标选「退出」一样）。正在进行的翻译会中断，已经翻好的部分都保存了。之后再双击 PDFTranslate.exe（源码版是 run.bat）即可重新打开。':
+    'Stops the background service (the same as Quit on the tray icon). A translation in progress is interrupted; what is already translated is saved. Double-click PDFTranslate.exe (run.bat for the source version) to open it again.',
+  '翻译和阅读助手的 API Key 都加密保存：在 Windows 上使用系统的 DPAPI（与当前 Windows 账户绑定，复制到别的电脑或账户无法解密，需要重新填写）。 data\\config.json 和数据库里都不再有明文 Key。':
+    'The API keys for translation and for the assistant are stored encrypted: on Windows with the system’s DPAPI (tied to this Windows account; copied to another computer or account they cannot be read and must be entered again). Neither data\\config.json nor the database holds a key in plain text.',
+  // estimate dialog
+  个文本块要翻译: ' text blocks to translate', 'token（输入': ' tokens (input ', '· 输出': ', output ', 其中: 'Of these, ',
+  '个块已经翻译过，但术语库或模型在那之后改过，会按新的术语重新翻译（手动编辑过的译文不会动）。':
+    ' blocks were translated before, but the glossary or the model has changed since; they are translated again with the new terms (translations you edited by hand are left alone).',
+  '估算按字数计算、输入按缓存未命中计价（实际命中缓存会更便宜），以服务商返回的用量为准，可在 设置 → 用量与费用 查看。':
+    'The estimate goes by character count and prices input as not cached (cache hits make it cheaper). The provider’s own figures are what counts: see Settings → Usage & cost.',
+  切换到中文界面: '切换到中文界面',
 };

@@ -165,13 +165,24 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
             meta = json.loads(r["meta_json"] or "{}")
             page = pdf.load_page(r["page_no"] - 1)
             box = fitz.Rect(json.loads(r["bbox_json"]))
-            if meta.get("shape") == "line":
-                colour = int((own_src.get(r["id"], (None, {}))[1]).get("color") or 0x1A1A1A)
+            if meta.get("shape"):
+                look = own_src.get(r["id"], (None, {}))[1]
+                colour = int(look.get("color") or 0x1A1A1A)
                 rgb = ((colour >> 16 & 255) / 255, (colour >> 8 & 255) / 255, (colour & 255) / 255)
-                d, mx, my = meta.get("dir"), (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
-                p1, p2 = {"h": ((box.x0, my), (box.x1, my)), "v": ((mx, box.y0), (mx, box.y1)),
-                          "d2": ((box.x0, box.y1), (box.x1, box.y0))}.get(d, ((box.x0, box.y0), (box.x1, box.y1)))
-                page.draw_line(fitz.Point(p1), fitz.Point(p2), color=rgb, width=float(meta.get("width") or 1.5), lineCap=1)
+                w = float(meta.get("width") or 1.5) * float(look.get("scale") or 1)  # thickness is the "scale" of a shape
+                if meta["shape"] == "rect":
+                    page.draw_rect(box + (w / 2, w / 2, -w / 2, -w / 2), color=rgb, width=w)
+                elif meta["shape"] == "ellipse":
+                    page.draw_oval(box + (w / 2, w / 2, -w / 2, -w / 2), color=rgb, width=w)
+                else:
+                    p1, p2 = shape_ends(box, meta.get("dir"), bool(meta.get("rev")))
+                    if meta["shape"] == "arrow":
+                        tip, wings, neck = arrow_head(p1, p2, w)
+                        page.draw_line(fitz.Point(p1), fitz.Point(neck), color=rgb, width=w, lineCap=1)
+                        page.draw_polyline([fitz.Point(tip), fitz.Point(wings[0]), fitz.Point(wings[1]), fitz.Point(tip)],
+                                           color=rgb, fill=rgb, width=0.2, closePath=True)
+                    else:
+                        page.draw_line(fitz.Point(p1), fitz.Point(p2), color=rgb, width=w, lineCap=1)
             elif meta.get("file"):
                 png = doc_dir / "images" / str(meta["file"])
                 if png.exists():
@@ -216,6 +227,28 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
     orig.close()
     mi.cleanup()
     return out_path
+
+
+def shape_ends(box, direction, rev: bool = False):
+    """Start and end of a line / arrow lying in its box (the same rule as the page view)."""
+    mx, my = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+    a, b = {"h": ((box.x0, my), (box.x1, my)), "v": ((mx, box.y0), (mx, box.y1)),
+            "d2": ((box.x0, box.y1), (box.x1, box.y0))}.get(direction, ((box.x0, box.y0), (box.x1, box.y1)))
+    return (b, a) if rev else (a, b)
+
+
+def arrow_head(p1, p2, width: float):
+    """(tip, (wing, wing), where the shaft stops) for an arrow from p1 to p2."""
+    import math
+
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / length, dy / length
+    head = min(max(7.0, width * 4.5), length * 0.6)
+    bx, by = p2[0] - ux * head, p2[1] - uy * head
+    half = head * 0.42
+    wings = ((bx - uy * half, by + ux * half), (bx + uy * half, by - ux * half))
+    return p2, wings, (p2[0] - ux * head * 0.7, p2[1] - uy * head * 0.7)
 
 
 def _code_comments(r, meta: dict) -> list[tuple]:

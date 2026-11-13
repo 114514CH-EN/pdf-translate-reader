@@ -129,8 +129,8 @@ export const api = {
     }
     return res.json();
   },
-  addLine(docId: string, pageNo: number, bbox: number[], dir: string): Promise<{ block_id: string }> {
-    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/shapes`, jsonInit('POST', { bbox, dir }));
+  addShape(docId: string, pageNo: number, shape: { kind: string; bbox: number[]; dir?: string; rev?: boolean }): Promise<{ block_id: string }> {
+    return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}/shapes`, jsonInit('POST', shape));
   },
   deletePage(docId: string, pageNo: number): Promise<{ page_count: number }> {
     return request(`/documents/${encodeURIComponent(docId)}/pages/${pageNo}`, { method: 'DELETE' });

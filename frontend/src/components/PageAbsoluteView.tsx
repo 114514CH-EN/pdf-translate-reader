@@ -322,10 +322,21 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
   if (ownObject) {
     const gone = !!layout?.hidden;
     if (gone && !editMode) return null;
-    const isLine = block.meta?.shape === 'line';
+    const shape = block.meta?.shape;
+    const isLine = !!shape;
     const colour = `#${(layout?.color ?? 0x1a1a1a).toString(16).padStart(6, '0')}`;
+    // thickness: the shape's own width, scaled by the same "scale" that sizes text
+    const sw = ((block.meta as { width?: number } | undefined)?.width ?? 1.5) * (layout?.scale ?? 1) * zoom;
     const d = block.meta?.dir ?? 'h';
-    const pts = { h: [0, boxH / 2, boxW, boxH / 2], v: [boxW / 2, 0, boxW / 2, boxH], d2: [0, boxH, boxW, 0] }[d as 'h' | 'v' | 'd2'] ?? [0, 0, boxW, boxH];
+    let pts = { h: [0, boxH / 2, boxW, boxH / 2], v: [boxW / 2, 0, boxW / 2, boxH], d2: [0, boxH, boxW, 0] }[d as 'h' | 'v' | 'd2'] ?? [0, 0, boxW, boxH];
+    if (block.meta?.rev) pts = [pts[2], pts[3], pts[0], pts[1]];
+    // arrow head (the same construction as the PDF export: services/export_pdf_inplace.arrow_head)
+    const len = Math.hypot(pts[2] - pts[0], pts[3] - pts[1]) || 1;
+    const ux = (pts[2] - pts[0]) / len;
+    const uy = (pts[3] - pts[1]) / len;
+    const head = Math.min(Math.max(7 * zoom, sw * 4.5), len * 0.6);
+    const hb = [pts[2] - ux * head, pts[3] - uy * head];
+    const half = head * 0.42;
     return (
       <>
         <div
@@ -337,8 +348,19 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           {gone ? (
             <span className="abs-hidden-note">已删除</span>
           ) : isLine ? (
-            <svg width={boxW} height={boxH} style={{ overflow: 'visible' }} aria-hidden="true">
-              <line x1={pts[0]} y1={pts[1]} x2={pts[2]} y2={pts[3]} stroke={colour} strokeWidth={((block.meta as { width?: number } | undefined)?.width ?? 1.5) * zoom} strokeLinecap="round" />
+            <svg width={boxW} height={boxH} style={{ overflow: 'visible' }} aria-hidden="true" fill="none" stroke={colour} strokeWidth={sw} strokeLinecap="round">
+              {shape === 'rect' ? (
+                <rect x={sw / 2} y={sw / 2} width={Math.max(0, boxW - sw)} height={Math.max(0, boxH - sw)} />
+              ) : shape === 'ellipse' ? (
+                <ellipse cx={boxW / 2} cy={boxH / 2} rx={Math.max(0, boxW / 2 - sw / 2)} ry={Math.max(0, boxH / 2 - sw / 2)} />
+              ) : shape === 'arrow' ? (
+                <>
+                  <line x1={pts[0]} y1={pts[1]} x2={pts[2] - ux * head * 0.7} y2={pts[3] - uy * head * 0.7} />
+                  <polygon points={`${pts[2]},${pts[3]} ${hb[0] - uy * half},${hb[1] + ux * half} ${hb[0] + uy * half},${hb[1] - ux * half}`} fill={colour} stroke="none" />
+                </>
+              ) : (
+                <line x1={pts[0]} y1={pts[1]} x2={pts[2]} y2={pts[3]} />
+              )}
             </svg>
           ) : (
             <img src={api.imageUrl(String((block as { doc_id?: string | number }).doc_id ?? docId), String(block.meta?.file ?? ''))} alt="" draggable={false} />

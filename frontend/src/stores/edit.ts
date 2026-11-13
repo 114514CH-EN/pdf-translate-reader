@@ -23,7 +23,8 @@ export interface Snap {
 }
 
 /** What 文本框 / 图片 / 线条 put on the page next (edit mode toolbar). */
-export type PlaceTool = { kind: 'text' } | { kind: 'line' } | { kind: 'image'; file: File };
+export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse';
+export type PlaceTool = { kind: 'text' } | { kind: ShapeKind } | { kind: 'image'; file: File };
 
 export interface Change {
   blockId: string;
