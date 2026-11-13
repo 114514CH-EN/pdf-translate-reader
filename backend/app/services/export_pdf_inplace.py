@@ -132,6 +132,28 @@ def export_translated_pdf(doc_id: int, out_path: Path, lang: str) -> Path:
                     arch = mi.add_to(arch)
                 _draw_block(page, bbox, trans, style, arch, css, body)
 
+    # formulas the reader rewrote in edit mode: the picture of the new formula goes over the old one
+    from . import formula_edit
+
+    for r in blocks:
+        if r["type"] != "formula" or not (r["translation"] or "").strip():
+            continue
+        png = formula_edit.png_path(doc_dir, r["id"], r["translation"])
+        if not png.exists():
+            continue  # no picture for this text: the original formula stays
+        try:
+            page = pdf.load_page(r["page_no"] - 1)
+            meta = json.loads(r["meta_json"] or "{}")
+            area = fitz.Rect(meta.get("crop") or json.loads(r["bbox_json"])) & page.rect
+            page.draw_rect(area, color=None, fill=(1, 1, 1), overlay=True)
+            pix = fitz.Pixmap(str(png))
+            scale = min(area.width / pix.width, area.height / pix.height, 1 / 4)  # drawn at 4x: 4 px = 1 pt; never enlarged
+            w, h = pix.width * scale, pix.height * scale
+            cx, cy = (area.x0 + area.x1) / 2, (area.y0 + area.y1) / 2
+            page.insert_image(fitz.Rect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), pixmap=pix, overlay=True)
+        except Exception:
+            pass  # the export still works; this formula keeps its original look
+
     # highlights made in the translation pane sit on the translated text
     from .export_common import add_highlight_annots, load_highlights
 

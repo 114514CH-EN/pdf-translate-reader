@@ -30,6 +30,10 @@ export interface Change {
 
 interface EditState {
   selectedId: string | null;
+  /** the formula being rewritten (公式编辑) */
+  formula: { blockId: string; side: EditSide } | null;
+  editFormula: (blockId: string, side?: EditSide) => void;
+  closeFormula: () => void;
   undoStack: Change[][];
   redoStack: Change[][];
   select: (id: string | null, side?: EditSide) => void;
@@ -100,6 +104,9 @@ async function applyAll(changes: Change[], side: 'before' | 'after'): Promise<vo
 
 export const useEditStore = create<EditState>((set, get) => ({
   selectedId: null,
+  formula: null,
+  editFormula: (blockId, side = 'tgt') => set({ formula: { blockId: String(blockId), side }, selectedId: selKey(blockId, side) }),
+  closeFormula: () => set({ formula: null }),
   undoStack: [],
   redoStack: [],
 
@@ -152,5 +159,5 @@ export const useEditStore = create<EditState>((set, get) => ({
     await applyAll(step, 'after');
   },
 
-  clearHistory: () => set({ undoStack: [], redoStack: [], selectedId: null }),
+  clearHistory: () => set({ undoStack: [], redoStack: [], selectedId: null, formula: null }),
 }));

@@ -1,3 +1,4 @@
+import { FormulaTex } from './FormulaTex';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import ImageBlock from './ImageBlock';
 import EditFrame from './EditFrame';
@@ -394,6 +395,23 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
     );
   }
 
+  // 公式编辑: a formula the reader rewrote is drawn from its LaTeX; in edit mode any formula opens the editor
+  const formulaTex = block.type === 'formula' ? ((side === 'src' ? block.src_edit?.text : block.translation) ?? '') : '';
+  const editFormula = block.type === 'formula' && editMode ? () => useEditStore.getState().editFormula(block.id, side) : undefined;
+  if (block.type === 'formula' && formulaTex) {
+    return (
+      <FormulaTex
+        tex={formulaTex}
+        bbox={cropBox ?? block.bbox}
+        zoom={zoom}
+        fontPt={style.size || block.font_size || 11}
+        blockId={block.id}
+        title={editMode ? '点一下修改这个公式' : '你改写过的公式（编辑模式里可以改回原样）'}
+        onClick={editFormula}
+      />
+    );
+  }
+
   // Formula blocks and untranslated content: show the original rendering, pixel-identical.
   // (Fallback to text when the original render is unavailable.)
   // (In edit mode, clicking an untranslated text block turns it into a box to type a translation in.)
@@ -407,11 +425,11 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           pad={block.type === 'table' ? 1 : block.type === 'formula' && cropBox ? 0 : 1.5}
         />
         <div
-          className={cls(['orig', block.type === 'formula' ? '' : 'untranslated'])}
+          className={cls(['orig', block.type === 'formula' ? (editMode ? 'formula-editable' : '') : 'untranslated'])}
           data-block-id={block.id}
           style={box}
-          title={side === 'src' ? (editMode && textual ? '点一下可以修改原文' : undefined) : block.type === 'formula' ? '公式（保持原样）' : editMode && textual ? '尚未翻译：点一下可以自己写译文' : '尚未翻译（显示原文）'}
-          onClick={textual ? select : undefined}
+          title={side === 'src' ? (editMode && textual ? '点一下可以修改原文' : undefined) : block.type === 'formula' ? (editMode ? '点一下可以改写这个公式' : '公式（保持原样）') : editMode && textual ? '尚未翻译：点一下可以自己写译文' : '尚未翻译（显示原文）'}
+          onClick={textual ? select : editFormula}
           {...hover}
         />
       </>

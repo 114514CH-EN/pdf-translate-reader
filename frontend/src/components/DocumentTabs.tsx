@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDocStore } from '../stores/doc';
 import { useViewStore } from '../stores/view';
 import { Icon } from './Icon';
+import { withTransition } from '../lib/transition';
 
 /**
  * Tab strip of open documents. × closes the tab (the document stays in the
@@ -67,7 +68,7 @@ export function DocumentTabs() {
         aria-pressed={atHome}
         title="首页：所有文档和上次读到的地方"
         onClick={() => {
-          setHomeOpen(true);
+          withTransition(() => setHomeOpen(true));
           void useDocStore.getState().loadDocuments();
         }}
       >

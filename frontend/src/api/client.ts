@@ -143,6 +143,14 @@ export const api = {
     );
   },
 
+  /** 公式编辑: the picture of a rewritten formula (for PDF export) */
+  async putFormulaImage(blockId: string, tex: string, png: Blob): Promise<void> {
+    const bytes = new Uint8Array(await png.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return request<void>(`/blocks/${encodeURIComponent(blockId)}/formula-image`, jsonInit('PUT', { tex, png: btoa(bin) }));
+  },
+
   /** edit mode: formatting of a translated block; null clears it */
   putLayout(blockId: string, layout: BlockLayout | null, lang?: string): Promise<void> {
     return request<void>(`/blocks/${encodeURIComponent(blockId)}/layout`, jsonInit('PUT', lang ? { layout, lang } : { layout }));

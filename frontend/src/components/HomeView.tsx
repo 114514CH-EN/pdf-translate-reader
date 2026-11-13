@@ -3,6 +3,7 @@ import { useViewStore } from '../stores/view';
 import type { DocumentRow } from '../types';
 import { useDocStore } from '../stores/doc';
 import { Icon } from './Icon';
+import { withTransition } from '../lib/transition';
 
 /**
  * What the window shows when no document is open: the library as cards to pick up
@@ -67,8 +68,10 @@ export default function HomeView() {
   };
   const thumb = (d: DocumentRow, page = 1) => `/api/documents/${encodeURIComponent(d.id)}/pages/${page}/original.png`;
   const go = (d: DocumentRow) => {
-    setHomeOpen(false);
-    void openDocument(String(d.id));
+    withTransition(() => {
+      setHomeOpen(false);
+      void openDocument(String(d.id));
+    });
   };
 
   // the list arrives most-recently-opened first: the first one is where the reader left off

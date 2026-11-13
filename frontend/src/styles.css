@@ -4821,3 +4821,159 @@ body.resizing .split-divider::after {
 .app.at-home .search-bar {
   visibility: hidden;
 }
+
+/* ============================================================
+   公式编辑 (v1.12)
+   ============================================================ */
+.abs-formula-tex {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  line-height: 1.2;
+}
+.abs-formula-tex > span {
+  display: inline-block;
+  transform-origin: center;
+  white-space: nowrap;
+}
+.abs-formula-tex .katex-display {
+  margin: 0;
+}
+.abs-formula-tex.is-editable,
+.abs-block.formula-editable {
+  cursor: pointer;
+}
+.abs-formula-tex.is-editable:hover,
+.abs-block.formula-editable:hover {
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.formula-editor {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  translate: -50% 0;
+  z-index: 80;
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px;
+  background: var(--panel);
+  border: 1px solid rgb(var(--shadow-rgb, 0 0 0) / 0.14);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: ui-rise 0.2s var(--ease-out, ease-out);
+}
+.formula-editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.formula-editor-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.formula-editor-sub {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.formula-editor-head .icon-btn {
+  align-self: center;
+}
+.formula-preview {
+  min-height: 64px;
+  max-height: 180px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  background: #fff;
+  color: #000;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+}
+:root[data-scheme='dark'] .formula-preview {
+  filter: brightness(0.88);
+}
+.formula-preview .katex-display {
+  margin: 0;
+}
+.formula-empty {
+  font-size: 12px;
+  color: #8a8f99;
+}
+.formula-error {
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.5;
+}
+.formula-snippets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.formula-snip {
+  min-width: 30px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.formula-snip:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.formula-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 58px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.formula-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.formula-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.formula-foot-gap {
+  flex: 1;
+}
+/* a numbered formula (\tag): room for the number, which goes to the right edge when there is space */
+.abs-formula-tex .katex-display > .katex > .katex-html:has(> .tag),
+.formula-preview .katex-display > .katex > .katex-html:has(> .tag) {
+  padding-right: 3em;
+}
+.abs-formula-tex > span.is-tagged {
+  min-width: 100%;
+}
+.formula-preview > span {
+  display: block;
+  width: 100%;
+}
+.formula-preview > span.formula-empty,
+.formula-preview > span.formula-error {
+  width: auto;
+}

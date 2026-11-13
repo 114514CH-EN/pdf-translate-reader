@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.13-8';
+const EXPECTED_BACKEND = '2026.11.13-9';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -9,6 +9,7 @@ import { Toolbar } from './components/Toolbar';
 import { PageAbsoluteView } from './components/PageAbsoluteView';
 import { FlowTranslationPane } from './components/FlowTranslationPane';
 import { Sidebar } from './components/Sidebar';
+import { FormulaEditor } from './components/FormulaEditor';
 import { Icon } from './components/Icon';
 import { ProgressStrip } from './components/ProgressStrip';
 import { SearchBar } from './components/SearchBar';
@@ -458,6 +459,7 @@ export default function App() {
           <SettingsModal />
         </Suspense>
         <SelectionToolbar />
+        <FormulaEditor />
         {isPetMode() && (
           <Suspense fallback={null}>
             <PetAssistant />

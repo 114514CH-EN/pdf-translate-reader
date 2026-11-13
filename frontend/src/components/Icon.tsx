@@ -59,7 +59,7 @@ export function Icon({ name, size = 16, className }: { name: IconName | string; 
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.75}
+      strokeWidth={size <= 13 ? 2 : size >= 22 ? 1.5 : 1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

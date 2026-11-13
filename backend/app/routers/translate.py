@@ -69,6 +69,33 @@ def edit_translation(block_id: int, payload: dict):
     return {"ok": True}
 
 
+@router.put("/api/blocks/{block_id}/formula-image")
+def put_formula_image(block_id: int, payload: dict):
+    """The picture of a formula the reader rewrote (rendered in the browser), for PDF export."""
+    import base64
+    import binascii
+
+    from ..config import UPLOAD_DIR
+    from ..services import formula_edit
+
+    tex = str(payload.get("tex") or "")
+    try:
+        data = base64.b64decode(str(payload.get("png") or ""), validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, "图片数据无效") from e
+    with get_db() as db:
+        row = db.execute("SELECT doc_id, type FROM blocks WHERE id=?", (block_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "块不存在")
+    if row["type"] != "formula":
+        raise HTTPException(400, "这个块不是公式")
+    try:
+        formula_edit.save_png(UPLOAD_DIR / str(row["doc_id"]), block_id, tex, data)
+    except ValueError as e:
+        raise HTTPException(400, "公式图片无效") from e
+    return {"ok": True}
+
+
 LAYOUT_ALIGN = ("left", "center", "right", "justify")
 
 

@@ -1194,3 +1194,92 @@
     animation: none;
   }
 }
+
+/* ---- a week of reading and today's goal (pet menu) ---- */
+.pet-week {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 4px 9px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.pet-week-bars {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  height: 46px;
+}
+.pet-week-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.pet-week-day i {
+  width: 100%;
+  max-width: 12px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+.pet-week-day i.is-met {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.pet-week-day.is-today i {
+  background: var(--accent);
+}
+.pet-week-day b {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--text-faint);
+}
+.pet-week-day.is-today b {
+  color: var(--text);
+  font-weight: 600;
+}
+.pet-goal {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.pet-goal:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.pet-goal small {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-faint);
+  margin-left: 1px;
+}
+.pet-goal-track,
+.pet-goal-arc {
+  fill: none;
+  stroke-width: 4;
+}
+.pet-goal-track {
+  stroke: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.pet-goal-arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pet-goal-arc.is-met {
+  stroke: var(--ok);
+}

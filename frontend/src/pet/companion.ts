@@ -14,6 +14,8 @@ export const STATS_KEY = 'pdftr.pet.stats';
 export const FOCUS_CHOICES = [15, 25, 45] as const;
 export const BREAK_MIN = 5;
 export const MILESTONES = [10, 25, 50, 100] as const;
+export const GOAL_CHOICES = [5, 10, 20, 30] as const;
+export const DEFAULT_GOAL = 10;
 
 export interface FocusState {
   phase: 'focus' | 'break';
@@ -33,6 +35,10 @@ export interface Stats {
   streak: number;
   /** the last day a page was read */
   lastRead: string;
+  /** pages read on earlier days (the last six that had any), by date */
+  week?: Record<string, number>;
+  /** pages to read in a day */
+  goal?: number;
 }
 
 function read<T>(key: string): T | null {
@@ -96,7 +102,13 @@ export function rollOver(stats: Stats | null, now: number): Stats {
   if (s.day === today) return s;
   const yesterday = dayOf(now - 86_400_000);
   const alive = s.lastRead === yesterday || s.lastRead === today;
-  return { day: today, pages: [], minutes: 0, focus: 0, streak: alive ? s.streak : 0, lastRead: s.lastRead };
+  // the day that ended goes into the week's record; only the last six days are kept
+  const week: Record<string, number> = {};
+  const from = dayOf(now - 6 * 86_400_000);
+  for (const [d, n] of Object.entries({ ...(s.week ?? {}), ...(s.day && s.pages.length ? { [s.day]: s.pages.length } : {}) })) {
+    if (d >= from && d < today) week[d] = n;
+  }
+  return { day: today, pages: [], minutes: 0, focus: 0, streak: alive ? s.streak : 0, lastRead: s.lastRead, week, goal: s.goal };
 }
 
 export function loadStats(now = Date.now()): Stats {
@@ -115,6 +127,8 @@ export interface PageResult {
   milestone?: number;
   /** first page of the day and the streak is at least 2 */
   streakDay?: number;
+  /** today's goal was just reached */
+  goal?: number;
 }
 
 /** A page was opened and stayed open long enough to count as read. */
@@ -127,7 +141,8 @@ export function recordPage(stats: Stats, docId: string, page: number, now = Date
   const streak = first ? s.streak + 1 : s.streak;
   const next: Stats = { ...s, pages, streak, lastRead: s.day };
   const milestone = MILESTONES.find((m) => m === pages.length);
-  return { stats: next, milestone, streakDay: first && streak >= 2 ? streak : undefined };
+  const goal = goalOf(next);
+  return { stats: next, milestone, streakDay: first && streak >= 2 ? streak : undefined, goal: pages.length === goal ? goal : undefined };
 }
 
 export function addMinute(stats: Stats, now = Date.now()): Stats {
@@ -138,6 +153,22 @@ export function addMinute(stats: Stats, now = Date.now()): Stats {
 export function addFocus(stats: Stats, now = Date.now()): Stats {
   const s = rollOver(stats, now);
   return { ...s, focus: s.focus + 1 };
+}
+
+export function goalOf(s: Stats): number {
+  return s.goal && s.goal > 0 ? s.goal : DEFAULT_GOAL;
+}
+
+/** The last seven days, oldest first, today last: pages read on each. */
+export function weekOf(s: Stats, now = Date.now()): { day: string; label: string; pages: number; today: boolean }[] {
+  const names = ['日', '一', '二', '三', '四', '五', '六'];
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const t = now - i * 86_400_000;
+    const day = dayOf(t);
+    out.push({ day, label: names[new Date(t).getDay()], pages: i === 0 ? s.pages.length : (s.week?.[day] ?? 0), today: i === 0 });
+  }
+  return out;
 }
 
 /** "今天 12 页 · 35 分钟 · 连续 3 天" */

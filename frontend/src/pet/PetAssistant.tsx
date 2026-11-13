@@ -23,6 +23,9 @@ import {
   addMinute,
   clock,
   loadFocus,
+  GOAL_CHOICES,
+  goalOf,
+  weekOf,
   loadStats,
   recordPage,
   saveFocus,
@@ -930,7 +933,13 @@ export function PetAssistant() {
       if (r.stats === statsRef.current) return;
       putStats(r.stats);
       const chatty = presenceRef.current === 'normal' && !focusRef.current && !openRef.current && tipsOnRef.current;
-      if (r.milestone) {
+      if (r.goal) {
+        cheeredAt.current = Date.now();
+        wake();
+        burst('hearts');
+        hop();
+        if (chatty) speak(`今天的 ${r.goal} 页读完了，目标达成`, 5000);
+      } else if (r.milestone) {
         cheeredAt.current = Date.now();
         wake();
         burst('hearts');
@@ -940,7 +949,7 @@ export function PetAssistant() {
       }
     }, 8000);
     return () => window.clearTimeout(timer);
-  }, [docId, currentPage, burst, putStats, speak, wake]);
+  }, [docId, currentPage, burst, hop, putStats, speak, wake]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!useDocStore.getState().activeId || document.hidden) return;
@@ -1428,6 +1437,45 @@ export function PetAssistant() {
             {summary(stats)}
             <span className="pet-menu-mood">心情：{MOOD_NAME[moodNow]}</span>
           </div>
+          {(() => {
+            // a week of reading at a glance, and how far today's goal has got
+            const week = weekOf(stats);
+            const goal = goalOf(stats);
+            const top = Math.max(goal, ...week.map((d) => d.pages));
+            const done = Math.min(1, stats.pages.length / goal);
+            const R = 13;
+            const C = 2 * Math.PI * R;
+            return (
+              <div className="pet-week">
+                <div className="pet-week-bars" role="img" aria-label={`最近七天读的页数：${week.map((d) => d.pages).join('、')}`}>
+                  {week.map((d) => (
+                    <span key={d.day} className={`pet-week-day ${d.today ? 'is-today' : ''}`} title={`${d.day}：${d.pages} 页`}>
+                      <i style={{ height: `${Math.max(d.pages > 0 ? 12 : 4, (d.pages / top) * 100)}%` }} className={d.pages >= goal ? 'is-met' : ''} />
+                      <b>{d.label}</b>
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="pet-goal"
+                  title={`今天的目标：${goal} 页（点一下换一个：${GOAL_CHOICES.join(' / ')}）`}
+                  onClick={() => {
+                    const i = GOAL_CHOICES.indexOf(goal as (typeof GOAL_CHOICES)[number]);
+                    putStats({ ...stats, goal: GOAL_CHOICES[(i + 1) % GOAL_CHOICES.length] });
+                  }}
+                >
+                  <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+                    <circle cx="17" cy="17" r={R} className="pet-goal-track" />
+                    <circle cx="17" cy="17" r={R} className={`pet-goal-arc ${done >= 1 ? 'is-met' : ''}`} strokeDasharray={`${C * done} ${C}`} transform="rotate(-90 17 17)" />
+                  </svg>
+                  <span>
+                    {Math.min(stats.pages.length, 999)}
+                    <small>/{goal} 页</small>
+                  </span>
+                </button>
+              </div>
+            );
+          })()}
           <button type="button" role="menuitem" className="pet-menu-item" onClick={menuAction(() => { wake(); setOpen((o) => !o); })}>
             <span className="pet-menu-check" />
             {open ? '收起对话' : '打开对话'}
