@@ -53,6 +53,9 @@ import {
 } from './appearance';
 import { PET_SUMMON_EVENT } from './mode';
 import { loadPhysics, PHYSICS_EVENT, savePhysics, step, swing, upright, VelocityTracker, type Body, type PhysicsSettings } from './physics';
+import { BALL, PetBall, type BallHandle } from './PetBall';
+import { Charm, PetPlay, type PlayMode } from './PetPlay';
+import { feed, FULL, gain, KICK, LEVELS, levelOf, loadBond, pick, saveBond, TIRED, today, YUM, type Bond } from './play';
 import './pet.css';
 
 /** distance of the pet's feet from the bottom of the window — above the status bar */
@@ -739,7 +742,9 @@ export function PetAssistant() {
   }, [place, maxX]);
 
   const quietFocus = focusPhase === 'focus';
-  const canWander = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep && !quietFocus;
+  const [play, setPlay] = useState<PlayMode | null>(null);
+  const [ballOut, setBallOut] = useState(false);
+  const canWander = placed && !open && !dragging && !dropping && !flying && !menu && !tip && presence === 'normal' && !sleep && !quietFocus && !play && !ballOut;
   useEffect(() => {
     if (!canWander) return;
     let timer = 0;
@@ -884,6 +889,15 @@ export function PetAssistant() {
     setStatsState(next);
     saveStats(next);
   }, []);
+  // ---- treats and the bond (pet/play.ts): reading earns treats, feeding them raises the bond ----
+  const [bond, setBondState] = useState<Bond>(() => loadBond());
+  const bondRef = useRef(bond);
+  const putBond = useCallback((next: Bond) => {
+    bondRef.current = next;
+    setBondState(next);
+    saveBond(next);
+  }, []);
+  const earn = useCallback((add: { xp?: number; treats?: number }) => putBond(gain(today(bondRef.current), add)), [putBond]);
   const hop = useCallback(() => {
     setHitSide('floor');
     rootRef.current?.style.removeProperty('--hit');
@@ -911,18 +925,19 @@ export function PetAssistant() {
       hop();
       if (f.phase === 'focus') {
         putStats(addFocus(statsRef.current, now));
+        earn({ treats: 2 });
         setFocus(startBreak(now));
         readingSince.current = now + BREAK_MIN * 60_000; // the break counts as the rest
         cheeredAt.current = now;
         burst('stars');
-        speak(`专注了 ${f.minutes} 分钟，歇 ${BREAK_MIN} 分钟吧`, 9000);
+        speak(`专注了 ${f.minutes} 分钟，歇 ${BREAK_MIN} 分钟吧。奖你两份零食`, 9000);
       } else {
         setFocus(null);
         speak('休息结束。右键我可以再开一轮专注', 9000);
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [focusOn, burst, hop, putStats, setFocus, speak, wake]);
+  }, [focusOn, burst, earn, hop, putStats, setFocus, speak, wake]);
 
   // a page counts as read after a few seconds on it; minutes count while the reader is active
   useEffect(() => {
@@ -932,13 +947,14 @@ export function PetAssistant() {
       const r = recordPage(statsRef.current, docId, currentPage);
       if (r.stats === statsRef.current) return;
       putStats(r.stats);
+      earn({ treats: r.goal ? 4 : 1 });
       const chatty = presenceRef.current === 'normal' && !focusRef.current && !openRef.current && tipsOnRef.current;
       if (r.goal) {
         cheeredAt.current = Date.now();
         wake();
         burst('hearts');
         hop();
-        if (chatty) speak(`今天的 ${r.goal} 页读完了，目标达成`, 5000);
+        if (chatty) speak(`今天的 ${r.goal} 页读完了，目标达成！多给三份零食`, 5000);
       } else if (r.milestone) {
         cheeredAt.current = Date.now();
         wake();
@@ -949,7 +965,7 @@ export function PetAssistant() {
       }
     }, 8000);
     return () => window.clearTimeout(timer);
-  }, [docId, currentPage, burst, hop, putStats, speak, wake]);
+  }, [docId, currentPage, burst, earn, hop, putStats, speak, wake]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!useDocStore.getState().activeId || document.hidden) return;
@@ -995,6 +1011,139 @@ export function PetAssistant() {
     [currentMood, speak],
   );
   useEffect(() => () => actTimers.current.forEach((t) => window.clearTimeout(t)), []);
+
+  // ---- playing (pet/play.ts): treats, a ball, and the little game cards ----
+  const emoteNow = useCallback((text: string, ms = 1900) => {
+    setEmote((e) => ({ text, n: (e?.n ?? 0) + 1 }));
+    actTimers.current.push(window.setTimeout(() => setEmote(null), ms));
+  }, []);
+  const [treatFx, setTreatFx] = useState(0);
+  // the speech bubble is hidden while the chat is open: say it as a notice instead
+  const tell = useCallback(
+    (text: string, ms: number, kind: 'info' | 'success' = 'info') => {
+      if (openRef.current) toast(text, kind);
+      else speak(text, ms);
+    },
+    [speak, toast],
+  );
+  const feedPet = useCallback(() => {
+    wake();
+    const r = feed(bondRef.current);
+    if (!r.ok) {
+      tell(r.why === 'empty' ? '零食吃完了。读一页就有一份，专注和玩游戏也能赚' : pick(FULL), 4600);
+      return;
+    }
+    const up = r.levelUp;
+    // a new level puts its charm on straight away, unless one was already chosen
+    putBond(up && r.bond.charm === 'none' ? { ...r.bond, charm: LEVELS[up - 1].charm } : r.bond);
+    setTreatFx((n) => n + 1);
+    window.setTimeout(() => {
+      burst('hearts');
+      hop();
+      emoteNow(pick(YUM));
+    }, 420);
+    if (up) {
+      window.setTimeout(() => {
+        burst('stars');
+        tell(`亲密度升到 Lv.${up}「${LEVELS[up - 1].title}」，解锁了头饰「${LEVELS[up - 1].charmName}」`, 7000, 'success');
+      }, 1500);
+    }
+  }, [burst, emoteNow, hop, putBond, tell, wake]);
+  const reactPlay = useCallback(
+    (how: 'happy' | 'wow' | 'sad') => {
+      if (how === 'happy') {
+        burst('hearts');
+        hop();
+      } else if (how === 'wow') burst('stars');
+      else emoteNow(pick(['唔…', '哎呀', '(・_・;)']));
+    },
+    [burst, emoteNow, hop],
+  );
+  const openPlay = useCallback(
+    (m: PlayMode) => {
+      wake();
+      setOpen(false);
+      setTip(null);
+      setSay(null);
+      setPlay(m);
+    },
+    [setOpen, wake],
+  );
+
+  const closePlay = useCallback(() => setPlay(null), []);
+  const ballRef = useRef<BallHandle>(null);
+  const kicks = useRef(0);
+  const chaseTimers = useRef<number[]>([]);
+  const canChase = placed && !open && !dragging && !dropping && !flying && !menu && presence === 'normal' && !sleep && !quietFocus && !play;
+  const canChaseRef = useRef(canChase);
+  canChaseRef.current = canChase;
+  const stopChase = useCallback(() => {
+    for (const t of chaseTimers.current) window.clearTimeout(t);
+    chaseTimers.current = [];
+    rootRef.current?.style.removeProperty('transition-duration');
+  }, []);
+  const chase = useCallback(
+    (bx: number, byHand: boolean) => {
+      stopChase();
+      if (byHand) kicks.current = 0;
+      if (!canChaseRef.current) return;
+      if (kicks.current >= 5) {
+        if (kicks.current === 5) speak(pick(TIRED), 3600);
+        kicks.current += 1;
+        return;
+      }
+      const go = window.setTimeout(() => {
+        if (!canChaseRef.current || !ballRef.current?.resting()) return;
+        const size = sizeRef.current;
+        const from = posRef.current.x;
+        const centre = bx + BALL / 2;
+        const side = from + size / 2 < centre ? -1 : 1; // stop on the side it came from
+        const to = clamp(centre - size / 2 + side * size * 0.32, 0, maxX());
+        const secs = clamp(Math.abs(to - from) / 300, 0.3, 2.4);
+        rootRef.current?.style.setProperty('transition-duration', `${secs}s`);
+        setHeading(to < from ? 'left' : 'right');
+        setWalking(true);
+        place({ x: to, y: GROUND });
+        const arrive = window.setTimeout(() => {
+          setWalking(false);
+          rootRef.current?.style.removeProperty('transition-duration');
+          const ball = ballRef.current;
+          if (!ball || !ball.resting() || !canChaseRef.current) return;
+          // kick it away from itself, unless a wall is right there
+          let dir = -side;
+          const room = dir > 0 ? window.innerWidth - ball.x() : ball.x();
+          if (room < 150) dir = -dir;
+          setHeading(dir < 0 ? 'left' : 'right');
+          hop();
+          ball.kick(dir * (280 + Math.random() * 420), 640 + Math.random() * 420);
+          kicks.current += 1;
+          if (kicks.current % 2 === 1) emoteNow(pick(KICK), 1400);
+        }, secs * 1000 + 90);
+        chaseTimers.current.push(arrive);
+      }, 420);
+      chaseTimers.current.push(go);
+    },
+    [emoteNow, hop, maxX, place, speak, stopChase],
+  );
+  useEffect(() => stopChase, [stopChase]);
+  // free again (menu closed, woke up…) with the ball lying there: go and get it
+  useEffect(() => {
+    if (!canChase || !ballOut) {
+      stopChase();
+      setWalking(false);
+      return;
+    }
+    const b = ballRef.current;
+    if (b?.resting()) chase(b.x(), false);
+  }, [canChase, ballOut, chase, stopChase]);
+  const tossBall = useCallback(() => {
+    wake();
+    kicks.current = 0;
+    setBallOut((v) => !v);
+  }, [wake]);
+  useEffect(() => {
+    if (open || sleep) setPlay(null);
+  }, [open, sleep]);
   useEffect(() => {
     pageAt.current = Date.now();
   }, [docId, currentPage]);
@@ -1256,7 +1405,11 @@ export function PetAssistant() {
   const tipBottom = clamp(shown.y + size + (pill ? 30 : 10), 14, Math.max(14, vh - 120));
 
   const MENU_W = 200;
-  const MENU_H = 445;
+  const playW = Math.min(264, vw - 20);
+  const playLeft = clamp(shown.x + size / 2 - playW / 2, 10, Math.max(10, vw - playW - 10));
+  const bondLv = levelOf(bond.xp);
+
+  const MENU_H = Math.min(560, vh - 16);
   const menuLeft = menu ? clamp(menu.x, 8, Math.max(8, vw - MENU_W - 8)) : 0;
   const menuTop = menu ? clamp(menu.y - MENU_H, 8, Math.max(8, vh - MENU_H - 8)) : 0;
 
@@ -1339,6 +1492,22 @@ export function PetAssistant() {
             {pill.text}
           </div>
         )}
+        {bond.charm !== 'none' && !tucked && (
+          <span className="pet-charm" aria-hidden="true">
+            <Charm id={bond.charm} />
+          </span>
+        )}
+        {treatFx > 0 && (
+          <span className="pet-treat" key={treatFx} aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="8.5" className="pet-treat-dough" />
+              <circle cx="7" cy="7.5" r="1.4" className="pet-treat-chip" />
+              <circle cx="12.5" cy="6.5" r="1.1" className="pet-treat-chip" />
+              <circle cx="13" cy="12" r="1.5" className="pet-treat-chip" />
+              <circle cx="7.5" cy="13" r="1.2" className="pet-treat-chip" />
+            </svg>
+          </span>
+        )}
         {emote && !dragging && !flying && (
           <span className="pet-emote" key={emote.n} aria-hidden="true">
             {emote.text}
@@ -1395,13 +1564,39 @@ export function PetAssistant() {
         </div>
       </div>
 
-      {say && !open && !tucked && (
+      {say && !open && !tucked && !play && (
         <div className="pet-tip pet-say" role="status" style={{ left: clamp(shown.x + size / 2, 70, Math.max(70, vw - 70)), bottom: tipBottom, maxWidth: tipW }}>
           {say}
         </div>
       )}
 
-      {tip && !say && !open && (
+      {play && !open && (
+        <PetPlay
+          mode={play}
+          bond={bond}
+          docId={docId ? String(docId) : null}
+          style={{ left: playLeft, bottom: tipBottom, width: playW }}
+          onBond={putBond}
+          onClose={closePlay}
+          react={reactPlay}
+        />
+      )}
+
+      {ballOut && (
+        <PetBall
+          ref={ballRef}
+          floor={GROUND - 2}
+          startX={clamp(pos.x + (pos.x > vw / 2 ? -90 : size + 60), 8, Math.max(8, vw - BALL - 8))}
+          onRest={chase}
+          onGrab={() => {
+            stopChase();
+            kicks.current = 0;
+            wake();
+          }}
+        />
+      )}
+
+      {tip && !say && !open && !play && (
         <div className="pet-tip" role="status" style={{ left: tipLeft, bottom: tipBottom, width: tipW }}>
           <div>{tip.text}</div>
           <div className="pet-tip-actions">
@@ -1476,6 +1671,36 @@ export function PetAssistant() {
               </div>
             );
           })()}
+          <button type="button" role="menuitem" className="pet-menu-item pet-menu-bond" title="亲密度：喂零食会涨，升级解锁头饰" onClick={menuAction(() => openPlay('bond'))}>
+            <span className="pet-menu-check" />
+            <span className="pet-menu-bond-main">
+              <span>
+                Lv.{bondLv.level} {bondLv.title}
+              </span>
+              <span className="pet-bond-bar" aria-hidden="true">
+                <i style={{ width: `${Math.round(bondLv.into * 100)}%` }} />
+              </span>
+            </span>
+            <span className="pet-menu-note">零食 {bond.treats}</span>
+          </button>
+          <div className="pet-menu-row pet-menu-play" role="group" aria-label="玩一会">
+            <button type="button" role="menuitem" className="pet-menu-item pet-menu-chip" disabled={!!sleep} title="喂一份零食，涨亲密度（一天最多喂 6 份）" onClick={menuAction(feedPet)}>
+              喂零食
+            </button>
+            <button type="button" role="menuitem" className="pet-menu-item pet-menu-chip" title="把球拖起来扔出去，小页会追过去踢回来" onClick={menuAction(tossBall)}>
+              {ballOut ? '收起球' : '扔球'}
+            </button>
+            <button type="button" role="menuitem" className="pet-menu-item pet-menu-chip" onClick={menuAction(() => openPlay('rps'))}>
+              猜拳
+            </button>
+            <button type="button" role="menuitem" className="pet-menu-item pet-menu-chip" title="从这篇文档的术语表里出选择题，不调用 AI" onClick={menuAction(() => openPlay('quiz'))}>
+              考术语
+            </button>
+            <button type="button" role="menuitem" className="pet-menu-item pet-menu-chip" onClick={menuAction(() => openPlay('fortune'))}>
+              今日签
+            </button>
+          </div>
+          <div className="pet-menu-sep" role="separator" />
           <button type="button" role="menuitem" className="pet-menu-item" onClick={menuAction(() => { wake(); setOpen((o) => !o); })}>
             <span className="pet-menu-check" />
             {open ? '收起对话' : '打开对话'}
