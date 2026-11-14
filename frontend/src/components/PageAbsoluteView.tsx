@@ -337,10 +337,14 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
     const head = Math.min(Math.max(7 * zoom, sw * 4.5), len * 0.6);
     const hb = [pts[2] - ux * head, pts[3] - uy * head];
     const half = head * 0.42;
+    // a rectangle or an ellipse is often drawn around text: only its outline takes the
+    // click, so what is inside it can still be clicked and edited
+    const hollow = !gone && (shape === 'rect' || shape === 'ellipse');
+    const hit = Math.max(10, sw + 8);
     return (
       <>
         <div
-          className={cls(['own-object', isLine ? 'is-line' : '', selected ? 'selected' : '', gone ? 'is-hidden' : '', editMode ? 'editable' : ''])}
+          className={cls(['own-object', isLine ? 'is-line' : '', hollow ? 'is-hollow' : '', selected ? 'selected' : '', gone ? 'is-hidden' : '', editMode ? 'editable' : ''])}
           data-block-id={block.id}
           style={box}
           onClick={editMode ? select : undefined}
@@ -350,9 +354,15 @@ function BlockView({ block, zoom, docId, pageNo, editMode, hovered, failed, hasB
           ) : isLine ? (
             <svg width={boxW} height={boxH} style={{ overflow: 'visible' }} aria-hidden="true" fill="none" stroke={colour} strokeWidth={sw} strokeLinecap="round">
               {shape === 'rect' ? (
-                <rect x={sw / 2} y={sw / 2} width={Math.max(0, boxW - sw)} height={Math.max(0, boxH - sw)} />
+                <>
+                  <rect x={sw / 2} y={sw / 2} width={Math.max(0, boxW - sw)} height={Math.max(0, boxH - sw)} />
+                  {editMode && <rect className="own-hit" x={sw / 2} y={sw / 2} width={Math.max(0, boxW - sw)} height={Math.max(0, boxH - sw)} strokeWidth={hit} />}
+                </>
               ) : shape === 'ellipse' ? (
-                <ellipse cx={boxW / 2} cy={boxH / 2} rx={Math.max(0, boxW / 2 - sw / 2)} ry={Math.max(0, boxH / 2 - sw / 2)} />
+                <>
+                  <ellipse cx={boxW / 2} cy={boxH / 2} rx={Math.max(0, boxW / 2 - sw / 2)} ry={Math.max(0, boxH / 2 - sw / 2)} />
+                  {editMode && <ellipse className="own-hit" cx={boxW / 2} cy={boxH / 2} rx={Math.max(0, boxW / 2 - sw / 2)} ry={Math.max(0, boxH / 2 - sw / 2)} strokeWidth={hit} />}
+                </>
               ) : shape === 'arrow' ? (
                 <>
                   <line x1={pts[0]} y1={pts[1]} x2={pts[2] - ux * head * 0.7} y2={pts[3] - uy * head * 0.7} />

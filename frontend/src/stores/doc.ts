@@ -90,6 +90,12 @@ export const useDocStore = create<DocState>((set, get) => ({
     try {
       const detail = await api.getDocument(id);
       set({ detail });
+      // the page count normally comes from pdf.js in the original pane, which is not
+      // mounted when a document opens straight into edit mode (a new blank document):
+      // without this the counter read "1 / –" and later pages could not be reached
+      if (get().activeId === id && useViewStore.getState().pageCount === 0 && detail.page_count > 0) {
+        useViewStore.setState({ pageCount: detail.page_count });
+      }
     } catch (e) {
       set({ error: errMsg(e) });
     }

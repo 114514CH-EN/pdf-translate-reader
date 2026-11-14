@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PDF 双语翻译阅读器</title>
-<meta name="description" content="本地运行的 PDF 双语阅读与翻译工具：左边原文，右边保持原版式的译文。公式、表格原样保留，带阅读助手和桌宠小页。">
+<meta name="description" content="本地运行的 PDF 双语阅读与翻译工具：左边原文，右边保持原版式的译文。公式、表格原样保留；原文译文都能改，也能从白纸开始写 PDF；带阅读助手和桌宠小页。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 62'%3E%3Cpath d='M13 20 Q13 15 18 15 H46 Q51 15 51 20 V43 Q51 51 43 51 H21 Q13 51 13 43 Z' fill='%23fdfcf9' stroke='%233a4150' stroke-width='3'/%3E%3Ccircle cx='25' cy='31' r='3.6' fill='%232b3242'/%3E%3Ccircle cx='39' cy='31' r='3.6' fill='%232b3242'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -100,11 +100,17 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .shot figcaption { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: center; }
 
 /* feature rows */
-section { padding: 112px 0 0; }
+/* the class in the selector: .wrap sets margin and padding and would win over a bare `section` */
+main > section.wrap { margin-top: 112px; }
+@media (max-width: 860px) { main > section.wrap { margin-top: 80px; } }
 h2 { font-family: "Noto Serif SC", Georgia, serif; font-weight: 900; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.25; margin: 0 0 14px; }
 .row { display: grid; grid-template-columns: 5fr 7fr; gap: 48px; align-items: center; }
 .row.flip { grid-template-columns: 7fr 5fr; }
 .row.flip .text { order: 2; }
+.row.stack { grid-template-columns: 1fr; gap: 28px; }
+.row.stack .text { order: 0; display: grid; grid-template-columns: 5fr 7fr; gap: 0 48px; align-items: start; }
+.row.stack .text h2, .row.stack .text p { grid-column: 1; }
+.row.stack .text ul { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
 .text p { margin: 0 0 14px; color: var(--muted); max-width: 34em; }
 .text ul { margin: 0; padding: 0; list-style: none; }
 .text li { position: relative; padding-left: 18px; margin: 7px 0; }
@@ -134,6 +140,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
 @media (max-width: 860px) {
   .row, .row.flip { grid-template-columns: 1fr; gap: 22px; }
   .row.flip .text { order: 0; }
+  .row.stack .text { display: block; }
   .steps { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
@@ -174,8 +181,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
       <span class="tgt"><small lang="zh">右边是版式不变的译文</small><small lang="en">On the right, the same page in Chinese</small>读懂每一页。</span>
     </h1>
     <p class="lede">
-      <span lang="zh">本地运行的 PDF 双语阅读器：译文按原 PDF 的位置、字号排好，公式和表格原样保留，两栏同步滚动。读论文、讲义、教材时，不懂的地方选中就能问。</span>
-      <span lang="en">A PDF reader that runs on your own computer. The Chinese translation is laid out exactly like the original page, formulas and tables are kept as they are, and both panes scroll together. Select anything you don't follow and ask about it.</span>
+      <span lang="zh">本地运行的 PDF 双语阅读器：译文按原 PDF 的位置、字号排好，公式和表格原样保留，两栏同步滚动。读论文、讲义、教材时，不懂的地方选中就能问；哪里不对，直接在页面上改。</span>
+      <span lang="en">A PDF reader that runs on your own computer. The Chinese translation is laid out exactly like the original page, formulas and tables are kept as they are, and both panes scroll together. Select anything you don't follow and ask about it, and fix anything that's wrong right on the page.</span>
     </p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/114514CH-EN/pdf-translate-reader/releases/latest">
@@ -224,20 +231,64 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
   <section class="wrap">
     <div class="row flip">
       <div class="text">
+        <h2 lang="zh">改原文、改公式，或者从一张白纸开始</h2>
+        <h2 lang="en">Edit the page, the formulas, or start from a blank sheet</h2>
+        <p lang="zh">点「编辑译文」，左边的原文和右边的译文都变成可以直接改的页面。改过的内容按原位置写回 PDF，导出就是成品。</p>
+        <p lang="en">In edit mode both the original and the translation become pages you can change in place. Your changes are written back into the PDF where they stand, so the export is the finished document.</p>
+        <ul>
+          <li lang="zh">改字、调字号颜色、移动、改大小，表格逐格改，整篇查找替换</li>
+          <li lang="en">Rewrite text, change size and colour, move and resize, edit table cells, find and replace</li>
+          <li lang="zh">公式用 LaTeX 改写，<mark>边写边看效果</mark></li>
+          <li lang="en">Rewrite formulas in LaTeX <mark>with a live preview</mark></li>
+          <li lang="zh">文本框、图片、直线、箭头、矩形、椭圆，点哪放哪</li>
+          <li lang="en">Text boxes, pictures, lines, arrows, rectangles and ellipses, placed where you click</li>
+          <li lang="zh">加页、删页，拖动小图调整页序</li>
+          <li lang="en">Add and delete pages, and drag thumbnails to reorder them</li>
+        </ul>
+      </div>
+      <img src="img/compose.webp" width="2880" height="1800" loading="lazy" alt="编辑模式：一份从空白页写起的实验报告，有文本框、插入的频率响应图、红色箭头和方框，右边是对应的译文">
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="row">
+      <div class="text">
+        <h2 lang="zh">回来时，停在你离开的那一页</h2>
+        <h2 lang="en">Back where you left off</h2>
+        <p lang="zh">首页最前面是上次在读的文档，翻开就是你停下的那一页；下面是全部文档，可以搜索、排序，鼠标停一下就能预览。读的时候随时点左上角的「首页」，回去也不会丢掉位置。</p>
+        <p lang="en">The home page puts the document you were reading in front, open at the page where you stopped, with the whole library below to search, sort and preview. The Home tab is always one click away and the open document keeps its place.</p>
+        <ul>
+          <li lang="zh">专注阅读（按 F）：收起所有栏，只留两页</li>
+          <li lang="en">Focus reading (press F) hides every bar and leaves the two pages</li>
+          <li lang="zh">9 种界面风格，电子墨水主题下页面可选灰度或原色</li>
+          <li lang="en">9 themes; in the e-ink theme pages can be greyscale or in colour</li>
+          <li lang="zh">中文 / English 界面一键切换</li>
+          <li lang="en">Switch the interface between Chinese and English</li>
+        </ul>
+      </div>
+      <img src="img/home.webp" width="2880" height="1800" loading="lazy" alt="首页：上次在读的 fourier-guide 显示在最前面，下面是全部文档的缩略图">
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="row stack">
+      <div class="text">
         <h2 lang="zh">桌宠小页，陪你读</h2>
         <h2 lang="en">小页, a reading buddy</h2>
         <p lang="zh">同一个程序的第二个界面：阅读助手变成趴在窗口下沿的一张小纸片。点它弹出对话，选中文字它就跑出来；在一页停留一会儿，它会问要不要讲讲这页的公式或表格。</p>
         <p lang="en">A second interface for the same app: the reading assistant becomes a small sheet of paper sitting on the bottom of the window. Click it to chat, and it comes out when you select text. Stay on a page for a moment and it offers to explain the formulas or tables there.</p>
         <ul>
-          <li lang="zh">会走动、转身、打瞌睡；右键有菜单</li>
-          <li lang="en">It wanders, turns around and dozes off; right-click for a menu</li>
-          <li lang="zh">嫌它吵就设成安静，或者藏到角落</li>
-          <li lang="en">Too lively? Make it quiet, or tuck it into the corner</li>
+          <li lang="zh">读书挣零食，喂它涨亲密度，升级解锁头饰</li>
+          <li lang="en">Reading earns treats; feeding it raises your bond and unlocks charms</li>
+          <li lang="zh">扔球给它追、猜拳、每日一签，还会<mark>用你文档里的术语出题考你</mark></li>
+          <li lang="en">Throw it a ball, play rock–paper–scissors, draw a daily fortune, and let it <mark>quiz you on your document's own terms</mark></li>
+          <li lang="zh">专注计时、今日页数、每日目标，读够了它会庆祝</li>
+          <li lang="en">Focus timer, pages read today and a daily goal it celebrates with you</li>
           <li lang="zh">换成你自己的图片或 GIF，自动去背景</li>
           <li lang="en">Give it your own picture or GIF; backgrounds are removed for you</li>
         </ul>
       </div>
-      <img src="img/pet.webp" width="2880" height="1800" loading="lazy" alt="桌宠版：小页在窗口底部，头顶的气泡里用表格解释这一页的脉冲频谱">
+      <img src="img/pet.webp" width="3624" height="1200" loading="lazy" alt="桌宠小页戴着小皇冠，脚边有一个球；左边是考术语的选择题，右边是今日签">
     </div>
   </section>
 
@@ -265,7 +316,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
         <span lang="en">In ⚙ Settings, pick a provider, enter the key and fetch the model list. The reading assistant has its own settings.</span></li>
       <li><b lang="zh">拖入 PDF</b><b lang="en">Drop in a PDF</b>
         <span lang="zh">点「翻译全文」。没有现成的文档？先用示例 <a href="demo/fourier-guide.pdf">fourier-guide.pdf</a> 试试。</span>
-        <span lang="en">Click "翻译全文" (translate all). No document at hand? Try <a href="demo/fourier-guide.pdf">fourier-guide.pdf</a>.</span></li>
+        <span lang="en">Click Translate (翻译全文 in the Chinese interface). No document at hand? Try <a href="demo/fourier-guide.pdf">fourier-guide.pdf</a>.</span></li>
     </ol>
   </section>
 
@@ -273,20 +324,22 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
     <h2 lang="zh">常见问题</h2>
     <h2 lang="en">FAQ</h2>
     <details>
-      <summary lang="zh">需要装 Node.js 吗？</summary>
-      <summary lang="en">Do I need Node.js?</summary>
+      <summary><span lang="zh">需要装 Node.js 吗？</span><span lang="en">Do I need Node.js?</span></summary>
       <p lang="zh">不需要。Windows 版（PDFTranslate.exe）什么都不用装；从源码运行只要 Python 3.10 或更新的版本。只有自己改前端代码时才需要 Node.js。</p>
       <p lang="en">No. The Windows app (PDFTranslate.exe) needs nothing installed; running from source needs only Python 3.10 or newer. Node.js is only needed if you change the frontend code.</p>
     </details>
     <details>
-      <summary lang="zh">翻译一篇论文要多少钱？</summary>
-      <summary lang="en">How much does translating a paper cost?</summary>
+      <summary><span lang="zh">翻译一篇论文要多少钱？</span><span lang="en">How much does translating a paper cost?</span></summary>
       <p lang="zh">取决于你用的模型。点「翻译全文」前会先估算 token 数和费用；设置里的「用量」页按用途和文档记账，DeepSeek 还会按缓存命中和峰谷时段计价。</p>
       <p lang="en">It depends on the model. Tokens and cost are estimated before you start, and the Usage page in Settings keeps a record by purpose and by document, including DeepSeek's cache-hit and peak/off-peak pricing.</p>
     </details>
     <details>
-      <summary lang="zh">支持 macOS 或 Linux 吗？</summary>
-      <summary lang="en">Does it work on macOS or Linux?</summary>
+      <summary><span lang="zh">界面有英文吗？</span><span lang="en">Is the interface available in English?</span></summary>
+      <p lang="zh">有。点标签栏右侧的 EN 切换，再点「中文」切回。桌宠说的话目前还是中文。</p>
+      <p lang="en">Yes. Click EN at the right of the tab strip (and 中文 to switch back). The desktop pet still speaks Chinese.</p>
+    </details>
+    <details>
+      <summary><span lang="zh">支持 macOS 或 Linux 吗？</span><span lang="en">Does it work on macOS or Linux?</span></summary>
       <p lang="zh">启动脚本是为 Windows 写的。程序本身是 Python + 浏览器，在 macOS / Linux 上可以按 README 的「开发」一节手动启动，但没有专门测试过。</p>
       <p lang="en">The launch scripts are written for Windows. The app itself is Python plus a browser, so it can be started by hand on macOS or Linux as described under Development in the README, but those systems are not tested.</p>
     </details>
@@ -295,7 +348,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: s
 
 <footer>
   <div class="wrap">
-    <span lang="zh">PDF 双语翻译阅读器 · v1.1.0</span><span lang="en">PDF Bilingual Reader · v1.1.0</span>
+    <span lang="zh">PDF 双语翻译阅读器 v1.16</span><span lang="en">PDF Bilingual Reader v1.16</span>
     <span><a href="https://github.com/114514CH-EN/pdf-translate-reader">GitHub</a> · <a href="https://github.com/114514CH-EN/pdf-translate-reader/releases">Releases</a> · <a href="https://github.com/114514CH-EN/pdf-translate-reader/issues">Issues</a></span>
   </div>
 </footer>

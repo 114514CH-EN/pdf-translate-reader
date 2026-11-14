@@ -5359,3 +5359,16 @@ svg.place-band line {
   height: 100%;
   pointer-events: none;
 }
+
+/* hollow shapes (v1.16.1): the inside lets clicks through to what the shape surrounds */
+.abs-block.own-object.is-hollow {
+  pointer-events: none;
+}
+.abs-block.own-object.is-hollow::before {
+  content: none;
+}
+.abs-block.own-object.is-hollow .own-hit {
+  stroke: transparent;
+  pointer-events: stroke;
+  cursor: pointer;
+}
