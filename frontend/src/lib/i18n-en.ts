@@ -81,6 +81,9 @@ export const EN: Record<string, string> = {
   '在上面手动添加，或点「提取术语」让模型从文档里找。已采用的术语会在翻译时保持一致。': 'Add terms above, or press “Extract terms”. Approved terms are kept consistent when translating.',
   全局: 'Global', 待定: 'Pending', 已采用: 'Approved', 已拒绝: 'Rejected', 状态: 'Status', 删除这个术语: 'Delete this term',
   手动: 'manual', 提取: 'extracted', 导入: 'imported', 划词: 'selected',
+  全选: 'Select all', 取消选择: 'Clear selection', 采用: 'Approve', 拒绝: 'Reject', 设为全局: 'Make global', 仅本文档: 'This document only',
+  批量操作选中的术语: 'Change the selected terms', 所有文档都会使用: 'Used by every document', 只在这份文档里使用: 'Used in this document only',
+  取消选中列表里的全部术语: 'Untick every term in the list', 选中筛选出来的全部术语: 'Tick every term the filter shows', 选中全部术语: 'Tick every term',
   请填写源术语和目标译法: 'Enter both the source term and its translation', 导入成功: 'Imported', 术语提取已开始: 'Term extraction started',
   // reader
   公式: 'Formula', 表格: 'Table', 图片: 'Picture', 代码: 'Code', 列表: 'List', 段落: 'Paragraph', 标题: 'Heading', 已编辑: 'Edited', 逐句: 'Sentences',

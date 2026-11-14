@@ -52,6 +52,43 @@ def create_term(payload: dict):
     return dict(row)
 
 
+STATUSES = ("proposed", "approved", "rejected")
+
+
+@router.post("/batch")
+def batch_terms(payload: dict):
+    """Several terms at once (the glossary panel's 全选): set their status, make them
+    global or document-only, or delete them — in one transaction, one cache bump."""
+    try:
+        ids = sorted({int(i) for i in payload.get("ids") or []})
+    except (TypeError, ValueError):
+        raise HTTPException(400, "ids 必须是术语编号列表")
+    if not ids:
+        raise HTTPException(400, "没有选中术语")
+    marks = ", ".join("?" for _ in ids)
+    with get_db() as db:
+        if payload.get("delete") is True:
+            n = db.execute(f"DELETE FROM glossary WHERE id IN ({marks})", ids).rowcount
+        else:
+            fields: dict = {}
+            if "status" in payload:
+                if payload["status"] not in STATUSES:
+                    raise HTTPException(400, "未知状态")
+                fields["status"] = payload["status"]
+            if payload.get("scope") == "global":
+                fields["doc_id"] = None
+            elif payload.get("scope") == "doc":
+                if payload.get("doc_id") is None:
+                    raise HTTPException(400, "设为仅本文档需要 doc_id")
+                fields["doc_id"] = int(payload["doc_id"])
+            if not fields:
+                raise HTTPException(400, "无更新字段")
+            cols = ", ".join(f"{k}=?" for k in fields)
+            n = db.execute(f"UPDATE glossary SET {cols} WHERE id IN ({marks})", (*fields.values(), *ids)).rowcount
+    bump_glossary_rev()
+    return {"changed": n}
+
+
 @router.put("/{term_id}")
 def update_term(term_id: int, payload: dict):
     fields = {}

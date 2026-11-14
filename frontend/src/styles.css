@@ -5372,3 +5372,77 @@ svg.place-band line {
   pointer-events: stroke;
   cursor: pointer;
 }
+
+/* ---- glossary: 全选 and changing many terms at once (v1.16.2) ---- */
+.glossary-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 2px;
+}
+.glossary-count-row .glossary-count {
+  padding: 0;
+}
+.glossary-all {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.glossary-bulk {
+  position: sticky;
+  top: -8px;
+  z-index: 2;
+  margin: 0 -10px 4px;
+  padding: 7px 10px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.glossary-bulk-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.glossary-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.glossary-bulk-actions .term-chip {
+  color: var(--text-dim);
+}
+.glossary-bulk-actions .term-chip:disabled {
+  opacity: 0.5;
+}
+.glossary-bulk-actions .term-chip.danger:hover,
+.glossary-bulk-actions .term-chip.danger.is-armed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.glossary-bulk-actions .term-chip.danger.is-armed {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  font-weight: 600;
+}
+/* the tick sits to the left of both lines of a term */
+.glossary-list > .term-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 6px;
+}
+.term-card > .term-pick {
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin: 6px 0 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.term-card > .term-pair,
+.term-card > .term-foot {
+  grid-column: 2;
+}
+.glossary-list > .term-card.is-picked {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}

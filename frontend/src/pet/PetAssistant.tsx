@@ -1498,7 +1498,7 @@ export function PetAssistant() {
           </span>
         )}
         {treatFx > 0 && (
-          <span className="pet-treat" key={treatFx} aria-hidden="true">
+          <span className="pet-treat" key={`treat-${treatFx}`} aria-hidden="true">
             <svg viewBox="0 0 20 20">
               <circle cx="10" cy="10" r="8.5" className="pet-treat-dough" />
               <circle cx="7" cy="7.5" r="1.4" className="pet-treat-chip" />
@@ -1509,12 +1509,12 @@ export function PetAssistant() {
           </span>
         )}
         {emote && !dragging && !flying && (
-          <span className="pet-emote" key={emote.n} aria-hidden="true">
+          <span className="pet-emote" key={`emote-${emote.n}`} aria-hidden="true">
             {emote.text}
           </span>
         )}
         {fx && (
-          <div className={`pet-fx is-${fx.kind}`} key={fx.n} aria-hidden="true">
+          <div className={`pet-fx is-${fx.kind}`} key={`fx-${fx.n}`} aria-hidden="true">
             {(fx.kind === 'hearts' ? ['♥', '♥', '♥'] : ['✦', '✧', '✦']).map((c, i) => (
               <span key={i} style={{ ['--i' as string]: i }}>
                 {c}

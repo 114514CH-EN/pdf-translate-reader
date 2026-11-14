@@ -28,6 +28,10 @@ export function GlossaryTab({ docId }: { docId: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [importGlobal, setImportGlobal] = useState(false);
   const [filter, setFilter] = useState('');
+  // 全选: ticked terms, changed or deleted together
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -44,6 +48,12 @@ export function GlossaryTab({ docId }: { docId: string }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // a different document: start with nothing ticked
+  useEffect(() => {
+    setPicked(new Set());
+    setConfirmDel(false);
+  }, [docId]);
 
   // terms added from the selection toolbar
   useEffect(() => {
@@ -110,6 +120,26 @@ export function GlossaryTab({ docId }: { docId: string }) {
     }
   };
 
+  const batch = async (
+    change: { status: string } | { scope: 'global' } | { scope: 'doc'; doc_id: string } | { delete: true },
+    done: string,
+  ) => {
+    const ids = [...picked];
+    if (!ids.length || busy) return;
+    setBusy(true);
+    try {
+      const { changed } = await api.batchGlossary(ids, change);
+      if ('delete' in change) setPicked(new Set());
+      setConfirmDel(false);
+      await refresh();
+      toast(`${done} ${changed} 个术语`, 'success');
+    } catch (e) {
+      toast(`批量操作失败：${errMsg(e)}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const importCsv = async (file: File) => {
     try {
       await api.importGlossary(file, docId, importGlobal ? 'global' : 'doc');
@@ -153,6 +183,28 @@ export function GlossaryTab({ docId }: { docId: string }) {
     .filter((t) => !f || t.src_term.toLowerCase().includes(f) || t.tgt_term.toLowerCase().includes(f))
     .sort((a, b) => Number(a.id) - Number(b.id));
   const approved = terms.filter((t) => t.status === 'approved').length;
+  // a ticked term that has since gone (deleted, or another document's list) no longer counts
+  const live = new Set(terms.map((t) => t.id));
+  const pickedIds = [...picked].filter((id) => live.has(id));
+  const shownPicked = shown.filter((t) => picked.has(t.id)).length;
+  const allShown = shown.length > 0 && shownPicked === shown.length;
+  const toggleAll = () =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      // 全选 works on what the filter shows; a second press clears those again
+      for (const t of shown) {
+        if (allShown) next.delete(t.id);
+        else next.add(t.id);
+      }
+      return next;
+    });
+  const togglePick = (id: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <div className="glossary-tab">
@@ -211,8 +263,66 @@ export function GlossaryTab({ docId }: { docId: string }) {
 
       <div className="glossary-list">
         {terms.length > 0 && (
-          <div className="glossary-count">
-            {f ? `${shown.length} / ${terms.length} 个术语` : `${terms.length} 个术语`}，已采用 {approved}
+          <div className="glossary-count-row">
+            <span className="glossary-count">
+              {f ? `${shown.length} / ${terms.length} 个术语` : `${terms.length} 个术语`}，已采用 {approved}
+            </span>
+            {shown.length > 0 && (
+              <label className="glossary-check glossary-all" title={allShown ? '取消选中列表里的全部术语' : f ? '选中筛选出来的全部术语' : '选中全部术语'}>
+                <input
+                  type="checkbox"
+                  checked={allShown}
+                  ref={(el) => {
+                    if (el) el.indeterminate = shownPicked > 0 && !allShown;
+                  }}
+                  onChange={toggleAll}
+                />
+                全选
+              </label>
+            )}
+          </div>
+        )}
+        {pickedIds.length > 0 && (
+          <div className="glossary-bulk" role="toolbar" aria-label="批量操作选中的术语">
+            <div className="glossary-bulk-head">
+              <span>已选 {pickedIds.length} 个</span>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setPicked(new Set());
+                  setConfirmDel(false);
+                }}
+              >
+                取消选择
+              </button>
+            </div>
+            <div className="glossary-bulk-actions">
+              <button type="button" className="term-chip" disabled={busy} onClick={() => void batch({ status: 'approved' }, '已采用')}>
+                采用
+              </button>
+              <button type="button" className="term-chip" disabled={busy} onClick={() => void batch({ status: 'proposed' }, '已改为待定')}>
+                待定
+              </button>
+              <button type="button" className="term-chip" disabled={busy} onClick={() => void batch({ status: 'rejected' }, '已拒绝')}>
+                拒绝
+              </button>
+              <button type="button" className="term-chip" disabled={busy} title="所有文档都会使用" onClick={() => void batch({ scope: 'global' }, '已设为全局')}>
+                设为全局
+              </button>
+              <button type="button" className="term-chip" disabled={busy} title="只在这份文档里使用" onClick={() => void batch({ scope: 'doc', doc_id: docId }, '已改为仅本文档')}>
+                仅本文档
+              </button>
+              <button
+                type="button"
+                className={`term-chip danger${confirmDel ? ' is-armed' : ''}`}
+                disabled={busy}
+                onClick={() => (confirmDel ? void batch({ delete: true }, '已删除') : setConfirmDel(true))}
+                onBlur={() => setConfirmDel(false)}
+              >
+                {confirmDel ? `确认删除 ${pickedIds.length} 个` : '删除'}
+              </button>
+            </div>
           </div>
         )}
         {loading && terms.length === 0 && <div className="empty-hint">加载中…</div>}
@@ -226,7 +336,8 @@ export function GlossaryTab({ docId }: { docId: string }) {
         {shown.map((t) => {
           const global = t.scope === 'global' || t.doc_id === null;
           return (
-            <div key={t.id} className={`term-card is-${t.status}`}>
+            <div key={t.id} className={`term-card is-${t.status}${picked.has(t.id) ? ' is-picked' : ''}`}>
+              <input type="checkbox" className="term-pick" checked={picked.has(t.id)} onChange={() => togglePick(t.id)} aria-label={`选中 ${t.src_term}`} />
               <div className="term-pair">
                 <input
                   className="term-input term-src"

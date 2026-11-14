@@ -361,6 +361,14 @@ export const api = {
     return request<GlossaryTerm>(`/glossary/${encodeURIComponent(id)}`, jsonInit('PUT', body));
   },
 
+  /** several terms at once: a status, global / document-only, or delete */
+  batchGlossary(
+    ids: string[],
+    change: { status: string } | { scope: 'global' } | { scope: 'doc'; doc_id: string } | { delete: true },
+  ): Promise<{ changed: number }> {
+    return request<{ changed: number }>('/glossary/batch', jsonInit('POST', { ids, ...change }));
+  },
+
   deleteGlossary(id: string): Promise<void> {
     return request<void>(`/glossary/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
