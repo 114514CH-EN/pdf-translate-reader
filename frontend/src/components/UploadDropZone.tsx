@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDocStore } from '../stores/doc';
+import { IMPORT_HINT, canImport } from '../lib/files';
 
 /**
  * Full-window drag & drop overlay for PDF uploads.
@@ -41,10 +42,10 @@ export function UploadDropZone({ children }: { children: ReactNode }) {
       const files = e.dataTransfer?.files;
       if (!files || files.length === 0) return;
       for (const file of Array.from(files)) {
-        if (file.name.toLowerCase().endsWith('.pdf')) {
+        if (canImport(file.name)) {
           void uploadFile(file);
         } else {
-          useDocStore.setState({ error: '仅支持 PDF 文件' });
+          useDocStore.setState({ error: IMPORT_HINT });
         }
       }
     },
@@ -69,7 +70,7 @@ export function UploadDropZone({ children }: { children: ReactNode }) {
       {children}
       {dragging && (
         <div className="drop-overlay">
-          <div className="drop-overlay-card">松开以上传 PDF</div>
+          <div className="drop-overlay-card">松开以导入 PDF 或 Word</div>
         </div>
       )}
     </div>

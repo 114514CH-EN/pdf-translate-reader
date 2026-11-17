@@ -13,6 +13,7 @@ The interface can be switched between Chinese and English (EN in the tab strip);
 ## Features
 
 **Translation**
+- Opens PDFs and Word documents (.docx / .doc / .rtf / .odt). Word files are turned into a PDF on import with whatever is already on the computer (Microsoft Word, WPS or LibreOffice), so the layout matches; with none of them a .docx still opens through a simple built-in conversion (tables and lists may be lost)
 - Page view: the translation keeps the original's positions, font sizes and colours (headings, numbered-list indents and table cell alignment follow the source). A sentence-by-sentence view lets you edit each sentence
 - Formulas are never re-typeset: inline and display math are cropped from the rendered page, so subscripts and superscripts match the original
 - Text inside pictures can be translated too (Settings → Translation, off by default): text is recognised locally and painted back at the same place, size and colour

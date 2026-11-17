@@ -574,6 +574,15 @@ v1.10.1 把质感全砍了，方向错了。这一版按几篇公认的做法重
 - 修复：桌宠头顶的小气泡（emote）会叠出好几层（用户截图里「哎呀」后面还露着「;)」）。原因是 `.pet` 里零食、emote、爱心特效三个兄弟元素都用裸数字计数做 key，计数撞上时 React 把旧元素留在原地。改成 `treat-n` / `emote-n` / `fx-n`。
 - 验证：pytest 112 passed；crawl 无错误；Playwright 连续猜拳 24 局，emote / 特效 / 零食元素同时最多 1 个（修复前 2 个）；术语库全选、取消全选、筛选后全选与半选、批量采用、设为全局、两步删除、中英文界面文字。
 
+### M56 打开 Word 文档 + 上传错误不显示的修复 + v1.17.0（2026-11-17）✅
+
+- 上传支持 .docx / .doc / .rtf / .odt：`services/convert.py` 依次尝试 Microsoft Word（PowerShell 驱动 COM，`ExportAsFixedFormat`）、WPS（`KWps.Application`，失败时 `SaveAs2`）、LibreOffice（`soffice --headless --convert-to pdf`，独立临时配置目录，桌面上开着 LibreOffice 也不冲突）、MuPDF 内置（仅 .docx）。不新增依赖；每一步缺了就跳过，超时 180 秒。
+- 转好的 PDF 照常作为 original.pdf，原 Word 文件另存为 `source.<ext>`；内置转换会提示「表格、列表和部分排版可能会丢失」，其它方式提示「已用 X 把 Word 文档转成 PDF」。
+- 先按文件头检查（docx/odt 是 zip，doc 是 OLE，rtf 以 `{\rtf` 开头）：LibreOffice 会把损坏或改错扩展名的文件当纯文本「转换」成一页乱码。
+- 修复：上传失败时的错误（不支持的格式、加密 PDF、转换失败）只写进 doc store 的 `error`，界面上没有任何地方显示，看起来像点了没反应。App 订阅 `error` 并弹出提示。
+- 已知：MuPDF 内置转换排出来的 "fi" 是连字字形（U+FB01），提取出的文字带连字；整体的连字处理会影响已有文档的重新提取，暂不改。
+- 验证：pytest 116 passed（新增 `test_word_import.py`：手写最小 .docx，LibreOffice 转换含表格、.rtf、无办公软件时的内置转换与提示、.doc 无转换器、损坏文件、扩展名不符）；crawl 无错误；Playwright 从首页「添加文档」导入 .docx，表格逐格提取、两页、提示正确，.txt 与改名文件给出提示。Windows 上 Word / WPS 的 COM 路径无法在这里实测。
+
 ## 三、待完成计划（按优先级）
 
 ### P0 — 用真实 API 跑通全链路（需要你）

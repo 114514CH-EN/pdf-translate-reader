@@ -13,12 +13,13 @@ from fastapi.concurrency import run_in_threadpool
 
 from ..config import UPLOAD_DIR
 from ..db import get_db, rows_to_dicts
+from ..services.convert import SIMPLE, WORD_EXT, ConvertError, office_to_pdf
 from ..services.extract import EXTRACT_VER, extract_page, restore_placeholders
 from ..services.structure import build_blocks
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-ALLOWED_EXT = {".pdf"}
+ALLOWED_EXT = {".pdf"} | WORD_EXT
 
 
 def _doc_dir(doc_id: int) -> Path:
@@ -46,12 +47,20 @@ def list_documents():
 async def upload_document(file: UploadFile):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
-        raise HTTPException(400, "仅支持 PDF 文件")
+        raise HTTPException(400, "仅支持 PDF 和 Word 文件（.pdf .docx .doc .rtf .odt）")
 
     title = Path(file.filename or "untitled.pdf").stem
     data = await file.read()
     if not data:
         raise HTTPException(400, "空文件")
+    source = None  # a Word file: kept next to the PDF made from it
+    converted_by = None
+    if ext in WORD_EXT:
+        source = data
+        try:
+            data, converted_by = await run_in_threadpool(office_to_pdf, data, ext, UPLOAD_DIR / "_convert")
+        except ConvertError as e:
+            raise HTTPException(400, str(e)) from e
     try:
         probe = fitz.open(stream=data, filetype="pdf")
     except Exception as e:
@@ -75,6 +84,8 @@ async def upload_document(file: UploadFile):
     doc_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = doc_dir / "original.pdf"
     pdf_path.write_bytes(data)
+    if source is not None:
+        (doc_dir / f"source{ext}").write_bytes(source)
 
     try:
         # parsing is CPU-bound: keep it off the event loop so the app stays responsive
@@ -100,7 +111,12 @@ async def upload_document(file: UploadFile):
     warning = None
     if n_text == 0:
         warning = "未检测到可提取的文字层：这可能是扫描版/图片版 PDF，暂不支持翻译（需先用 OCR 工具转换为可搜索 PDF）。"
-    return {"doc_id": doc_id, "warning": warning}
+    elif converted_by == SIMPLE:
+        warning = (
+            "电脑上没找到 Microsoft Word、WPS 或 LibreOffice，这份 Word 文档用的是内置的简易转换："
+            "表格、列表和部分排版可能会丢失。装上其中任意一个后重新导入，效果会好很多。"
+        )
+    return {"doc_id": doc_id, "warning": warning, "converted_by": converted_by}
 
 
 PAPER = {"a4": (595.0, 842.0), "letter": (612.0, 792.0), "a4-landscape": (842.0, 595.0)}

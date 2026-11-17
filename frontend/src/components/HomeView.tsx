@@ -4,6 +4,7 @@ import type { DocumentRow } from '../types';
 import { useDocStore } from '../stores/doc';
 import { Icon } from './Icon';
 import { withTransition } from '../lib/transition';
+import { IMPORT_ACCEPT } from '../lib/files';
 
 /**
  * What the window shows when no document is open: the library as cards to pick up
@@ -62,7 +63,7 @@ export default function HomeView() {
     <input
       ref={fileRef}
       type="file"
-      accept=".pdf,application/pdf"
+      accept={IMPORT_ACCEPT}
       multiple
       hidden
       onChange={(e) => {
@@ -81,7 +82,7 @@ export default function HomeView() {
             <span className="home-drop-icon">
               <Icon name="upload" size={26} />
             </span>
-            <span className="home-drop-title">{uploading ? '正在上传…' : '把 PDF 拖到这里'}</span>
+            <span className="home-drop-title">{uploading ? '正在上传…' : '把 PDF 或 Word 拖到这里'}</span>
             <span className="home-drop-sub">或者点击选择文件</span>
           </button>
           <button type="button" className="btn home-blank" onClick={newBlank} disabled={uploading}>
@@ -89,7 +90,7 @@ export default function HomeView() {
             或者从一张空白页开始，自己写一份
           </button>
           <ol className="home-steps">
-            <li>上传一份 PDF（论文、课件、手册都可以）</li>
+            <li>上传一份 PDF 或 Word 文档（论文、课件、手册都可以）</li>
             <li>在 ⚙ 设置里填好翻译 API，点「翻译全文」</li>
             <li>左边原文、右边译文，版式一致，对照着读</li>
           </ol>
@@ -157,7 +158,7 @@ export default function HomeView() {
               </button>
               <button type="button" className="btn" onClick={pick} disabled={uploading}>
                 <Icon name="upload" size={15} />
-                {uploading ? '正在上传…' : '添加 PDF'}
+                {uploading ? '正在上传…' : '添加文档'}
               </button>
               <button type="button" className="btn" onClick={newBlank} disabled={uploading} title="从一张空白页开始，自己写一份 PDF">
                 <Icon name="docPlus" size={15} />
@@ -224,7 +225,7 @@ export default function HomeView() {
                 <span className="home-thumb">
                   <Icon name="plus" size={26} />
                 </span>
-                <span className="home-card-title">{uploading ? '正在上传…' : '添加 PDF'}</span>
+                <span className="home-card-title">{uploading ? '正在上传…' : '添加文档'}</span>
                 <span className="home-card-meta">点击选择，或拖到窗口里</span>
               </button>
             )}

@@ -40,6 +40,10 @@ const VIEW: Record<string, string> = { 整页预览: 'Page view', 逐句对照: 
 const SIDE: Record<string, string> = { 原文: 'Original', 译文: 'Translation' };
 
 const RULES: [RegExp, (m: RegExpExecArray) => string][] = [
+  // Word import (before the general 打开 … rule)
+  [/^这个文件不是有效的 (\.\w+) 文档：.*$/, (m) => `This is not a valid ${m[1]} document: it may be damaged, or have the wrong extension`],
+  [/^已用 (.+) 把 Word 文档转成 PDF$/, (m) => `Converted the Word document to PDF with ${m[1]}`],
+  [/^打开 (\.\w+) 文件需要电脑上装有 Microsoft Word、WPS 或 LibreOffice.*$/, (m) => `Opening ${m[1]} files needs Microsoft Word, WPS or LibreOffice on this computer (none was found, or the conversion failed). You can also save it as .docx or PDF in Word first.`],
   [/^第 (\d+) 页，共 (\d+) 页$/, (m) => `Page ${m[1]} of ${m[2]}`],
   [/^读到第 (\d+) 页，共 (\d+) 页$/, (m) => `Page ${m[1]} of ${m[2]}`],
   [/^读到第 (\d+) 页$/, (m) => `Stopped at page ${m[1]}`],

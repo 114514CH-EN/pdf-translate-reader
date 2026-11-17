@@ -76,7 +76,7 @@ export const api = {
     return request<DocumentRow[]>('/documents');
   },
 
-  async uploadDocument(file: File): Promise<{ doc_id: string; warning?: string | null }> {
+  async uploadDocument(file: File): Promise<{ doc_id: string; warning?: string | null; converted_by?: string | null }> {
     const form = new FormData();
     form.append('file', file);
     let res: Response;
@@ -86,7 +86,7 @@ export const api = {
       throw new ApiError(e instanceof Error ? e.message : '网络错误', 0);
     }
     if (!res.ok) throw await parseError(res);
-    return (await res.json()) as { doc_id: string; warning?: string | null };
+    return (await res.json()) as { doc_id: string; warning?: string | null; converted_by?: string | null };
   },
 
   getDocument(id: string): Promise<DocDetail> {

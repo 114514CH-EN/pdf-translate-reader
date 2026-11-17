@@ -141,8 +141,9 @@ export const useDocStore = create<DocState>((set, get) => ({
   async uploadFile(file) {
     set({ uploading: true, error: null });
     try {
-      const { doc_id, warning } = await api.uploadDocument(file);
+      const { doc_id, warning, converted_by } = await api.uploadDocument(file);
       if (warning) useViewStore.getState().toast(warning, 'error');
+      else if (converted_by) useViewStore.getState().toast(`已用 ${converted_by} 把 Word 文档转成 PDF`, 'success');
       await get().loadDocuments();
       await get().openDocument(doc_id);
       set({ uploading: false });

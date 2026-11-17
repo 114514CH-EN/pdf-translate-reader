@@ -24,7 +24,7 @@ export const EN: Record<string, string> = {
   '左边原文、右边译文，版式一致，对照着读': 'Original on the left, translation on the right, same layout',
   还没打开过: 'Never opened', 今天打开过: 'Opened today', 昨天打开过: 'Opened yesterday',
   '把 PDF 拖进窗口就能添加': 'Drop a PDF on the window to add it',
-  '松开以上传 PDF': 'Release to add the PDF', '仅支持 PDF 文件': 'Only PDF files are supported',
+  '松开以上传 PDF': 'Release to add the PDF', '仅支持 PDF 文件': 'Only PDF files are supported', '仅支持 PDF 和 Word 文件（.pdf .docx .doc .rtf .odt）': 'Only PDF and Word files can be opened (.pdf .docx .doc .rtf .odt)', '松开以导入 PDF 或 Word': 'Release to add the PDF or Word file', '把 PDF 或 Word 拖到这里': 'Drop a PDF or Word file here', 添加文档: 'Add a document', '上传 PDF 或 Word 文档': 'Upload a PDF or Word document', '上传一份 PDF 或 Word 文档（论文、课件、手册都可以）': 'Add a PDF or Word document (a paper, slides, a manual)',
   // toolbar
   整页预览: 'Page view', 逐句对照: 'Sentence view', 第一页: 'First page', 上一页: 'Previous page', 下一页: 'Next page', 最后一页: 'Last page',
   页码: 'Page number', 缩小: 'Zoom out', 放大: 'Zoom in', '恢复 100%': 'Back to 100%', 适合宽度: 'Fit width',

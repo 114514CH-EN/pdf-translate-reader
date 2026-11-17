@@ -4,6 +4,7 @@ import { useViewStore } from '../stores/view';
 import { Icon } from './Icon';
 import { withTransition } from '../lib/transition';
 import { getLang, setLang } from '../lib/i18n';
+import { IMPORT_ACCEPT, IMPORT_HINT, canImport } from '../lib/files';
 
 /**
  * Tab strip of open documents. × closes the tab (the document stays in the
@@ -54,8 +55,8 @@ export function DocumentTabs() {
   const onPick = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      useDocStore.setState({ error: '仅支持 PDF 文件' });
+    if (!canImport(file.name)) {
+      useDocStore.setState({ error: IMPORT_HINT });
       return;
     }
     void uploadFile(file);
@@ -186,7 +187,7 @@ export function DocumentTabs() {
       <button
         type="button"
         className="btn btn-ghost btn-sm doc-tab-add"
-        title="上传 PDF"
+        title="上传 PDF 或 Word 文档"
         disabled={uploading}
         onClick={() => fileInputRef.current?.click()}
       >
@@ -196,7 +197,7 @@ export function DocumentTabs() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={IMPORT_ACCEPT}
         style={{ display: 'none' }}
         onChange={(e) => {
           onPick(e.target.files);
