@@ -63,7 +63,10 @@ def test_inplace_export(tmp_path):
     hits = page.search_for("译文0内容")
     assert hits, "inserted text not found"
     h = hits[0]
-    assert abs(h.x0 - title["bbox"][0]) < 2
+    if title["style"].get("align") == "center":  # a centred title stays centred
+        assert abs((h.x0 + h.x1) / 2 - (title["bbox"][0] + title["bbox"][2]) / 2) < 2
+    else:
+        assert abs(h.x0 - title["bbox"][0]) < 2
     # a CJK font's line box starts higher than its glyphs (Noto CJK ascent ≈ 1.16 em)
     assert abs(h.y0 - title["bbox"][1]) < 5
     assert pdf.page_count == 1

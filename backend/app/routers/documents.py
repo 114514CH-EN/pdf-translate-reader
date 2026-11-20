@@ -609,7 +609,52 @@ def reextract_document(doc_id: int) -> int:
             db.execute("UPDATE notes SET block_id=? WHERE id=?", (nb, n["id"]))
         _renumber_placeholders(db, doc_id, old_runs, _page_runs(db, doc_id))
         _fix_absorbed_brackets(db, doc_id)
+        _fix_private_use(db, doc_id)
     return kept
+
+
+_PUA_RE = re.compile("[\uE000-\uF8FF]")
+
+
+def _fix_private_use(db, doc_id: int) -> None:
+    """Blocks with private-use characters (math letters some fonts map there, v22): an
+    older extractor passed them on as text, which no font can draw, so the translation
+    shows boxes or lost the letter. Now they are formulas. Put the placeholders in where
+    the copied characters can still be found; otherwise clear the translation so the
+    next "translate all" redoes just this block. Hand-edited translations are kept."""
+    rows = db.execute(
+        "SELECT t.id, t.text, t.edited, b.meta_json, b.page_no FROM translations t JOIN blocks b ON b.id=t.block_id"
+        " WHERE b.doc_id=? AND t.lang NOT LIKE '\\_\\_%' ESCAPE '\\'", (doc_id,)  # not the original side's own edits
+    ).fetchall()
+    runs = None
+    for r in rows:
+        try:
+            meta = json.loads(r["meta_json"] or "{}")
+        except Exception:
+            continue
+        ph = meta.get("ph") or ""
+        want = sorted(re.findall(r"\{\{(m\d+)\}\}", ph))
+        if not want or not _PUA_RE.search(r["text"]) and sorted(re.findall(r"\{\{(m\d+)\}\}", r["text"])) == want:
+            continue
+        if runs is None:
+            runs = _page_runs(db, doc_id)
+        mine = [m for m in runs.get(r["page_no"], []) if m["id"] in want]
+        if not any(_PUA_RE.search(m.get("text") or "") for m in mine):
+            continue  # not a block this change is about
+        text = r["text"]
+        have = re.findall(r"\{\{(m\d+)\}\}", text)
+        todo = [m for m in mine if m["id"] not in have]
+        if todo:
+            text = restore_placeholders(text, todo) or text
+        good = not _PUA_RE.search(text) and sorted(re.findall(r"\{\{(m\d+)\}\}", text)) == want
+        if good:
+            if text != r["text"]:
+                db.execute("UPDATE translations SET text=? WHERE id=?", (text, r["id"]))
+        elif r["edited"]:
+            # keep the reader's own words; only the characters no font can draw go
+            db.execute("UPDATE translations SET text=? WHERE id=?", (_PUA_RE.sub("", text), r["id"]))
+        else:
+            db.execute("DELETE FROM translations WHERE id=?", (r["id"],))
 
 
 def _page_runs(db, doc_id: int) -> dict[int, list[dict]]:

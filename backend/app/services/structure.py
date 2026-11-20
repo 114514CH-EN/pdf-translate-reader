@@ -168,6 +168,47 @@ def _merge_paragraphs(items: list[dict]) -> list[dict]:
     return out
 
 
+def _mark_centred(items: list[dict], page_width: float = 0.0) -> None:
+    """Centred text (titles, an author line, a caption) stays centred in the translation.
+
+    Several lines: all on one centre line, with left edges that differ. One line: its
+    centre is the text column's centre and it starts well inside the column.
+    """
+    body = [it for it in items if it["type"] in ("paragraph", "heading")]
+    if not body:
+        return
+    x0 = min(it["bbox"][0] for it in body)
+    x1 = max(it["bbox"][2] for it in body)
+    width = x1 - x0
+    if width < 120:
+        return
+    mid = (x0 + x1) / 2
+    for it in body:
+        if it["style"].get("align") or it.get("list_marker"):
+            continue
+        boxes = [g[1] for g in it.get("geo") or []] or [it["bbox"]]
+        centres = [(b[0] + b[2]) / 2 for b in boxes]
+        lefts = [b[0] for b in boxes]
+        if len(boxes) >= 2:
+            centred = max(centres) - min(centres) < 3 and max(lefts) - min(lefts) >= 6
+        else:
+            b = boxes[0]
+            # ragged right edges make the column's measured centre a little off: allow
+            # some slack, but only for a line set in from both sides
+            # on the column's centre, or the page's (a title above two columns, or a
+            # short page whose lines never reach the right margin)
+            near = abs(centres[0] - mid) < max(4.0, 0.02 * width) or (
+                page_width > 0 and abs(centres[0] - page_width / 2) < 4
+            )
+            centred = (
+                near
+                and b[0] - x0 > 0.1 * width
+                and (x1 - b[2] > 0.1 * width or abs(centres[0] - page_width / 2) < 4)
+            )
+        if centred:
+            it["style"] = {**it["style"], "align": "center"}
+
+
 def _bbox_in(inner: list[float], outer: list[float], tol: float = 1.0) -> bool:
     return (
         inner[0] >= outer[0] - tol
@@ -188,10 +229,17 @@ def _reading_order(items: list[dict], page_width: float) -> list[dict]:
     if not items:
         return []
     by_id = {id(b): b for b in items}
+    mid = page_width / 2
     full_w = [
         b
         for b in items
-        if (b["bbox"][2] - b["bbox"][0]) > 0.6 * page_width and b["type"] != "table"
+        if b["type"] != "table"
+        and (
+            (b["bbox"][2] - b["bbox"][0]) > 0.6 * page_width
+            # straddles the middle of the page (a centred title or author line): no column
+            # block does that, so it divides the page like a full-width one
+            or (b["bbox"][0] < mid - 0.05 * page_width and b["bbox"][2] > mid + 0.05 * page_width)
+        )
     ]
     full_w.sort(key=lambda b: b["bbox"][1])
     full_ids = {id(b) for b in full_w}
@@ -205,7 +253,18 @@ def _reading_order(items: list[dict], page_width: float) -> list[dict]:
         band = [b for b in rest if y0 <= (b["bbox"][1] + b["bbox"][3]) / 2 < y1]
         ordered.extend(_order_band(band, page_width))
         if i < len(full_w):
+            # beside it, within its height: what is to its left before it (a word left of
+            # a tall centred matrix), what is to its right after it (the equation's number)
+            fy0, fy1 = full_w[i]["bbox"][1], full_w[i]["bbox"][3]
+            fx0 = full_w[i]["bbox"][0]
+            placed_ids = {id(x) for x in ordered}
+            side = sorted(
+                (b for b in rest if fy0 <= (b["bbox"][1] + b["bbox"][3]) / 2 < fy1 and id(b) not in placed_ids),
+                key=lambda b: (b["bbox"][1], b["bbox"][0]),
+            )
+            ordered.extend(b for b in side if b["bbox"][2] <= fx0 + 2)
             ordered.append(full_w[i])
+            ordered.extend(b for b in side if b["bbox"][2] > fx0 + 2)
     # anything left (shouldn't happen) keeps y order
     placed = {id(b) for b in ordered}
     leftover = [by_id[k] for k in by_id if k not in placed]
@@ -236,11 +295,70 @@ def _order_band(band_blocks: list[dict], page_width: float) -> list[dict]:
         if not placed:
             clusters.append([b])
             cluster_x.append([b["bbox"][0], b["bbox"][2]])
-    clusters.sort(key=lambda c: min(x["bbox"][0] for x in c))
-    out: list[dict] = []
-    for col in clusters:
-        out.extend(sorted(col, key=lambda b: (round(b["bbox"][1], 1), b["bbox"][0])))
-    return out
+    # real columns leave a gutter between them; groups whose x-ranges overlap are one
+    # column (a centred title or equation above / between left-aligned lines)
+    merged = True
+    while merged and len(clusters) > 1:
+        merged = False
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                if min(cluster_x[i][1], cluster_x[j][1]) - max(cluster_x[i][0], cluster_x[j][0]) > 4:
+                    clusters[i].extend(clusters.pop(j))
+                    cx = cluster_x.pop(j)
+                    cluster_x[i] = [min(cluster_x[i][0], cx[0]), max(cluster_x[i][1], cx[1])]
+                    merged = True
+                    break
+            if merged:
+                break
+    by_y = lambda b: (round(b["bbox"][1], 1), b["bbox"][0])  # noqa: E731
+
+    # a group made only of short one-line labels at the margin ("(10 points)", an
+    # equation's number) is not a column: each label goes right after the line it sits
+    # beside
+    def label(b: dict) -> bool:
+        size = (b.get("style") or {}).get("size") or 10
+        return (b["bbox"][3] - b["bbox"][1]) < 2.4 * size and (b["bbox"][2] - b["bbox"][0]) < 0.3 * page_width
+
+    tags: list[dict] = []
+    if len(clusters) > 1:
+        keep = [c for c in clusters if not all(label(b) for b in c)]
+        if keep and len(keep) < len(clusters):
+            tags = [b for c in clusters if all(label(b) for b in c) for b in c]
+            cluster_x = [x for c, x in zip(clusters, cluster_x) if not all(label(b) for b in c)]
+            clusters = keep
+    if tags:
+        ordered = _order_band([b for c in clusters for b in c], page_width) if len(clusters) > 1 else sorted(clusters[0], key=by_y)
+
+        def overlap(a: dict, b: dict) -> float:
+            return min(a["bbox"][3], b["bbox"][3]) - max(a["bbox"][1], b["bbox"][1])
+
+        for t in sorted(tags, key=by_y):
+            mates = [i for i, b in enumerate(ordered) if overlap(t, b) > 0.4 * (t["bbox"][3] - t["bbox"][1])]
+            if mates:
+                ordered.insert(max(mates, key=lambda i: overlap(t, ordered[i])) + 1, t)
+            else:  # alone on its row: by height on the page
+                at = next((i for i, b in enumerate(ordered) if by_y(b) > by_y(t)), len(ordered))
+                ordered.insert(at, t)
+        return ordered
+    # clusters are columns only if they stand side by side; a centred title above a
+    # left-aligned heading is two clusters by x, but one is simply above the other
+    spans = [(min(x["bbox"][1] for x in c), max(x["bbox"][3] for x in c)) for c in clusters]
+
+    def beside(i: int) -> bool:
+        return any(j != i and min(spans[i][1], spans[j][1]) - max(spans[i][0], spans[j][0]) > 1 for j in range(len(clusters)))
+
+    cols = [c for i, c in enumerate(clusters) if beside(i)]
+    solo = [b for i, c in enumerate(clusters) if not beside(i) for b in c]
+    cols.sort(key=lambda c: min(x["bbox"][0] for x in c))
+    unit: list[dict] = []
+    for col in cols:
+        unit.extend(sorted(col, key=by_y))
+    if not solo:
+        return unit
+    top = min((x["bbox"][1] for c in cols for x in c), default=float("inf"))
+    above = sorted((b for b in solo if (b["bbox"][1] + b["bbox"][3]) / 2 < top), key=by_y)
+    below = sorted((b for b in solo if (b["bbox"][1] + b["bbox"][3]) / 2 >= top), key=by_y)
+    return above + unit + below
 
 
 def _bold_frac(spans: list[dict]) -> float:
@@ -305,10 +423,13 @@ def _style_runs(
             prev_text, prev_box = cur[0][-1], cur[2][-1]
             mid_sentence = not re.search(r"[.:;?!。：；？！)）]\s*$", prev_text)
             same_size = sig[0] == cur_sig[0]
+            # a wrapped line starts where the one above it did; a centred title and the
+            # author line under it do not
+            same_left = abs(bbox[0] - prev_box[0]) < 3
             # a sentence running on across a bold change is one paragraph:
             #   "…will not be\n**marked.**"  (into bold)
             #   "**…a long bold sentence that wraps\nonto** a normal line" (out of a full-width bold line)
-            if same_size and mid_sentence and (
+            if same_size and mid_sentence and same_left and (
                 sig[1] or (prev_box[2] - prev_box[0]) >= 0.8 * widest
             ):
                 cur_sig = sig
@@ -746,6 +867,7 @@ def build_blocks(page_payload: dict, page_no: int) -> list[dict]:
             c["level"] = level_of_size.get(c["style"]["size"], 3)
 
     text_items = _merge_paragraphs(text_items)
+    _mark_centred(text_items, page_width)
     _formula_crops(text_items)
     # re-apply list level from indent after merge
     if text_items:
