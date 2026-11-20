@@ -47,12 +47,12 @@ export function AssistantTab({ docId }: { docId: string }) {
     void loadSettings();
   }, [docId, loadFor, loadSettings]);
 
-  // the reader may have just configured the assistant in 设置 → retry once it closes
+  // the reader may have just configured (or fixed) the assistant in 设置 → retry once it closes
   const wasOpen = useRef(settingsOpen);
   useEffect(() => {
-    if (wasOpen.current && !settingsOpen && notConfigured) void refreshSummary();
+    if (wasOpen.current && !settingsOpen && (notConfigured || summaryError)) void refreshSummary();
     wasOpen.current = settingsOpen;
-  }, [settingsOpen, notConfigured, refreshSummary]);
+  }, [settingsOpen, notConfigured, summaryError, refreshSummary]);
 
   useEffect(() => {
     const el = listRef.current;

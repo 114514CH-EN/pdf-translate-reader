@@ -60,7 +60,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   docId: null,
 
   async loadFor(docId) {
-    if (get().docId === docId && (get().loading || get().summaryMd || get().messages.length > 0)) return;
+    // already loaded — or the summary already failed for this document: not again on its
+    // own every time the panel is opened (that kept calling a model that was down); the
+    // panel's 重试 button asks again
+    const cur = get();
+    if (cur.docId === docId && (cur.loading || cur.summaryMd || cur.messages.length > 0 || cur.summaryError || cur.notConfigured)) return;
     if (get().docId !== docId && abort) {
       abort.abort();
       abort = null;

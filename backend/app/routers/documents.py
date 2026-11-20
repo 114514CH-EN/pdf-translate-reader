@@ -613,7 +613,7 @@ def reextract_document(doc_id: int) -> int:
     return kept
 
 
-_PUA_RE = re.compile("[\uE000-\uF8FF]")
+_PUA_RE = re.compile("[\uE000-\uF8FF\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")  # drawn by no font
 
 
 def _fix_private_use(db, doc_id: int) -> None:
@@ -644,9 +644,13 @@ def _fix_private_use(db, doc_id: int) -> None:
         text = r["text"]
         have = re.findall(r"\{\{(m\d+)\}\}", text)
         todo = [m for m in mine if m["id"] not in have]
-        if todo:
+        # repairable only where the copied characters are still there to be swapped for
+        # their placeholders; a translation made from the old reading of the block
+        # otherwise (a letter dropped, formulas renumbered onto its end) is redone
+        good = False
+        if todo and _PUA_RE.search(text):
             text = restore_placeholders(text, todo) or text
-        good = not _PUA_RE.search(text) and sorted(re.findall(r"\{\{(m\d+)\}\}", text)) == want
+            good = not _PUA_RE.search(text) and sorted(re.findall(r"\{\{(m\d+)\}\}", text)) == want
         if good:
             if text != r["text"]:
                 db.execute("UPDATE translations SET text=? WHERE id=?", (text, r["id"]))
@@ -767,6 +771,19 @@ def _fix_absorbed_brackets(db, doc_id: int) -> None:
 
 
 UPGRADE = {"left": 0}  # documents still waiting for the new extractor (shown by /api/health)
+UPGRADE_PENDING: set[int] = set()  # their ids: a translation of one of them waits (wait_upgraded)
+
+
+def wait_upgraded(doc_id: int, limit: float = 120.0) -> None:
+    """A translation started while the update re-reads this document would pick blocks that
+    are about to be replaced (and then store results for blocks that no longer exist):
+    wait for that document first. Re-reading one document takes seconds."""
+    import time
+
+    waited = 0.0  # (the endpoints calling this are plain functions, run in a worker thread)
+    while int(doc_id) in UPGRADE_PENDING and waited < limit:
+        time.sleep(0.25)
+        waited += 0.25
 
 
 def stale_documents() -> list[int]:
@@ -795,6 +812,7 @@ def upgrade_old_documents(background: bool = False) -> None:
     """
     stale = stale_documents()
     UPGRADE["left"] = len(stale)
+    UPGRADE_PENDING.update(stale)
 
     def run() -> None:
         for doc_id in stale:
@@ -803,11 +821,13 @@ def upgrade_old_documents(background: bool = False) -> None:
                 print(f"[upgrade] re-extracted document {doc_id} (kept {kept} translations)")
             except Exception as e:  # never block startup
                 print(f"[upgrade] document {doc_id} failed: {e}")
+            UPGRADE_PENDING.discard(doc_id)
             UPGRADE["left"] = max(0, UPGRADE["left"] - 1)
         try:
             migrate_formula_placeholders()
         except Exception as e:
             print(f"[upgrade] placeholder migration failed: {e}")
+        UPGRADE_PENDING.clear()
         UPGRADE["left"] = 0
 
     if background and stale:

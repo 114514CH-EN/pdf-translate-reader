@@ -445,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 22  # v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 23  # v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -515,9 +515,27 @@ _PUA_BULLETS = {
 _SYMBOL_FONT = re.compile(r"symbol|wingding|webding", re.I)
 
 
+# TeX's OT1 encoding puts the ff / fi / fl / ffi / ffl ligatures at 0x1B–0x1F; a font
+# embedded without a Unicode map hands those control codes over as they are
+_OT1_LIGATURES = {"\x1b": "ff", "\x1c": "fi", "\x1d": "fl", "\x1e": "ffi", "\x1f": "ffl"}
+_CONTROL_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+
 def _fix_bullets(text: str, font: str) -> str:
     if text and _SYMBOL_FONT.search(font or "") and any(ch in _PUA_BULLETS for ch in text):
         return "".join(_PUA_BULLETS.get(ch, ch) for ch in text)
+    if text and _CONTROL_RE.search(text) and not MATH_FONT_RE.search(font or ""):
+        # (in a math font a lone control code is a piece of a big bracket or brace —
+        # TeX's cmex — and stays part of its formula)
+        if _CONTROL_RE.fullmatch(text.strip()):
+            # a control code alone: a bullet from a font with no Unicode map (seen: 0x88
+            # in a LaTeX math font's bullet). Nothing else is drawn as one lone character
+            return text.replace(text.strip(), "•")
+        if any(ch in _OT1_LIGATURES for ch in text):
+            return re.sub(
+                "(?<=[A-Za-z])[\x1b-\x1f]|[\x1b-\x1f](?=[A-Za-z])",
+                lambda m: _OT1_LIGATURES[m.group(0)], text,
+            )
     return text
 
 
@@ -605,8 +623,17 @@ def _is_math_span(sp: dict) -> bool:
         return False
     if MATH_FONT_RE.search(sp.get("font") or ""):
         return True
+    if _PUA_RE.search(t):
+        # a private-use character cannot be drawn by any font of ours, so the whole piece
+        # is shown from the page (arev remaps single letters of math-italic words this way)
+        return True
     n_math = len(MATH_CHAR_RE.findall(t))
     return n_math > 0 and n_math >= 0.5 * len(t.replace(" ", ""))
+
+
+# characters no font can draw: private-use code points, and control codes left over
+# after _fix_bullets (an embedded font with no Unicode map)
+_PUA_RE = re.compile("[\uE000-\uF8FF\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
 # function names typeset upright in the text font (LaTeX \\sin, \\arctan, …): not prose words
@@ -898,6 +925,23 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
         is_m = [_is_math_span(sp) for _, _, sp in flat]
         if not any(is_m):
             continue
+        # the rest of a word one of whose letters is private-use (a math-italic
+        # word that arev writes as three pieces of one font, the middle letter remapped): the whole word is the formula
+        for k in [k for k, (_, _, sp) in enumerate(flat) if _PUA_RE.search(sp.get("text") or "")]:
+            for step in (-1, 1):
+                q = k
+                while 0 <= q + step < len(flat):
+                    a, b = flat[q][2], flat[q + step][2]
+                    t = b.get("text") or ""
+                    if (flat[q + step][0] != flat[k][0] or b.get("font") != a.get("font") or not t.strip()
+                            or t != t.strip() or (a.get("text") or "") != (a.get("text") or "").strip()
+                            or not all(c.isalnum() or _PUA_RE.match(c) for c in t)):
+                        break
+                    gap = b["bbox"][0] - a["bbox"][2] if step == 1 else a["bbox"][0] - b["bbox"][2]
+                    if gap > 0.15 * (a.get("size") or 10):
+                        break
+                    is_m[q + step] = True
+                    q += step
         # numerators / exponents / limits set in the text font (LaTeX digits are CMR)
         for k, (li, si, sp) in enumerate(flat):
             t = (sp.get("text") or "").strip()

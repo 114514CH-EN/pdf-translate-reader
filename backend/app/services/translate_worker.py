@@ -497,6 +497,10 @@ def _store_translation(
 ) -> None:
     ck = cache_key(block["text"], target_lang, model, glossary_rev)
     with get_db() as db:
+        if not db.execute("SELECT 1 FROM blocks WHERE id=?", (block["id"],)).fetchone():
+            # the page was read again while this was being translated (an update, an edit
+            # to the page): the block is gone, and its replacement is translated on its own
+            return
         store_sentences(db, block["id"], pairs)
         db.execute(
             "INSERT INTO translations (block_id, lang, model, prompt_ver, text, edited, cache_key)"

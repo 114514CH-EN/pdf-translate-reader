@@ -30,7 +30,13 @@ def test_private_use_math_letters_become_formula_runs():
     assert q["meta"]["ph"].startswith("Compute the inner product {{m")
     assert V not in q["meta"]["ph"] and W not in q["meta"]["ph"]
     norm = next(x for x in b if x["text"].startswith("Next work"))
-    assert norm["meta"]["ph"] == "Next work out {{m2}} as well."
+    ph = norm["meta"]["ph"]
+    assert ph.startswith("Next work out {{m2}} as well.")
+    # a whole math-italic word, one of whose letters is remapped, is one formula
+    assert "The score {{m3}}(d) compares {{m4}}(d) with itself." in ph
+    assert not re.search("[\uE000-\uF8FF]", ph)
+    # and words in formulas do not make the sentence around them italic
+    assert "Here the words are {{{m5}}, dog, " in ph and not norm["style"]["italic"]
 
 
 def test_centred_title_and_author_in_reading_order():
@@ -108,6 +114,7 @@ def test_upgrade_repairs_or_clears_broken_translations(monkeypatch):
     assert old_rule.pattern != extract.MATH_CHAR_RE.pattern
     with TestClient(app) as c:
         monkeypatch.setattr(extract, "MATH_CHAR_RE", old_rule)
+        monkeypatch.setattr(extract, "_PUA_RE", re.compile("(?!)"))  # matches nothing, as before
         doc_id = c.post("/api/documents", files={"file": ("sheet.pdf", PDF.read_bytes())}).json()["doc_id"]
         monkeypatch.undo()
         blocks = {b["text"][:9]: b for b in c.get(f"/api/documents/{doc_id}/pages/1/blocks").json()["blocks"]}
@@ -128,7 +135,44 @@ def test_upgrade_repairs_or_clears_broken_translations(monkeypatch):
         after = {b["text"][:9]: b for b in c.get(f"/api/documents/{doc_id}/pages/1/blocks").json()["blocks"]}
         q2, n2 = after["Compute t"], after["Next work"]
         assert re.fullmatch(r"先算内积 \{\{m\d+\}\}。", q2["translation"]), q2["translation"]
+        # hand-edited: kept (its placeholders renumbered onto the new formulas)
         want = re.findall(r"\{\{m\d+\}\}", n2["meta"]["ph"])
-        assert len(want) == 1 and n2["translation"] == f"再算出 {want[0]}。"
+        assert n2["translation"].startswith(f"再算出 {want[0]}。")
         assert after["Signals a"]["translation"] == "信号与系统 2 - 练习题 4"
         c.delete(f"/api/documents/{doc_id}")
+
+
+def test_upgrade_redoes_a_machine_translation_it_cannot_mend(monkeypatch):
+    """Not hand-edited, and the letters were dropped rather than copied: nothing to swap
+    back, so the translation is cleared and "translate all" redoes just this block."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.routers.documents import reextract_document
+    from app.services import extract
+
+    with TestClient(app) as c:
+        monkeypatch.setattr(extract, "MATH_CHAR_RE", re.compile(extract.MATH_CHAR_RE.pattern.replace("-", "")))
+        monkeypatch.setattr(extract, "_PUA_RE", re.compile("(?!)"))
+        doc_id = c.post("/api/documents", files={"file": ("sheet.pdf", PDF.read_bytes())}).json()["doc_id"]
+        monkeypatch.undo()
+        q = next(b for b in c.get(f"/api/documents/{doc_id}/pages/1/blocks").json()["blocks"] if b["text"].startswith("Compute"))
+        c.put(f"/api/blocks/{q['id']}/translation", json={"text": "先算内积 · 。"})  # the letters lost
+        from app.db import get_db
+
+        with get_db() as db:  # as the model wrote it, not a hand edit
+            db.execute("UPDATE translations SET edited=0 WHERE block_id=?", (q["id"],))
+        reextract_document(doc_id)
+        q2 = next(b for b in c.get(f"/api/documents/{doc_id}/pages/1/blocks").json()["blocks"] if b["text"].startswith("Compute"))
+        assert not q2.get("translation")
+        c.delete(f"/api/documents/{doc_id}")
+
+
+def test_control_codes_from_fonts_without_a_unicode_map():
+    from app.services.extract import _fix_bullets
+
+    # a bullet that comes out as a lone control code (0x88 from a math font's bullet)
+    assert _fix_bullets("\x88", "F78") == "•" and _fix_bullets(" \x88 ", "F78") == " • "
+    # TeX OT1 ligatures at 0x1B–0x1F, next to letters
+    assert _fix_bullets("\x1cles and o\x1ece", "CMSS10") == "files and office"
+    assert _fix_bullets("plain", "F78") == "plain"

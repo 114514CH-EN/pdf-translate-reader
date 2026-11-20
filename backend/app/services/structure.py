@@ -55,7 +55,7 @@ def _span_style(spans: list[dict]) -> dict:
     """Char-weighted dominant style of a line/block."""
     sizes: dict[float, int] = {}
     fonts: dict[str, int] = {}
-    bold_chars = italic_chars = total = 0
+    bold_chars = italic_chars = total = prose = 0
     color = 0
     for sp in spans:
         t = sp.get("text", "")
@@ -67,6 +67,11 @@ def _span_style(spans: list[dict]) -> dict:
         sizes[size] = sizes.get(size, 0) + n
         font = sp.get("font", "")
         fonts[font] = fonts.get(font, 0) + n
+        if sp.get("m"):
+            # formulas are shown from the page as they are; their (math-)italic letters
+            # must not make the words around them italic in the translation
+            continue
+        prose += n
         flags = sp.get("flags", 0)
         if flags & BOLD_BIT or "bold" in font.lower():
             bold_chars += n
@@ -81,8 +86,8 @@ def _span_style(spans: list[dict]) -> dict:
     return {
         "size": round(dom_size, 2),
         "font": dom_font,
-        "bold": bold_chars / total > 0.5,
-        "italic": italic_chars / total > 0.5,
+        "bold": bold_chars / (prose or total) > 0.5,
+        "italic": italic_chars / (prose or total) > 0.5,
         "color": color,
     }
 

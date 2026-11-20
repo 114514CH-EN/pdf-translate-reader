@@ -18,8 +18,8 @@ def pua_oblique(dest: Path) -> None:
     f = TTFont(FONTS / "DejaVuSans-Oblique.ttf")
     for table in f["cmap"].tables:
         if table.isUnicode():
-            table.cmap[0xEBF6] = table.cmap[ord("v")]
-            table.cmap[0xEBF7] = table.cmap[ord("w")]
+            for code, letter in ((0xEBF6, "v"), (0xEBF7, "w"), (0xEBE9, "i"), (0xEBE1, "a"), (0xEBF5, "u")):
+                table.cmap[code] = table.cmap[ord(letter)]
     f.save(dest)
 
 
@@ -56,6 +56,24 @@ def main() -> None:
     x = put(x, 250, "\uebf6", str(tmp), "ArevSansOblique")
     x = put(x, 250, "\u2225", str(sym), "MathDesignSymbol")
     put(x, 250, " as well.", reg, "ArevSansRoman")
+    # whole math-italic words with one remapped letter, each piece its own span
+    obl = str(tmp)
+    x = put(72, 280, "The score ", reg, "ArevSansRoman")
+    for piece in ("CS", "\uebe9", "m"):
+        x = put(x, 280, piece, obl, "ArevSansOblique")
+    x = put(x, 280, "(", reg, "ArevSansRoman")
+    x = put(x, 280, "d", obl, "ArevSansOblique")
+    x = put(x, 280, ") compares ", reg, "ArevSansRoman")
+    for piece in ("\uebf6", "ec"):
+        x = put(x, 280, piece, obl, "ArevSansOblique")
+    put(x, 280, "(d) with itself.", reg, "ArevSansRoman")
+    # a sentence with several math-italic words in it is still upright prose
+    x = put(72, 310, "Here the words are {", reg, "ArevSansRoman")
+    for word in (("c", "\uebe1", "t"), ("dog",), ("h", "\uebf5", "t"), ("s", "\uebe9", "t")):
+        for piece in word:
+            x = put(x, 310, piece, obl, "ArevSansOblique")
+        x = put(x, 310, ", ", reg, "ArevSansRoman")
+    put(x, 310, "end} and that is all.", reg, "ArevSansRoman")
     doc.subset_fonts()
     doc.save(OUT, garbage=4, deflate=True)
     tmp.unlink()

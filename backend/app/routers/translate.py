@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from ..db import get_db
 from ..services import translate_worker
+from . import documents
 from ..services.settings_store import load_settings
 
 router = APIRouter(tags=["translate"])
@@ -31,6 +32,7 @@ def start_translate(payload: dict):
         "overwrite_edits": bool(payload.get("overwrite_edits")),
         "target_lang": payload.get("target_lang"),
     }
+    documents.wait_upgraded(int(doc_id))
     job_id = translate_worker.start_translate_job(int(doc_id), params)
     return {"job_id": job_id}
 
@@ -41,6 +43,7 @@ def retranslate_block(block_id: int):
         row = db.execute("SELECT doc_id FROM blocks WHERE id=?", (block_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "块不存在")
+    documents.wait_upgraded(row["doc_id"])
     job_id = translate_worker.start_translate_job(
         row["doc_id"], {"scope": "blocks", "block_ids": [block_id], "force": True}
     )
