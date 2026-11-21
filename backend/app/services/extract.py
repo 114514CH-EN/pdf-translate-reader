@@ -445,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 23  # v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 24  # v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -663,6 +663,70 @@ def _has_words(spans: list[dict], body: float) -> bool:
         if _CJK_RE.search(t) or any(w.lower() not in _OP_NAMES for w in _WORD_RE.findall(t)):
             return True
     return False
+
+
+def _join_split_rows(raw_blocks: list[dict]) -> list[dict]:
+    """One line of text that the PDF reader broke at a stacked superscript + subscript.
+
+    "values c¹₁ and c¹₂ of c⁰₁ …": the subscript sits under the superscript, so the line
+    is handed over in pieces — the first ending on the superscript, the next starting with
+    the subscript at the same x — sometimes in separate blocks. Left as they are, the
+    first piece gains a line break and the others become blocks of their own laid over
+    the first one's translation. Pieces on the same baseline that continue each other,
+    where a small script ends one and/or starts the next, are joined back into one line.
+    """
+    sizes = sorted(sp["size"] for rb in raw_blocks for ln in rb["lines"] for sp in ln["spans"]
+                   if (sp.get("text") or "").strip())
+    if not sizes:
+        return raw_blocks
+    body = sizes[len(sizes) // 2] or 10.0
+
+    def info(ln: dict) -> dict | None:
+        spans = [sp for sp in ln["spans"] if (sp.get("text") or "").strip()]
+        if not spans:
+            return None
+        top = max(spans, key=lambda sp: sp["size"])
+        return {"x0": spans[0]["bbox"][0], "x1": spans[-1]["bbox"][2], "base": top["origin"][1],
+                "size": top["size"], "first": spans[0], "last": spans[-1]}
+
+    recs = []
+    for bi, rb in enumerate(raw_blocks):
+        for li, ln in enumerate(rb["lines"]):
+            i = info(ln)
+            if i:
+                recs.append((bi, li, i))
+    if len(recs) < 2:
+        return raw_blocks
+    small = lambda sp: sp["size"] < 0.85 * body  # noqa: E731
+    target: dict[tuple, tuple] = {}  # (bi, li) of a piece -> (bi, li) of the line it joins
+    recs.sort(key=lambda r: (round(r[2]["base"], 1), r[2]["x0"]))
+    for a_i, (abi, ali, a) in enumerate(recs):
+        for bbi, bli, b in recs[a_i + 1:]:
+            if abs(b["base"] - a["base"]) > 0.3 * a["size"]:
+                break
+            if b["x0"] < a["x0"] + 0.5 * (a["x1"] - a["x0"]) or b["x0"] > a["x1"] + 0.6 * a["size"]:
+                continue
+            if not (small(a["last"]) or small(b["first"])):
+                continue  # two columns, or a tab stop: not a split at a script
+            target[(bbi, bli)] = target.get((abi, ali), (abi, ali))
+            break
+    if not target:
+        return raw_blocks
+    for piece in sorted(target, key=lambda k: next(r[2]["x0"] for r in recs if (r[0], r[1]) == k)):
+        hbi, hli = target[piece]
+        head = raw_blocks[hbi]["lines"][hli]
+        part = raw_blocks[piece[0]]["lines"][piece[1]]
+        head["spans"] = head["spans"] + part["spans"]
+        part["spans"] = []
+        boxes = [sp["bbox"] for sp in head["spans"] if (sp.get("text") or "").strip()]
+        head["bbox"] = _union(boxes)
+    out = []
+    for rb in raw_blocks:
+        rb["lines"] = [ln for ln in rb["lines"] if ln["spans"]]
+        if rb["lines"]:
+            rb["bbox"] = _union([ln["bbox"] for ln in rb["lines"]])
+            out.append(rb)
+    return out
 
 
 def _merge_math_rows(raw_blocks: list[dict]) -> list[dict]:
@@ -923,6 +987,23 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
             sizes = [sp["size"] for sp in ln["spans"] if (sp.get("text") or "").strip()]
             line_size.append(max(sizes) if sizes else 0)
         is_m = [_is_math_span(sp) for _, _, sp in flat]
+        # a superscript stacked over a subscript (c¹₁): plain text cannot write it, so the
+        # letter and both scripts are a formula, shown from the page
+        for k in range(1, len(flat) - 1):
+            a, b = flat[k][2], flat[k + 1][2]
+            ta, tb = (a.get("text") or "").strip(), (b.get("text") or "").strip()
+            ls = line_size[flat[k][0]] or a["size"]
+            if not (ta and tb and a["size"] < 0.85 * ls and b["size"] < 0.85 * ls):
+                continue
+            wa = a["bbox"][2] - a["bbox"][0]
+            stacked = b["bbox"][0] < a["bbox"][2] - 0.4 * wa and abs(
+                (a["bbox"][1] + a["bbox"][3]) / 2 - (b["bbox"][1] + b["bbox"][3]) / 2) > 0.3 * a["size"]
+            if stacked:
+                is_m[k] = is_m[k + 1] = True
+                base = flat[k - 1][2]
+                tbase = (base.get("text") or "").strip()
+                if tbase and len(tbase) <= 2 and tbase.isalpha() and base["bbox"][2] >= a["bbox"][0] - 0.15 * ls:
+                    is_m[k - 1] = True
         if not any(is_m):
             continue
         # the rest of a word one of whose letters is private-use (a math-italic
@@ -1043,9 +1124,17 @@ def _assign_math_runs(raw_blocks: list[dict], counter: list[int]) -> list[dict]:
             if not boxes:
                 continue
             x0, y0, x1, y1 = _union(boxes)
-            row_base = blk["lines"][flat[min(members)][0]].get("row_base")
+            li0 = flat[min(members)][0]
+            row_base = blk["lines"][li0].get("row_base")
             if row_base is not None and y0 < row_base < y1:
                 base = row_base
+            elif size and size < 0.85 * (line_size[li0] or size):
+                # only small scripts (a lone superscript ⁰, a subscript ₂): placed by the
+                # line's baseline, so a superscript stays up and a subscript down
+                text_sp = [sp for sp in blk["lines"][li0]["spans"]
+                           if (sp.get("text") or "").strip() and sp["size"] >= 0.85 * line_size[li0]]
+                if text_sp:
+                    base = row_base if row_base is not None else max(text_sp, key=lambda sp: sp["size"])["origin"][1]
             pad = 0.12 * size
             runs.append({
                 "id": rid,
@@ -1431,6 +1520,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 span_info.append((b[0], b[1], b[2], b[3], int(sp.get("color", 0)), bold, len(txt),
                                   round(sp.get("size", 0) or 0, 1)))
 
+    raw_blocks = _join_split_rows(raw_blocks)
     raw_blocks = _merge_math_rows(raw_blocks)
     math_runs = _assign_math_runs(raw_blocks, [0])
     try:

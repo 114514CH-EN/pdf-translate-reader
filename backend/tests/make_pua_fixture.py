@@ -74,6 +74,25 @@ def main() -> None:
             x = put(x, 310, piece, obl, "ArevSansOblique")
         x = put(x, 310, ", ", reg, "ArevSansRoman")
     put(x, 310, "end} and that is all.", reg, "ArevSansRoman")
+    # a letter carrying a superscript stacked over a subscript (c with 1 over 1), set as
+    # three pieces: the oblique letter, a small raised digit, a small lowered digit at the
+    # same x. PDF readers break the line at each such stack
+    y = 430
+    x = put(72, y, "Find the new points ", reg, "ArevSansRoman")
+    for i, (up, down) in enumerate((("1", "1"), ("1", "2"), ("0", "1"), ("0", "2"))):
+        x = put(x, y, "c", obl, "ArevSansOblique")
+        put(x + 0.2, y - 3.6, up, reg, "ArevSansRoman", 7.6)
+        x = put(x + 0.2, y + 2.4, down, reg, "ArevSansRoman", 7.6)
+        x = put(x, y, (" and ", " from ", " and ", ", after one step.")[i], reg, "ArevSansRoman")
+    # a lone superscript after a plain italic letter, beside a formula on the same line
+    y = 446
+    x = put(72, y, "The error of ", reg, "ArevSansRoman")
+    x = put(x, y, "C", obl, "ArevSansOblique")
+    x = put(x + 0.2, y - 3.6, "0", reg, "ArevSansRoman", 7.6)
+    x = put(x, y, " is ", reg, "ArevSansRoman")
+    for piece in ("\uebf6", "ec"):
+        x = put(x, y, piece, obl, "ArevSansOblique")
+    put(x, y, " long.", reg, "ArevSansRoman")
     doc.subset_fonts()
     doc.save(OUT, garbage=4, deflate=True)
     tmp.unlink()

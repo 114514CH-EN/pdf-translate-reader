@@ -176,3 +176,50 @@ def test_control_codes_from_fonts_without_a_unicode_map():
     # TeX OT1 ligatures at 0x1B–0x1F, next to letters
     assert _fix_bullets("\x1cles and o\x1ece", "CMSS10") == "files and office"
     assert _fix_bullets("plain", "F78") == "plain"
+
+
+def test_stacked_scripts_are_formulas_and_lone_superscripts_stay_up():
+    with fitz.open(PDF) as d:
+        page = extract_page(d[0])
+    ph = next(b["meta"]["ph"] for b in build_blocks(page, 1) if "Find the new points" in b["text"])
+    line = ph[ph.index("Find the new points"):].split("\n")
+    assert re.fullmatch(r"Find the new points \{\{m\d+\}\} and \{\{m\d+\}\} from \{\{m\d+\}\} and \{\{m\d+\}\}, after one step\.", line[0])
+    m = re.fullmatch(r"The error of C\{\{(m\d+)\}\} is \{\{m\d+\}\} long\.", line[1])
+    assert m
+    sup = next(r for r in page["math_runs"] if r["id"] == m.group(1))
+    # aligned on the text's baseline: the crop sits above it, like the superscript it is
+    assert sup["bbox"][3] <= sup["baseline"]
+
+
+def _sp(text, x0, x1, base, size=10.0, font="Demo-Roman"):
+    top = base - 0.8 * size
+    return {"text": text, "font": font, "size": size, "flags": 0, "color": 0,
+            "origin": [x0, base], "bbox": [x0, top, x1, top + size]}
+
+
+def test_line_broken_at_stacked_scripts_is_joined_again():
+    """How the PDF reader hands such a line over: the first piece ends on the raised
+    script, the next starts with the lowered one at the same x, a third piece in a block
+    of its own. Rejoined, it is one line again, in order, without a break."""
+    from app.services.extract import _join_split_rows
+
+    base = 130.0
+    a = [_sp("2. Find the points ", 82, 180, base), _sp("c", 180, 185, base, font="Demo-Oblique"),
+         _sp("1", 185.2, 189, base - 3.6, 7.6)]
+    b = [_sp("1", 185.2, 189, base + 2.4, 7.6), _sp(" and ", 189, 210, base), _sp("c", 210, 215, base, font="Demo-Oblique"),
+         _sp("1", 215.2, 219, base - 3.6, 7.6)]
+    c = [_sp("2", 215.2, 219, base + 2.4, 7.6), _sp(", after one step.", 219, 300, base)]
+    nxt = [_sp("of the update rule.", 96, 200, base + 13)]
+    blocks = [{"type": 0, "bbox": [], "lines": [{"bbox": [82, 120, 189, 133], "spans": a}, {"bbox": [185, 120, 219, 135], "spans": b},
+                                                  {"bbox": [96, 133, 200, 146], "spans": nxt}]},
+              {"type": 0, "bbox": [], "lines": [{"bbox": [215, 120, 300, 135], "spans": c}]}]
+    out = _join_split_rows(blocks)
+    assert len(out) == 1 and len(out[0]["lines"]) == 2
+    assert "".join(sp["text"] for sp in out[0]["lines"][0]["spans"]) == "2. Find the points c11 and c12, after one step."
+    assert "".join(sp["text"] for sp in out[0]["lines"][1]["spans"]) == "of the update rule."
+    # two columns side by side are not joined
+    left = [_sp("left column text", 72, 290, base)]
+    right = [_sp("right column text", 310, 540, base)]
+    cols = [{"type": 0, "bbox": [], "lines": [{"bbox": [72, 120, 290, 133], "spans": left}]},
+            {"type": 0, "bbox": [], "lines": [{"bbox": [310, 120, 540, 133], "spans": right}]}]
+    assert len(_join_split_rows(cols)) == 2
