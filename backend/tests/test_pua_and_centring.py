@@ -266,3 +266,27 @@ def test_misread_formula_glyphs_on_a_latin_page():
                  "\u0915\u093e", "\u0914\u0930 \u092f\u0939 \u092d\u0940 \u0939\u093f\u0902\u0926\u0940 \u092e\u0947\u0902")
     _mark_misread_glyphs(hindi)
     assert not any(sp.get("_misread") for sp in hindi[0]["lines"][0]["spans"])
+
+
+def test_formula_font_under_a_made_up_name():
+    """Word embeds Cambria Math under a name like "CIDFont+F4". A font the page uses for
+    math-italic letters and never for a prose word is a formula font: pieces such as
+    "= tan(5" are formula too. A text font that also sets a math letter stays text."""
+    from app.services.extract import _is_math_span, _mark_math_fonts
+
+    def it(s):  # ASCII letters → mathematical italic
+        return "".join(chr(0x1D44E + ord(c) - 97) if "a" <= c <= "z" else c for c in s)
+
+    spans = [
+        {"text": "Differentiate with the product rule", "font": "CIDFont+F2", "size": 12},
+        {"text": it("g(u, v) = ") + "tan(5" + it("uv"), "font": "CIDFont+F4", "size": 14},
+        {"text": "= tan(5", "font": "CIDFont+F4", "size": 14},
+        {"text": ") (4" + it("u") + ")", "font": "CIDFont+F4", "size": 14},
+        {"text": "where " + it("u") + " is the speed and " + it("v") + it("w"), "font": "CIDFont+F3", "size": 12},
+        {"text": " ", "font": "CIDFont+F4", "size": 14},
+    ]
+    blocks = [{"lines": [{"spans": spans}]}]
+    _mark_math_fonts(blocks)
+    assert [bool(sp.get("_mfont")) for sp in spans] == [False, True, True, True, False, False]
+    assert _is_math_span(spans[2]) and _is_math_span(spans[3])
+    assert not _is_math_span(spans[0])
