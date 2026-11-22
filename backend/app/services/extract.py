@@ -46,15 +46,16 @@ def _visual_rows(picked: list[tuple]) -> list[str]:
     return [" ".join(q[3] for q in sorted(line, key=lambda q: q[1])) for line in lines]
 
 
-def _words_in_bbox(words: list[tuple], bbox: list[float]) -> str:
-    """Assemble cell text from word geometry (reading order), avoiding tbl.extract() quirks."""
+def _words_in_bbox(words: list[tuple], bbox: list[float], token=None) -> str:
+    """Assemble cell text from word geometry (reading order), avoiding tbl.extract() quirks.
+    ``token(word_tuple)`` may stand in for a word's text."""
     x0, y0, x1, y1 = bbox
     picked = []
     for w in words:
         wx0, wy0, wx1, wy1, word = w[0], w[1], w[2], w[3], w[4]
         wcx, wcy = (wx0 + wx1) / 2, (wy0 + wy1) / 2
         if x0 - 1 <= wcx <= x1 + 1 and y0 - 1 <= wcy <= y1 + 1:
-            picked.append((wcy, wx0, max(wy1 - wy0, 1.0), word))
+            picked.append((wcy, wx0, max(wy1 - wy0, 1.0), token(w) if token else word))
     if not picked:
         return ""
     rows = _visual_rows(picked)
@@ -66,6 +67,38 @@ def _words_in_bbox(words: list[tuple], bbox: list[float]) -> str:
     text = re.sub(r"\s+([,.;:!?)\]}])", r"\1", text)
     text = re.sub(r"([(\[{])\s+", r"\1", text)
     return text.strip()
+
+
+_RUN_MARK = re.compile("\x00(m\\d+)\x00")
+
+
+def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple], ids: set[str]) -> str | None:
+    """A table cell's text with its formulas as {{mN}}, found by where the words are: a word
+    lying on a piece of formula N stands for formula N, the first time only. Matching the
+    formula's text instead fails when its pieces read in another order in the cell (the
+    path letter under an integral sign is on the next line, after the words that follow
+    the formula)."""
+    def token(w):
+        cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
+        for (bx0, by0, bx1, by1), rid in marks:
+            if rid in ids and bx0 <= cx <= bx1 and by0 <= cy <= by1:
+                return "\x00" + rid + "\x00"
+        return w[4]
+
+    text = _words_in_bbox(words, bbox, token)
+    seen: set[str] = set()
+
+    def sub(m):
+        rid = m.group(1)
+        if rid in seen:
+            return ""
+        seen.add(rid)
+        return "{{" + rid + "}}"
+
+    out = _RUN_MARK.sub(sub, text)
+    if not seen:
+        return None
+    return re.sub(r"[ \t]{2,}", " ", out).strip()
 
 
 # Word-exported math fonts often map every glyph to the same char twice (the
@@ -449,7 +482,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 28  # v28: a formula in a table cell whose pieces sit on different lines (a fraction after "f(x, y) =") is found in the cell text line by line; misread glyphs are judged by how they come (one or two at a time, not in words) instead of by their ratio to Latin letters, which failed on pages full of squared terms; grad / div / curl are operator names and a formula font may set a stray word; v27: a font a page uses only for math-italic letters (no prose words) is a formula font, whatever its name (Word embeds Cambria Math as "CIDFont+F4"); v26: on a Latin-script page, one-to-three-character pieces of Indic / Ethiopic script are misread formula glyphs (Word Cambria Math: ∂ as Telugu, x as a Tamil digit, big parentheses as Ethiopic); v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 28  # v28: formulas in table cells are found by where their pieces are, not by their text (a fraction's numerator on the line above, an integral's path letter below); text | formula | text stored as separate lines of one block is one line again; misread glyphs are judged by how they come (one or two at a time, not in words) instead of by their ratio to Latin letters, which failed on pages full of squared terms; grad / div / curl are operator names and a formula font may set a stray word; v27: a font a page uses only for math-italic letters (no prose words) is a formula font, whatever its name (Word embeds Cambria Math as "CIDFont+F4"); v26: on a Latin-script page, one-to-three-character pieces of Indic / Ethiopic script are misread formula glyphs (Word Cambria Math: ∂ as Telugu, x as a Tamil digit, big parentheses as Ethiopic); v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -1634,6 +1667,9 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
     except Exception:
         pass  # keep the text-based boxes
     sup_fixes = _plain_superscripts(raw_blocks)
+    # where each formula's pieces are, for the placeholders of table cells
+    run_marks = [(tuple(sp["bbox"]), sp["m"]) for blk in raw_blocks for ln in blk["lines"]
+                 for sp in ln["spans"] if sp.get("m") and (sp.get("text") or "").strip()]
     math_spans = [
         (sp["bbox"], len((sp.get("text") or "").replace(" ", "")), bool(sp.get("m")), *_letters(sp))
         for blk in raw_blocks for ln in blk["lines"] for sp in ln["spans"] if (sp.get("text") or "").strip()
@@ -1661,15 +1697,18 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 n_rows, n_cols, cells = 0, 0, []
             if not cells:
                 continue
-            for cell in cells:
-                cell["text"] = _words_in_bbox(words, cell["bbox"])
+            def sup_fix(cell: dict, text: str) -> str:
                 for sb, tail, plain, sup in sup_fixes:  # "10" + raised "5" came out of the words as "105"
                     if cell["bbox"][0] <= (sb[0] + sb[2]) / 2 <= cell["bbox"][2] \
                             and cell["bbox"][1] <= (sb[1] + sb[3]) / 2 <= cell["bbox"][3]:
                         for glue in ("", " "):
-                            if tail + glue + plain in cell["text"]:
-                                cell["text"] = cell["text"].replace(tail + glue + plain, tail + sup, 1)
+                            if tail + glue + plain in text:
+                                text = text.replace(tail + glue + plain, tail + sup, 1)
                                 break
+                return text
+
+            for cell in cells:
+                cell["text"] = sup_fix(cell, _words_in_bbox(words, cell["bbox"]))
                 cell.update(_cell_style(span_info, cell["bbox"]))
                 # math cell → shown as a crop of the original rendering
                 x0, y0, x1, y1 = cell["bbox"]
@@ -1698,7 +1737,10 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                     for m in inside:  # keep the crop off the cell borders
                         mb = m["bbox"]
                         m["bbox"] = [max(mb[0], x0 + 0.8), max(mb[1], y0 + 0.8), min(mb[2], x1 - 0.8), min(mb[3], y1 - 0.8)]
-                    ph = restore_placeholders(cell["text"], inside) if inside else None
+                    ph = None
+                    if inside:
+                        ph = _cell_placeholders(words, cell["bbox"], run_marks, {m["id"] for m in inside})
+                        ph = sup_fix(cell, ph) if ph else restore_placeholders(cell["text"], inside)
                     if ph:
                         cell["ph"] = ph
                         cell["math_ids"] = [m["id"] for m in inside if "{{" + m["id"] + "}}" in ph]
