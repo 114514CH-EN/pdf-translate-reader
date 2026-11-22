@@ -445,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 24  # v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 25  # v25: a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -1165,14 +1165,21 @@ def _hidden_spans(page: fitz.Page) -> dict[tuple, int]:
         if r is None or r.is_empty:
             continue
         items = d.get("items") or []
-        boxy = items and all(it[0] in ("re", "qu") for it in items)
-        if not boxy and items and all(it[0] == "l" for it in items):
+        seqno = d.get("seqno", -1)
+        if items and all(it[0] in ("re", "qu") for it in items):
+            # each rectangle on its own: Word draws a table's border lines as one path of
+            # thin filled rectangles, whose outline is the whole table — that is not a
+            # surface covering everything inside it
+            for it in items:
+                ir = fitz.Rect(it[1]) if it[0] == "re" else fitz.Quad(it[1]).rect
+                if min(ir.width, ir.height) >= 3:  # a rule, a border, a fraction bar hides nothing
+                    covers.append((seqno, ir))
+        elif items and all(it[0] == "l" for it in items):
             # a rectangle drawn as four lines: every point on its border
             pts = [pt for it in items for pt in it[1:3]]
-            boxy = all(min(abs(pt.x - r.x0), abs(pt.x - r.x1)) < 0.6 or min(abs(pt.y - r.y0), abs(pt.y - r.y1)) < 0.6
-                       for pt in pts)
-        if boxy:
-            covers.append((d.get("seqno", -1), r))
+            if all(min(abs(pt.x - r.x0), abs(pt.x - r.x1)) < 0.6 or min(abs(pt.y - r.y0), abs(pt.y - r.y1)) < 0.6
+                   for pt in pts) and min(r.width, r.height) >= 3:
+                covers.append((seqno, r))
     try:
         opaque = [fitz.Rect(i["bbox"]) for i in page.get_image_info() if not i.get("has-mask")]
         for seq, (kind, rect) in enumerate(page.get_bboxlog()):
