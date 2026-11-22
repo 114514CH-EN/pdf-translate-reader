@@ -676,6 +676,20 @@ _MISREAD_RE = re.compile("[\u0900-\u0dff\u1200-\u139f]")
 _LATIN_RE = re.compile("[A-Za-z\U0001D400-\U0001D7FF]")
 
 
+_WORD_RE = re.compile("[A-Za-z]{2,}")
+_FORMULA_LETTER_RE = re.compile("[\U0001D400-\U0001D7FF\u0391-\u03c9]")
+
+
+def _letters(sp: dict) -> tuple[int, int]:
+    """(letters of ordinary words, letters of formulas) in a span: words are two or more
+    plain Latin letters outside a formula; formula letters are math italics and Greek,
+    or any letter in a span that belongs to a formula."""
+    t = sp.get("text") or ""
+    if sp.get("m") or sp.get("_misread"):
+        return 0, sum(1 for ch in t if ch.isalpha()) or len(t.strip())
+    return sum(len(w) for w in _WORD_RE.findall(t)), len(_FORMULA_LETTER_RE.findall(t))
+
+
 def _mark_misread_glyphs(raw_blocks: list[dict]) -> None:
     """On a page written in Latin script, a piece of one to three characters from an Indic
     or the Ethiopic script is a formula glyph with a broken character map, not text in
@@ -1565,7 +1579,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
         pass  # keep the text-based boxes
     sup_fixes = _plain_superscripts(raw_blocks)
     math_spans = [
-        (sp["bbox"], len((sp.get("text") or "").replace(" ", "")), bool(sp.get("m")))
+        (sp["bbox"], len((sp.get("text") or "").replace(" ", "")), bool(sp.get("m")), *_letters(sp))
         for blk in raw_blocks for ln in blk["lines"] for sp in ln["spans"] if (sp.get("text") or "").strip()
     ]
 
@@ -1603,13 +1617,19 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 cell.update(_cell_style(span_info, cell["bbox"]))
                 # math cell → shown as a crop of the original rendering
                 x0, y0, x1, y1 = cell["bbox"]
-                tot = mth = 0
-                for sb, n, is_m in math_spans:
+                tot = mth = prose = formula = 0
+                for sb, n, is_m, pl, fl in math_spans:
                     cx, cy = (sb[0] + sb[2]) / 2, (sb[1] + sb[3]) / 2
                     if x0 - 1 <= cx <= x1 + 1 and y0 - 1 <= cy <= y1 + 1:
                         tot += n
                         mth += n if is_m else 0
-                if tot and mth >= 0.5 * tot:
+                        prose += pl
+                        formula += fl
+                # by characters, or by letters: digits, brackets and "=" of formulas that
+                # were not grouped into runs count as text, so a worked answer made of
+                # equations with a few words ("at the point") read as "mostly text" and
+                # went to the translator in pieces
+                if tot and (mth >= 0.5 * tot or (formula >= 8 and prose < 0.3 * (prose + formula))):
                     cell["math"] = True
                 elif mth:
                     # text + formula in one cell: protect the formula with a placeholder
