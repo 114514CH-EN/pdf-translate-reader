@@ -247,9 +247,22 @@ def test_table_borders_drawn_as_one_path_hide_nothing():
     assert "Under a white box" in hidden
 
 
-def test_word_exponents_mapped_to_odia_are_formula_pieces():
-    from app.services.extract import _is_math_span
+def test_misread_formula_glyphs_on_a_latin_page():
+    """Word's Cambria Math with a broken character map: on an English page, short pieces in
+    Indic or Ethiopic script are formula glyphs (shown from the page). A page written in
+    such a script keeps its text."""
+    from app.services.extract import _is_math_span, _mark_misread_glyphs
 
-    assert _is_math_span({"text": "ଶ", "font": "CIDFont+F4", "size": 10})
-    # real Odia words are not touched
-    assert not _is_math_span({"text": "ଓଡିଆ ଭାଷା", "font": "Kalinga", "size": 11})
+    def page(*texts):
+        return [{"lines": [{"spans": [{"text": t, "font": "CIDFont+F4", "size": 10} for t in texts]}]}]
+
+    english = page("For a turning point of the surface we need both slopes to vanish, so", "\u0c21\u0beb", "=",
+                   "\u0c21\u0bec", "= 0", "\u0b36", "\u1240", "and the rest of this sentence is plain English text.")
+    _mark_misread_glyphs(english)
+    flags = [sp.get("_misread", False) for sp in english[0]["lines"][0]["spans"]]
+    assert flags == [False, True, False, True, False, True, True, False]
+    assert _is_math_span(english[0]["lines"][0]["spans"][1])
+    hindi = page("\u092f\u0939 \u090f\u0915 \u0935\u093e\u0915\u094d\u092f \u0939\u0948", "\u0939\u0948",
+                 "\u0915\u093e", "\u0914\u0930 \u092f\u0939 \u092d\u0940 \u0939\u093f\u0902\u0926\u0940 \u092e\u0947\u0902")
+    _mark_misread_glyphs(hindi)
+    assert not any(sp.get("_misread") for sp in hindi[0]["lines"][0]["spans"])
