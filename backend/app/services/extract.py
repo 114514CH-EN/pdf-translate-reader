@@ -69,41 +69,55 @@ def _words_in_bbox(words: list[tuple], bbox: list[float], token=None) -> str:
     return text.strip()
 
 
-_RUN_MARK = re.compile("\x00(m\\d+)\x00")
+_RUN_MARK = re.compile("\x00(m\\d+)([01])\x00")
 
 
-def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple], runs: dict[str, list]) -> str | None:
+def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple], runs: dict[str, tuple]) -> str | None:
     """A table cell's text with its formulas as {{mN}}, found by where the words are: a word
-    lying on a piece of formula N stands for formula N, the first time only. Matching the
-    formula's text instead fails when its pieces read in another order in the cell (the
-    path letter under an integral sign is on the next line, after the words that follow
-    the formula)."""
+    lying mostly on pieces of formula N stands for formula N. Matching the formula's text
+    instead fails when its pieces read in another order in the cell (a numerator on the
+    line above, the path letter under an integral sign on the line below). ``runs``: id →
+    (bbox, baseline); the placeholder goes where the formula's baseline row is."""
     def token(w):
-        cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
+        area = max((w[2] - w[0]) * (w[3] - w[1]), 1e-6)
+        cover: dict[str, float] = {}
         for (bx0, by0, bx1, by1), rid in marks:
-            if rid in runs and bx0 <= cx <= bx1 and by0 <= cy <= by1:
-                # punctuation of the sentence stuck to the formula ("width T,") reaches
-                # past the whole formula: it stays text
-                rx0, _, rx1, _ = runs[rid]
-                lead = re.match(r"[(\[]*", w[4]).group() if w[0] < rx0 - 0.5 else ""
-                tail = re.search(r"[,;:.!?)\]]*$", w[4]).group() if w[2] > rx1 + 0.5 else ""
-                return lead + "\x00" + rid + "\x00" + tail
-        return w[4]
+            if rid in runs:
+                ix = min(w[2], bx1) - max(w[0], bx0)
+                iy = min(w[3], by1) - max(w[1], by0)
+                if ix > 0 and iy > 0:
+                    cover[rid] = cover.get(rid, 0.0) + ix * iy
+        if not cover:
+            return w[4]
+        rid = max(cover, key=cover.get)
+        if cover[rid] < 0.45 * area:
+            return w[4]
+        # punctuation of the sentence stuck to the formula ("width T,") reaches past the
+        # whole formula: it stays text
+        (rx0, _, rx1, _), base = runs[rid]
+        lead = re.match(r"[(\[]*", w[4]).group() if w[0] < rx0 - 0.5 else ""
+        tail = re.search(r"[,;:.!?)\]]*$", w[4]).group() if w[2] > rx1 + 0.5 else ""
+        main = "1" if w[1] - 1 <= base <= w[3] + 1 else "0"
+        return lead + "\x00" + rid + main + "\x00" + tail
 
     text = _words_in_bbox(words, bbox, token)
-    seen: set[str] = set()
+    found = _RUN_MARK.findall(text)
+    if not found:
+        return None
+    on_row = {rid for rid, main in found if main == "1"}
+    done: set[str] = set()
 
     def sub(m):
-        rid = m.group(1)
-        if rid in seen:
-            return ""
-        seen.add(rid)
+        rid, main = m.group(1), m.group(2)
+        if rid in done or (rid in on_row and main != "1"):
+            return ""  # a numerator above / a limit below: the formula is put on its own row
+        done.add(rid)
         return "{{" + rid + "}}"
 
     out = _RUN_MARK.sub(sub, text)
-    if not seen:
-        return None
-    return re.sub(r"[ \t]{2,}", " ", out).strip()
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\s+([,.;:!?)\]}])", r"\1", out)
+    return out.strip()
 
 
 # Word-exported math fonts often map every glyph to the same char twice (the
@@ -1744,7 +1758,8 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                         m["bbox"] = [max(mb[0], x0 + 0.8), max(mb[1], y0 + 0.8), min(mb[2], x1 - 0.8), min(mb[3], y1 - 0.8)]
                     ph = None
                     if inside:
-                        ph = _cell_placeholders(words, cell["bbox"], run_marks, {m["id"]: m["bbox"] for m in inside})
+                        ph = _cell_placeholders(words, cell["bbox"], run_marks,
+                                                {m["id"]: (m["bbox"], m["baseline"]) for m in inside})
                         ph = sup_fix(cell, ph) if ph else restore_placeholders(cell["text"], inside)
                     if ph:
                         cell["ph"] = ph
