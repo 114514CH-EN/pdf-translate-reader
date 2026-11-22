@@ -445,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 26  # v26: on a Latin-script page, one-to-three-character pieces of Indic / Ethiopic script are misread formula glyphs (Word Cambria Math: ∂ as Telugu, x as a Tamil digit, big parentheses as Ethiopic); v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 27  # v27: a font a page uses only for math-italic letters (no prose words) is a formula font, whatever its name (Word embeds Cambria Math as "CIDFont+F4"); v26: on a Latin-script page, one-to-three-character pieces of Indic / Ethiopic script are misread formula glyphs (Word Cambria Math: ∂ as Telugu, x as a Tamil digit, big parentheses as Ethiopic); v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -623,6 +623,9 @@ def _is_math_span(sp: dict) -> bool:
         return False
     if MATH_FONT_RE.search(sp.get("font") or ""):
         return True
+    if sp.get("_mfont"):
+        # a font this page uses only for formulas (see _mark_math_fonts)
+        return True
     if sp.get("_misread"):
         # a glyph whose character map is broken (see _mark_misread_glyphs): what it shows
         # is only known from the page
@@ -676,7 +679,6 @@ _MISREAD_RE = re.compile("[\u0900-\u0dff\u1200-\u139f]")
 _LATIN_RE = re.compile("[A-Za-z\U0001D400-\U0001D7FF]")
 
 
-_WORD_RE = re.compile("[A-Za-z]{2,}")
 _FORMULA_LETTER_RE = re.compile("[\U0001D400-\U0001D7FF\u0391-\u03c9]")
 
 
@@ -685,7 +687,7 @@ def _letters(sp: dict) -> tuple[int, int]:
     plain Latin letters outside a formula; formula letters are math italics and Greek,
     or any letter in a span that belongs to a formula."""
     t = sp.get("text") or ""
-    if sp.get("m") or sp.get("_misread"):
+    if sp.get("m") or sp.get("_misread") or sp.get("_mfont"):
         return 0, sum(1 for ch in t if ch.isalpha()) or len(t.strip())
     return sum(len(w) for w in _WORD_RE.findall(t)), len(_FORMULA_LETTER_RE.findall(t))
 
@@ -705,6 +707,35 @@ def _mark_misread_glyphs(raw_blocks: list[dict]) -> None:
         if t and len(t) <= 3 and _MISREAD_RE.search(t) and all(
                 _MISREAD_RE.match(ch) or not ch.isalpha() for ch in t):
             sp["_misread"] = True
+
+
+_MATH_ITALIC_RE = re.compile("[\U0001D400-\U0001D7FF]")
+
+
+def _mark_math_fonts(raw_blocks: list[dict]) -> None:
+    """A font that this page uses for math-italic letters and never for a word of prose is
+    a formula font, whatever it is called: Word embeds Cambria Math under a made-up name
+    ("CIDFont+F4"), so pieces of it such as "= cos(3xy" or ") (6xy" were taken for text —
+    the formula went to the translator in fragments and came back flattened."""
+    seen: dict[str, list[int]] = {}
+    for rb in raw_blocks:
+        for ln in rb["lines"]:
+            for sp in ln["spans"]:
+                t = sp.get("text") or ""
+                f = sp.get("font") or ""
+                if not t.strip() or not f:
+                    continue
+                c = seen.setdefault(f, [0, 0])
+                c[0] += len(_MATH_ITALIC_RE.findall(t))
+                c[1] += sum(1 for w in _WORD_RE.findall(t) if w.lower() not in _OP_NAMES)
+    fonts = {f for f, (mi, words) in seen.items() if mi >= 3 and not words}
+    if not fonts:
+        return
+    for rb in raw_blocks:
+        for ln in rb["lines"]:
+            for sp in ln["spans"]:
+                if sp.get("font") in fonts and (sp.get("text") or "").strip():
+                    sp["_mfont"] = True
 
 
 def _join_split_rows(raw_blocks: list[dict]) -> list[dict]:
@@ -1570,6 +1601,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                                   round(sp.get("size", 0) or 0, 1)))
 
     _mark_misread_glyphs(raw_blocks)
+    _mark_math_fonts(raw_blocks)
     raw_blocks = _join_split_rows(raw_blocks)
     raw_blocks = _merge_math_rows(raw_blocks)
     math_runs = _assign_math_runs(raw_blocks, [0])
