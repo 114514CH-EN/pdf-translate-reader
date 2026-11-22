@@ -72,7 +72,7 @@ def _words_in_bbox(words: list[tuple], bbox: list[float], token=None) -> str:
 _RUN_MARK = re.compile("\x00(m\\d+)\x00")
 
 
-def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple], ids: set[str]) -> str | None:
+def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple], runs: dict[str, list]) -> str | None:
     """A table cell's text with its formulas as {{mN}}, found by where the words are: a word
     lying on a piece of formula N stands for formula N, the first time only. Matching the
     formula's text instead fails when its pieces read in another order in the cell (the
@@ -81,8 +81,13 @@ def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple]
     def token(w):
         cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
         for (bx0, by0, bx1, by1), rid in marks:
-            if rid in ids and bx0 <= cx <= bx1 and by0 <= cy <= by1:
-                return "\x00" + rid + "\x00"
+            if rid in runs and bx0 <= cx <= bx1 and by0 <= cy <= by1:
+                # punctuation of the sentence stuck to the formula ("width T,") reaches
+                # past the whole formula: it stays text
+                rx0, _, rx1, _ = runs[rid]
+                lead = re.match(r"[(\[]*", w[4]).group() if w[0] < rx0 - 0.5 else ""
+                tail = re.search(r"[,;:.!?)\]]*$", w[4]).group() if w[2] > rx1 + 0.5 else ""
+                return lead + "\x00" + rid + "\x00" + tail
         return w[4]
 
     text = _words_in_bbox(words, bbox, token)
@@ -1739,7 +1744,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                         m["bbox"] = [max(mb[0], x0 + 0.8), max(mb[1], y0 + 0.8), min(mb[2], x1 - 0.8), min(mb[3], y1 - 0.8)]
                     ph = None
                     if inside:
-                        ph = _cell_placeholders(words, cell["bbox"], run_marks, {m["id"] for m in inside})
+                        ph = _cell_placeholders(words, cell["bbox"], run_marks, {m["id"]: m["bbox"] for m in inside})
                         ph = sup_fix(cell, ph) if ph else restore_placeholders(cell["text"], inside)
                     if ph:
                         cell["ph"] = ph
