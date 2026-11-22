@@ -142,9 +142,12 @@ textarea {
   gap: 6px;
 }
 
+/* the buttons sit on the same middle line as the tab titles (the tabs stand on the bottom
+   edge, so the bar's own middle is 3-4px higher than their text) */
 .doc-tabs > .btn,
 .doc-tabs > .lib-menu {
-  align-self: center;
+  align-self: flex-end;
+  margin-bottom: calc((31px - (var(--control-h) - 4px)) / 2);
 }
 
 .doc-tabs-scroll {
@@ -173,8 +176,30 @@ textarea {
   cursor: pointer;
   white-space: nowrap;
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
   user-select: none;
   transition: background var(--ease), color var(--ease);
+}
+
+.doc-tab.dragging {
+  opacity: 0.45;
+}
+.doc-tab.drop-before::before,
+.doc-tab.drop-after::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.doc-tab.drop-before::before {
+  left: -2px;
+}
+.doc-tab.drop-after::before {
+  right: -2px;
 }
 
 .doc-tab:hover:not(.active) {
@@ -188,7 +213,6 @@ textarea {
   border-color: var(--border);
   margin-bottom: calc(-1 * var(--bw));
   height: calc(31px + var(--bw));
-  font-weight: 500;
 }
 
 .doc-tab-title {

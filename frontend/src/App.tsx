@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.22-3';
+const EXPECTED_BACKEND = '2026.11.22-4';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -130,13 +130,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
-  // on startup, activate the first open tab (closing the last tab leaves the empty state)
+  // on startup, reopen the tab that was read last (the list comes most recently opened
+  // first); closing the last tab leaves the empty state
   const bootRef = useRef(false);
   const openIds = useDocStore((s) => s.openIds);
   useEffect(() => {
     if (bootRef.current || documents.length === 0) return;
     bootRef.current = true;
-    if (!activeId && openIds.length > 0) useDocStore.getState().setActive(openIds[0]);
+    if (activeId || openIds.length === 0) return;
+    const last = documents.find((d) => openIds.includes(String(d.id)));
+    useDocStore.getState().setActive(last ? String(last.id) : openIds[0]);
   }, [activeId, documents, openIds]);
 
   // detect an old backend process still serving this (new) page

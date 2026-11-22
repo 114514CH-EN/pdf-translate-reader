@@ -37,6 +37,8 @@ interface DocState {
   loadDocuments: () => Promise<void>;
   openDocument: (id: string) => Promise<void>;
   closeDocument: (id: string) => void;
+  /** drag a tab: put `id` in front of `before` (null: at the end) */
+  moveTab: (id: string, before: string | null) => void;
   /** 从零开始: a new document of one empty page, opened in edit mode */
   createBlank: (title: string) => Promise<void>;
   ensureOpen: (id: string) => void;
@@ -105,6 +107,18 @@ export const useDocStore = create<DocState>((set, get) => ({
     const sid = String(id);
     if (get().openIds.includes(sid)) return;
     const openIds = [...get().openIds, sid];
+    set({ openIds });
+    writeOpen(openIds);
+  },
+
+  moveTab(id, before) {
+    const sid = String(id);
+    if (sid === before) return;
+    const rest = get().openIds.filter((x) => x !== sid);
+    const at = before === null ? rest.length : rest.indexOf(before);
+    if (at < 0) return;
+    const openIds = [...rest.slice(0, at), sid, ...rest.slice(at)];
+    if (openIds.join() === get().openIds.join()) return;
     set({ openIds });
     writeOpen(openIds);
   },

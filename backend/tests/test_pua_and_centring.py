@@ -290,3 +290,106 @@ def test_formula_font_under_a_made_up_name():
     assert [bool(sp.get("_mfont")) for sp in spans] == [False, True, True, True, False, False]
     assert _is_math_span(spans[2]) and _is_math_span(spans[3])
     assert not _is_math_span(spans[0])
+
+
+def test_misread_glyphs_on_a_page_full_of_squares():
+    """A worked answer full of squared terms: dozens of misread exponents next to fewer
+    Latin letters than any fixed ratio would allow. They come one at a time, so they are
+    still formula glyphs; a Hindi word among them would not be."""
+    from app.services.extract import _mark_misread_glyphs
+
+    spans = [{"text": "Work out each term separately and add them up", "font": "F2", "size": 10}]
+    for _ in range(12):
+        spans += [{"text": "\U0001D45D\U0001D45E", "font": "F4", "size": 10},
+                  {"text": "ଶ", "font": "F4", "size": 7}]
+    blocks = [{"lines": [{"spans": spans}]}]
+    _mark_misread_glyphs(blocks)
+    assert all(sp.get("_misread") for sp in spans if sp["text"] == "ଶ")
+    hindi = [{"text": "Work out each term separately and add them up", "font": "F2", "size": 10},
+             {"text": "यह एक वाक्य है", "font": "F5", "size": 10},
+             {"text": "का", "font": "F5", "size": 10}]
+    _mark_misread_glyphs([{"lines": [{"spans": hindi}]}])
+    assert not any(sp.get("_misread") for sp in hindi)
+
+
+def test_formula_font_with_operator_names():
+    """grad / div / curl set upright inside a formula do not make its font a text font."""
+    from app.services.extract import _mark_math_fonts
+
+    def it(s):
+        return "".join(chr(0x1D44E + ord(c) - 97) if "a" <= c <= "z" else c for c in s)
+
+    spans = [{"text": "grad " + it("h") + " = ", "font": "F4", "size": 12},
+             {"text": "div " + it("uvw"), "font": "F4", "size": 12},
+             {"text": "Compute the gradient of the field", "font": "F2", "size": 12}]
+    _mark_math_fonts([{"lines": [{"spans": spans}]}])
+    assert [bool(sp.get("_mfont")) for sp in spans] == [True, True, False]
+
+
+def test_cell_formula_found_line_by_line():
+    """A formula whose numerator sits on the line above ("g(u, v) = " then the fraction):
+    the cell text reads line by line, the run reads left to right — both are tried."""
+    from app.services.extract import restore_placeholders
+
+    def it(s):
+        return "".join(chr(0x1D44E + ord(c) - 97) if "a" <= c <= "z" else c for c in s)
+
+    cell = "Differentiate " + it("u+3v") + " " + it("g(u, v) =") + " " + it("4u−v")
+    runs = [{"id": "m1", "text": it("g(u, v) = u+3v"), "rows": it("u+3v g(u, v) =")},
+            {"id": "m2", "text": it("4u−v"), "rows": it("4u−v")}]
+    assert restore_placeholders(cell, runs) == "Differentiate {{m1}} {{m2}}"
+
+
+def test_text_pieces_around_a_formula_in_one_block_make_one_line():
+    """Some PDFs store every piece of a line as a line of its own, the formula's glyphs even
+    in reverse order. Text | formula | text on one baseline is one line, read left to right,
+    even inside one block (where tab-separated columns are otherwise kept apart)."""
+    from app.services.extract import _merge_math_rows
+
+    def it(s):
+        return "".join(chr(0x1D44E + ord(c) - 97) if "a" <= c <= "z" else c for c in s)
+
+    def line(x0, x1, text, size=14.0, base=67.4, font="ArialMT"):
+        sp = {"text": text, "font": font, "size": size, "flags": 0, "color": 0,
+              "bbox": [x0, base - 0.8 * size, x1, base + 0.2 * size], "origin": (x0, base)}
+        return {"bbox": sp["bbox"], "spans": [sp]}
+
+    lines = [line(70, 180, "Work out the flux of "),
+             line(264, 317, it("v"), 19.9, 66.8, "TimesNewRoman"),
+             line(183, 262, it("g = u"), 19.9, 66.8, "TimesNewRoman"),
+             line(320, 440, ";   through the plane   ")]
+    blocks = [{"type": 0, "bbox": [70, 50, 440, 72], "lines": lines}]
+    out = _merge_math_rows(blocks)
+    texts = ["".join(sp["text"] for sp in ln["spans"]) for b in out for ln in b["lines"]]
+    joined = [t for t in texts if "flux" in t]
+    assert len(joined) == 1
+    t = joined[0]
+    assert t.index("flux") < t.index(it("g")) < t.index(it("v")) < t.index("through")
+
+
+def test_cell_placeholders_by_position():
+    """Formulas in a table cell are found by where their pieces are: the path letter under
+    an integral sign (on the next line, after the words that follow the formula) belongs
+    to it, and a comma of the sentence stuck to a formula stays text."""
+    from app.services.extract import _cell_placeholders
+
+    def it(s):
+        return "".join(chr(0x1D44E + ord(c) - 97) if "a" <= c <= "z" else c for c in s)
+
+    words = [(10, 10, 60, 22, "Integrate"), (64, 8, 70, 24, "∮"), (72, 10, 110, 22, it("(u+v)du")),
+             (114, 10, 150, 22, "around"), (154, 10, 170, 22, it("p,")), (174, 10, 200, 22, "then"),
+             (64, 24, 70, 30, it("q"))]
+    marks = [((63, 7, 71, 25), "m1"), ((71, 9, 111, 23), "m1"), ((63, 23, 71, 31), "m1"),
+             ((153, 9, 165, 23), "m2")]
+    runs = {"m1": ([63, 7, 111, 31], 20), "m2": ([153, 9, 165, 23], 20)}
+    assert _cell_placeholders(words, [0, 0, 300, 40], marks, runs) == "Integrate {{m1}} around {{m2}}, then"
+
+    # a fraction whose numerator is on the line above the words before it: the formula
+    # goes where its main row is, after "law gives"
+    words = [(70, 2, 78, 12, it("w")), (10, 14, 40, 26, "The"), (44, 14, 66, 26, "law"),
+             (68, 14, 96, 26, "gives"), (100, 14, 120, 26, it("k =")), (124, 26, 132, 36, it("s")),
+             (136, 14, 170, 26, "exactly.")]
+    marks = [((99, 13, 121, 27), "m1"), ((69, 1, 79, 13), "m1"), ((123, 25, 133, 37), "m1")]
+    runs = {"m1": ([69, 1, 133, 37], 24)}
+    out = _cell_placeholders(words, [0, 0, 300, 40], marks, runs)
+    assert out.replace(" ", "") == "Thelawgives{{m1}}exactly."

@@ -9,6 +9,7 @@ import { IMPORT_ACCEPT, IMPORT_HINT, canImport } from '../lib/files';
 /**
  * Tab strip of open documents. × closes the tab (the document stays in the
  * library); the library menu reopens documents or deletes them for good.
+ * Tabs can be dragged into another order, which is remembered.
  */
 export function DocumentTabs() {
   const documents = useDocStore((s) => s.documents);
@@ -16,6 +17,10 @@ export function DocumentTabs() {
   const activeId = useDocStore((s) => s.activeId);
   const setActive = useDocStore((s) => s.setActive);
   const closeDocument = useDocStore((s) => s.closeDocument);
+  const moveTab = useDocStore((s) => s.moveTab);
+  // dragging a tab to another place: which tab, and where it would land
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null);
   const deleteDocument = useDocStore((s) => s.deleteDocument);
   const uploadFile = useDocStore((s) => s.uploadFile);
   const uploading = useDocStore((s) => s.uploading);
@@ -151,7 +156,38 @@ export function DocumentTabs() {
               key={id}
               role="tab"
               aria-selected={!homeOpen && id === String(activeId)}
-              className={`doc-tab ${!homeOpen && id === String(activeId) ? 'active' : ''}`}
+              className={`doc-tab ${!homeOpen && id === String(activeId) ? 'active' : ''} ${
+                dragId === id ? 'dragging' : ''
+              } ${dropAt?.id === id && dragId !== id ? (dropAt.after ? 'drop-after' : 'drop-before') : ''}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/x-pdftr-tab', id);
+                setDragId(id);
+              }}
+              onDragOver={(e) => {
+                if (!dragId) return; // only our own tabs, not files dragged in from outside
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const r = e.currentTarget.getBoundingClientRect();
+                const after = e.clientX > r.left + r.width / 2;
+                if (dropAt?.id !== id || dropAt.after !== after) setDropAt({ id, after });
+              }}
+              onDrop={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                const r = e.currentTarget.getBoundingClientRect();
+                const after = e.clientX > r.left + r.width / 2;
+                const i = tabs.findIndex((t) => String(t.id) === id);
+                const next = after ? tabs[i + 1] : tabs[i];
+                moveTab(dragId, next ? String(next.id) : null);
+                setDragId(null);
+                setDropAt(null);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setDropAt(null);
+              }}
               onClick={() => setActive(id)}
               onAuxClick={(e) => {
                 if (e.button === 1) closeDocument(id); // middle-click closes, like a browser
