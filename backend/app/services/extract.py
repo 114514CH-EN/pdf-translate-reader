@@ -946,8 +946,11 @@ def _merge_math_rows(raw_blocks: list[dict]) -> list[dict]:
                 reach = 1.0 * s_ if (a["frags"] or b["frags"]) else 0.3 * s_
                 if abs(a["base"] - b["base"]) > 0.3 * s_:
                     continue
-                if {r["bi"] for r in a["text"]} & {r["bi"] for r in b["text"]}:
-                    continue  # same block: its own line handling (tab stops) applies
+                if {r["bi"] for r in a["text"]} & {r["bi"] for r in b["text"]} and not (a["frags"] or b["frags"]):
+                    # same block: its own line handling (tab stops) applies — unless a
+                    # formula sits between them ("Find the flux of" | formula | "; through
+                    # the plane": the PDF stores each piece as a line of its own)
+                    continue
                 gap = max(b["bbox"][0] - a["bbox"][2], a["bbox"][0] - b["bbox"][2])
                 if gap <= reach:
                     a["text"] += b["text"]
