@@ -79,25 +79,28 @@ def _cell_placeholders(words: list[tuple], bbox: list[float], marks: list[tuple]
     line above, the path letter under an integral sign on the line below). ``runs``: id →
     (bbox, baseline); the placeholder goes where the formula's baseline row is."""
     def token(w):
-        area = max((w[2] - w[0]) * (w[3] - w[1]), 1e-6)
+        # how much of the word's width lies on a formula's pieces, measured in a thin band
+        # round the word's middle (math fonts can report words several lines tall)
+        width = max(w[2] - w[0], 1e-6)
+        cy = (w[1] + w[3]) / 2
+        half = max(1.0, 0.2 * min(w[3] - w[1], 24.0))
         cover: dict[str, float] = {}
         for (bx0, by0, bx1, by1), rid in marks:
-            if rid in runs:
+            if rid in runs and by0 <= cy + half and by1 >= cy - half:
                 ix = min(w[2], bx1) - max(w[0], bx0)
-                iy = min(w[3], by1) - max(w[1], by0)
-                if ix > 0 and iy > 0:
-                    cover[rid] = cover.get(rid, 0.0) + ix * iy
+                if ix > 0:
+                    cover[rid] = cover.get(rid, 0.0) + ix
         if not cover:
             return w[4]
         rid = max(cover, key=cover.get)
-        if cover[rid] < 0.45 * area:
+        if cover[rid] < 0.45 * width:
             return w[4]
         # punctuation of the sentence stuck to the formula ("width T,") reaches past the
         # whole formula: it stays text
         (rx0, _, rx1, _), base = runs[rid]
         lead = re.match(r"[(\[]*", w[4]).group() if w[0] < rx0 - 0.5 else ""
         tail = re.search(r"[,;:.!?)\]]*$", w[4]).group() if w[2] > rx1 + 0.5 else ""
-        main = "1" if w[1] - 1 <= base <= w[3] + 1 else "0"
+        main = "1" if cy - max(half, 0.5 * min(w[3] - w[1], 24.0)) - 1 <= base <= cy + 0.5 * min(w[3] - w[1], 24.0) + 1 else "0"
         return lead + "\x00" + rid + main + "\x00" + tail
 
     text = _words_in_bbox(words, bbox, token)
