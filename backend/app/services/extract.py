@@ -445,7 +445,7 @@ def _merge_wrapped_rows(cells: list[dict], n_rows: int, rules: tuple, words: lis
     return new_row, out
 
 
-EXTRACT_VER = 25  # v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
+EXTRACT_VER = 26  # v26: on a Latin-script page, one-to-three-character pieces of Indic / Ethiopic script are misread formula glyphs (Word Cambria Math: ∂ as Telugu, x as a Tamil digit, big parentheses as Ethiopic); v25: Word Cambria Math exponents that come out as Odia letters are formula pieces; a path of several filled rectangles (Word table borders) covers only those rectangles, not their outline — whole tables of text were taken for hidden; thin rules never hide text; v24: lines the PDF broke at a stacked superscript+subscript are joined again, and such a letter with its scripts is a formula; a formula of only small scripts sits on its line's baseline (superscripts stay raised); v23: a lone control code is a bullet, OT1 ligature codes (0x1B–0x1F) are letters again; a span with any private-use or other undrawable character is a formula, with the rest of its word (arev's remapped math-italic letters); formula letters no longer make the prose around them italic or bold; v22: private-use characters (math letters some fonts map there, e.g. arev's v, w) are formula runs; a bold title line and the plain line under it (author) are separate blocks; centred lines and blocks keep their centring; v21: table rows that exist only in some columns (vertically merged cells beside them) are split at their partial rules, raised exponents in the text font become Unicode superscripts (10⁵, not 105); v20: bold vectors (\\mathbf) and derivative dots inside their formula, centred titles and chart labels wrapped over two lines are one paragraph; v19: text painted over by a later opaque shape or picture (an old chart under a new one) is skipped; v18: lines rebuilt from math pieces (LaTeX fractions, numerators in the text font), formulas on consecutive lines kept apart, vector brackets and tall integral signs inside formula boxes, wordless blocks shown as formulas; v17: a text line broken by Word math into several PDF blocks (fractions, cases) is one line again; v16: wrapped lines of tall ruled table cells rejoined into one cell; v15: code blocks (monospace listings, only comments translated), Courier "o" sub-bullets, brackets pulled into formulas; v8: cell text inset/alignment + hanging list indents; v7: inline bold no longer splits paragraphs; v6 tab-stop segments; v5 mixed-cell placeholders
 # v6: tab-stop segments split; v5: formula placeholders inside mixed table cells; v4: same-baseline lines merged; v3: math runs (formula placeholders {{mN}}), formula blocks, math table cells
 
 
@@ -623,10 +623,9 @@ def _is_math_span(sp: dict) -> bool:
         return False
     if MATH_FONT_RE.search(sp.get("font") or ""):
         return True
-    if len(t) <= 3 and all("\u0b00" <= ch <= "\u0b7f" for ch in t):
-        # Word's Cambria Math subset maps its small digits to Odia letters (an exponent 2
-        # comes out as U+0B36): a one-to-three-letter piece of Odia script is that, never
-        # Odia text, and is shown from the page
+    if sp.get("_misread"):
+        # a glyph whose character map is broken (see _mark_misread_glyphs): what it shows
+        # is only known from the page
         return True
     if _PUA_RE.search(t):
         # a private-use character cannot be drawn by any font of ours, so the whole piece
@@ -668,6 +667,30 @@ def _has_words(spans: list[dict], body: float) -> bool:
         if _CJK_RE.search(t) or any(w.lower() not in _OP_NAMES for w in _WORD_RE.findall(t)):
             return True
     return False
+
+
+# scripts Word's Cambria Math subset spills into when its character map is broken: an
+# exponent 2 comes out as Odia U+0B36, ∂ as Telugu, x / y as Tamil digits, big
+# parentheses as Ethiopic syllables
+_MISREAD_RE = re.compile("[\u0900-\u0dff\u1200-\u139f]")
+_LATIN_RE = re.compile("[A-Za-z\U0001D400-\U0001D7FF]")
+
+
+def _mark_misread_glyphs(raw_blocks: list[dict]) -> None:
+    """On a page written in Latin script, a piece of one to three characters from an Indic
+    or the Ethiopic script is a formula glyph with a broken character map, not text in
+    that language. A page that is mostly in such a script (a Hindi or Tamil document) is
+    left alone."""
+    spans = [sp for rb in raw_blocks for ln in rb["lines"] for sp in ln["spans"]]
+    latin = sum(len(_LATIN_RE.findall(sp.get("text") or "")) for sp in spans)
+    other = sum(len(_MISREAD_RE.findall(sp.get("text") or "")) for sp in spans)
+    if not other or latin < 40 or latin < 8 * other:
+        return
+    for sp in spans:
+        t = (sp.get("text") or "").strip()
+        if t and len(t) <= 3 and _MISREAD_RE.search(t) and all(
+                _MISREAD_RE.match(ch) or not ch.isalpha() for ch in t):
+            sp["_misread"] = True
 
 
 def _join_split_rows(raw_blocks: list[dict]) -> list[dict]:
@@ -1532,6 +1555,7 @@ def extract_page(page: fitz.Page, img_dir: Path | None = None) -> dict:
                 span_info.append((b[0], b[1], b[2], b[3], int(sp.get("color", 0)), bold, len(txt),
                                   round(sp.get("size", 0) or 0, 1)))
 
+    _mark_misread_glyphs(raw_blocks)
     raw_blocks = _join_split_rows(raw_blocks)
     raw_blocks = _merge_math_rows(raw_blocks)
     math_runs = _assign_math_runs(raw_blocks, [0])
