@@ -41,6 +41,12 @@ function errMsg(e: unknown): string {
 const isNotConfigured = (msg: string) => msg.includes('尚未配置');
 
 let abort: AbortController | null = null;
+// The document summary is written by a model and can take minutes when the model is slow
+// or down. Browsers keep at most six connections to one address: a summary request left
+// open for every document switched through used them all up, and then even the PDF
+// itself waited forever ("正在加载 PDF…"). One at a time, and cancelled on a switch.
+let summaryAbort: AbortController | null = null;
+const SUMMARY_DELAY = 1200; // flicking through tabs asks for nothing
 
 const EMPTY = {
   messages: [] as ChatMessage[],
@@ -69,17 +75,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abort.abort();
       abort = null;
     }
+    summaryAbort?.abort();
+    const ctl = new AbortController();
+    summaryAbort = ctl;
     set({ ...EMPTY, docId, loading: true });
     try {
       let summaryError = '';
-      const [summary, messages] = await Promise.all([
-        api.getSummary(docId).catch((e) => {
-          summaryError = errMsg(e);
+      const summaryLater = async () => {
+        await new Promise((r) => window.setTimeout(r, SUMMARY_DELAY));
+        if (ctl.signal.aborted || get().docId !== docId) return null;
+        return api.getSummary(docId, false, ctl.signal).catch((e) => {
+          if (!ctl.signal.aborted) summaryError = errMsg(e);
           return null;
-        }),
-        api.getChat(docId).catch(() => [] as ChatMessage[]),
-      ]);
-      if (get().docId !== docId) return; // switched documents meanwhile
+        });
+      };
+      const [summary, messages] = await Promise.all([summaryLater(), api.getChat(docId).catch(() => [] as ChatMessage[])]);
+      if (summaryAbort === ctl) summaryAbort = null;
+      if (get().docId !== docId || ctl.signal.aborted) return; // switched documents meanwhile
       set({
         summaryMd: summary?.summary_md ?? '',
         questions: summary?.questions ?? [],
@@ -98,10 +110,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { docId } = get();
     if (!docId) return;
     set({ loading: true, summaryError: '' });
+    summaryAbort?.abort();
+    const ctl = new AbortController();
+    summaryAbort = ctl;
     try {
-      const summary = await api.getSummary(docId, true);
+      const summary = await api.getSummary(docId, true, ctl.signal);
+      if (get().docId !== docId) return;
       set({ summaryMd: summary.summary_md ?? '', questions: summary.questions ?? [], loading: false, notConfigured: false });
     } catch (e) {
+      if (ctl.signal.aborted || get().docId !== docId) return;
       const m = errMsg(e);
       set({
         loading: false,

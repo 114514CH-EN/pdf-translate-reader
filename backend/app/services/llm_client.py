@@ -80,7 +80,11 @@ async def chat_completion(
     json_mode: bool = False,
     temperature: float = 0.2,
     max_tokens: int = 8192,
+    attempts: int = 5,
 ) -> str:
+    """One chat call. Translation keeps trying (rate limits, a busy provider); the reading
+    assistant passes attempts=2: someone is waiting for it, and with a model that is down
+    five tries kept a request (and a browser connection) open for minutes."""
     client = make_client(cfg)
     kwargs: dict[str, Any] = {
         "model": cfg.get("model") or "deepseek-flash",
@@ -95,7 +99,7 @@ async def chat_completion(
         kwargs["extra_body"] = extra
     last_err: Exception | None = None
     try:
-        for attempt in range(5):
+        for attempt in range(max(1, attempts)):
             try:
                 resp = await client.chat.completions.create(**kwargs)
                 content = resp.choices[0].message.content or ""
@@ -113,6 +117,8 @@ async def chat_completion(
                 if status is not None and status < 500 and status != 429:
                     raise
                 delay = 2**attempt
+            if attempt + 1 >= attempts:
+                break
             await _sleep(delay)
         raise last_err if last_err else RuntimeError("LLM call failed")
     finally:

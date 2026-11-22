@@ -224,8 +224,8 @@ export const api = {
     return request<TestConnectionResult>('/settings/test-connection', { method: 'POST' });
   },
 
-  getSummary(id: string, refresh = false): Promise<SummaryResult> {
-    return request<SummaryResult>(`/documents/${encodeURIComponent(id)}/summary${refresh ? '?refresh=true' : ''}`);
+  getSummary(id: string, refresh = false, signal?: AbortSignal): Promise<SummaryResult> {
+    return request<SummaryResult>(`/documents/${encodeURIComponent(id)}/summary${refresh ? '?refresh=true' : ''}`, { signal });
   },
 
   clearChat(id: string): Promise<void> {

@@ -223,3 +223,33 @@ def test_line_broken_at_stacked_scripts_is_joined_again():
     cols = [{"type": 0, "bbox": [], "lines": [{"bbox": [72, 120, 290, 133], "spans": left}]},
             {"type": 0, "bbox": [], "lines": [{"bbox": [310, 120, 540, 133], "spans": right}]}]
     assert len(_join_split_rows(cols)) == 2
+
+
+def test_table_borders_drawn_as_one_path_hide_nothing():
+    """Word draws a table's borders after the text, as one path of thin filled rectangles.
+    Its outline is the whole table — the text inside is not hidden by it. A real opaque
+    box drawn over text (an old chart under a new one) still hides that text."""
+    from app.services.extract import _hidden_spans
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((100, 120), "Inside a bordered table cell", fontsize=11)
+    page.insert_text((100, 400), "Under a white box", fontsize=11)
+    shape = page.new_shape()
+    for r in ((58, 72, 529, 72.6), (58, 72, 58.6, 458), (93, 72, 93.6, 458), (528.4, 72, 529, 458), (58, 457.4, 529, 458)):
+        shape.draw_rect(fitz.Rect(r))
+    shape.finish(color=None, fill=(0, 0, 0))  # one path, five filled hairline rectangles
+    shape.draw_rect(fitz.Rect(90, 385, 300, 410))
+    shape.finish(color=None, fill=(1, 1, 1))  # an opaque box over the second line
+    shape.commit()
+    hidden = {k[0] for k in _hidden_spans(page)}
+    assert "Inside a bordered table cell" not in hidden
+    assert "Under a white box" in hidden
+
+
+def test_word_exponents_mapped_to_odia_are_formula_pieces():
+    from app.services.extract import _is_math_span
+
+    assert _is_math_span({"text": "ଶ", "font": "CIDFont+F4", "size": 10})
+    # real Odia words are not touched
+    assert not _is_math_span({"text": "ଓଡିଆ ଭାଷା", "font": "Kalinga", "size": 11})

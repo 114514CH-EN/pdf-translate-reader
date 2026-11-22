@@ -169,6 +169,7 @@ export function PdfPane({
   const [dims, setDims] = useState<Record<number, PageDims>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0); // 重新加载
 
   // ---- load PDF document bytes from backend ----
   useEffect(() => {
@@ -184,11 +185,35 @@ export function PdfPane({
     setError(null);
     setPdfDoc(null);
 
+    // The request can hang or drop while the program restarts (an update, a second start
+    // that hands over to the running one): limit each try, and try again a few times
+    // before giving up, instead of showing "正在加载 PDF…" forever.
+    let ctl: AbortController | null = null;
+    const fetchPdf = async (): Promise<ArrayBuffer> => {
+      const waits = [1000, 2000, 4000, 8000];
+      for (let i = 0; ; i++) {
+        ctl = new AbortController();
+        const timer = window.setTimeout(() => ctl?.abort(), 30000);
+        try {
+          const res = await fetch(api.documentFileUrl(docId), { cache: 'no-store', signal: ctl.signal }); // pages may have been added
+          if (res.ok) return await res.arrayBuffer();
+          // 4xx (gone, not allowed): no point in asking again
+          if (res.status < 500 || i >= waits.length) throw new Error(`获取 PDF 失败 (${res.status})`);
+        } catch (e) {
+          if (cancelled) throw e;
+          if (e instanceof Error && e.message.startsWith('获取 PDF 失败')) throw e;
+          if (i >= waits.length) throw new Error('连不上软件的后台服务');
+        } finally {
+          window.clearTimeout(timer);
+        }
+        await new Promise((r) => window.setTimeout(r, waits[i]));
+        if (cancelled) throw new Error('cancelled');
+      }
+    };
+
     (async () => {
       try {
-        const res = await fetch(api.documentFileUrl(docId), { cache: 'no-store' }); // pages may have been added
-        if (!res.ok) throw new Error(`获取 PDF 失败 (${res.status})`);
-        const data = await res.arrayBuffer();
+        const data = await fetchPdf();
         if (cancelled) return;
         task = pdfjs.getDocument({ data });
         const doc = await task.promise;
@@ -226,6 +251,7 @@ export function PdfPane({
 
     return () => {
       cancelled = true;
+      (ctl as AbortController | null)?.abort();
       try {
         void task?.destroy();
       } catch {
@@ -235,7 +261,7 @@ export function PdfPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // reload only when the document changes (a ref-based token used to change one
     // render late and reloaded the PDF on the first page navigation)
-  }, [docId]);
+  }, [docId, attempt]);
 
   // ---- track current page from scroll position ----
   useEffect(() => {
@@ -311,7 +337,14 @@ export function PdfPane({
   if (error || !pdfDoc) {
     return (
       <div className="pdf-pane pane-empty">
-        <div className="empty-hint">PDF 加载失败{error ? `：${error}` : ''}</div>
+        <div className="empty-hint">
+          PDF 加载失败{error ? `：${error}` : ''}
+          <div>
+            <button type="button" className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>
+              重新加载
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

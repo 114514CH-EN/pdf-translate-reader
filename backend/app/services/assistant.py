@@ -163,7 +163,7 @@ async def ensure_summary(doc_id: int) -> dict:
         },
         {"role": "user", "content": sample[:9000]},
     ]
-    content = await chat_completion(cfg, messages, temperature=0.3)
+    content = await chat_completion(cfg, messages, temperature=0.3, attempts=2)
     txt = content.strip()
     if txt.startswith("```"):
         txt = re.sub(r"^```(?:json)?\s*", "", txt)
@@ -393,4 +393,4 @@ async def lookup(doc_id: int, text: str, page_no: int | None, mode: str = "auto"
         {"role": "user", "content": task + (f"\nGlossary to follow: {gl}" if gl else "")
          + (f"\n\nContext sentence: {context}" if context else "") + f"\n\nText: {text}"},
     ]
-    return (await chat_completion(cfg, messages, temperature=0.1, max_tokens=600)).strip()
+    return (await chat_completion(cfg, messages, temperature=0.1, max_tokens=600, attempts=2)).strip()
