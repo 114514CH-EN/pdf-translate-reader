@@ -290,8 +290,10 @@ def _order_band(band_blocks: list[dict], page_width: float) -> list[dict]:
     for _, b in centers[1:]:
         placed = False
         for i, xr in enumerate(cluster_x):
-            cx = (b["bbox"][0] + b["bbox"][2]) / 2
-            if xr[0] - 0.15 * page_width <= cx <= xr[1] + 0.15 * page_width:
+            # one column if the x-ranges meet: a column's short heading ("References") sits
+            # well inside it but its centre can be close to the next column; real columns
+            # are kept apart by a gutter
+            if min(b["bbox"][2], xr[1]) - max(b["bbox"][0], xr[0]) > 0:
                 clusters[i].append(b)
                 cluster_x[i][0] = min(cluster_x[i][0], b["bbox"][0])
                 cluster_x[i][1] = max(cluster_x[i][1], b["bbox"][2])

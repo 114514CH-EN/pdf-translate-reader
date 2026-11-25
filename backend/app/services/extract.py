@@ -552,7 +552,7 @@ def restore_placeholders(translation: str, runs: list[dict]) -> str | None:
     for run in runs:
         j, needle = -1, ""
         # as the spans run, or line by line as a table cell's text reads (a fraction's
-        # numerator sits on the line above "f(x, y) =")
+        # numerator sits on the line above "g(u, v) =")
         for form in (run.get("text"), run.get("rows")):
             needle = "".join(_MATH_DUP.sub(r"\1", form or "").split())
             j = compact.find(needle, pos) if needle else -1
