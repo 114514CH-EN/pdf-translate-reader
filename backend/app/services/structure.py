@@ -278,22 +278,17 @@ def _reading_order(items: list[dict], page_width: float) -> list[dict]:
     return ordered
 
 
-def _order_band(band_blocks: list[dict], page_width: float) -> list[dict]:
-    if not band_blocks:
-        return []
-    if len(band_blocks) == 1:
-        return band_blocks
-    # cluster x-centers into columns
+def _columns_by_centre(band_blocks: list[dict], page_width: float) -> tuple[list[list[dict]], list[list[float]]]:
+    """Group blocks whose x-centres lie close together (pages without columns of text:
+    a chart's axis labels, a form)."""
     centers = sorted((((b["bbox"][0] + b["bbox"][2]) / 2, b) for b in band_blocks), key=lambda t: t[0])
     clusters: list[list[dict]] = [[centers[0][1]]]
     cluster_x: list[list[float]] = [[centers[0][1]["bbox"][0], centers[0][1]["bbox"][2]]]
     for _, b in centers[1:]:
         placed = False
         for i, xr in enumerate(cluster_x):
-            # one column if the x-ranges meet: a column's short heading ("References") sits
-            # well inside it but its centre can be close to the next column; real columns
-            # are kept apart by a gutter
-            if min(b["bbox"][2], xr[1]) - max(b["bbox"][0], xr[0]) > 0:
+            cx = (b["bbox"][0] + b["bbox"][2]) / 2
+            if xr[0] - 0.15 * page_width <= cx <= xr[1] + 0.15 * page_width:
                 clusters[i].append(b)
                 cluster_x[i][0] = min(cluster_x[i][0], b["bbox"][0])
                 cluster_x[i][1] = max(cluster_x[i][1], b["bbox"][2])
@@ -302,6 +297,46 @@ def _order_band(band_blocks: list[dict], page_width: float) -> list[dict]:
         if not placed:
             clusters.append([b])
             cluster_x.append([b["bbox"][0], b["bbox"][2]])
+    return clusters, cluster_x
+
+
+def _columns_by_text(band_blocks: list[dict], page_width: float) -> tuple[list[list[dict]], list[list[float]]] | None:
+    """Columns found from the wide blocks (paragraphs, figures) — x-ranges that do not touch
+    are separate columns; every narrower block (a heading, a caption) then joins the column
+    its centre lies in. By centres alone, a short heading at the top of the right column
+    ("References") is near enough to the left column to be taken into it, and the two
+    columns are read as one, row by row. None when the wide blocks make no two columns."""
+    wide = [b for b in band_blocks if b["bbox"][2] - b["bbox"][0] > 0.25 * page_width]
+    if len(wide) < 2:
+        return None
+    ranges: list[list[float]] = []
+    for b in sorted(wide, key=lambda b: b["bbox"][0]):
+        if ranges and b["bbox"][0] < ranges[-1][1]:
+            ranges[-1][1] = max(ranges[-1][1], b["bbox"][2])
+        else:
+            ranges.append([b["bbox"][0], b["bbox"][2]])
+    if len(ranges) < 2:
+        return None
+    clusters: list[list[dict]] = [[] for _ in ranges]
+    cluster_x = [list(r) for r in ranges]
+    for b in band_blocks:
+        cx = (b["bbox"][0] + b["bbox"][2]) / 2
+        i = next((k for k, r in enumerate(ranges) if r[0] <= cx <= r[1]), None)
+        if i is None:  # in a gutter or a margin (a page number): a group of its own
+            clusters.append([b])
+            cluster_x.append([b["bbox"][0], b["bbox"][2]])
+            continue
+        clusters[i].append(b)
+        cluster_x[i] = [min(cluster_x[i][0], b["bbox"][0]), max(cluster_x[i][1], b["bbox"][2])]
+    return clusters, cluster_x
+
+
+def _order_band(band_blocks: list[dict], page_width: float) -> list[dict]:
+    if not band_blocks:
+        return []
+    if len(band_blocks) == 1:
+        return band_blocks
+    clusters, cluster_x = _columns_by_text(band_blocks, page_width) or _columns_by_centre(band_blocks, page_width)
     # real columns leave a gutter between them; groups whose x-ranges overlap are one
     # column (a centred title or equation above / between left-aligned lines)
     merged = True
