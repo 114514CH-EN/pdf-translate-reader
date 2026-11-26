@@ -40,6 +40,8 @@ export function Toolbar() {
   const homeOpen = useViewStore((s) => s.homeOpen);
   const setFocusMode = useViewStore((s) => s.setFocusMode);
   const setMode = useViewStore((s) => s.setMode);
+  const panes = useViewStore((s) => s.panes);
+  const setPanes = useViewStore((s) => s.setPanes);
   const currentPage = useViewStore((s) => s.currentPage);
   const pageCount = useViewStore((s) => s.pageCount);
   const requestPageNav = useViewStore((s) => s.requestPageNav);
@@ -157,14 +159,16 @@ export function Toolbar() {
 
   const fitWidth = () => {
     // fit the page width into the narrower of the two panes (minus scrollbar + margin)
-    const panes = Array.from(
+    const areas = Array.from(
       document.querySelectorAll<HTMLElement>('.pane-left .pdf-pane, .pane-right .translation-pane'),
     ).filter((el) => el.clientWidth > 0);
     const cur = useViewStore.getState().currentPage;
     const pages = useTranslationStore.getState().pages;
     const pageW = pages[cur]?.width ?? pages[1]?.width ?? 595;
-    const avail = panes.length ? Math.min(...panes.map((el) => el.clientWidth)) - 32 : 0;
-    if (avail > 0) setZoom(Math.round((avail / pageW) * 100) / 100, true);
+    const avail = areas.length ? Math.min(...areas.map((el) => el.clientWidth)) - 32 : 0;
+    // one pane across the whole window: fit, but not to a page wider than one reads comfortably
+    const most = areas.length === 1 ? 1.6 : 4;
+    if (avail > 0) setZoom(Math.min(Math.round((avail / pageW) * 100) / 100, most), true);
   };
 
   // 适合宽度 mode: refit whenever the reading area changes size (window, sidebar, divider)
@@ -186,7 +190,7 @@ export function Toolbar() {
       window.clearTimeout(t);
       ro?.disconnect();
     };
-  }, [zoomFit, activeId, pageReady]);
+  }, [zoomFit, activeId, pageReady, panes]);
 
   // shortcuts routed from App (see lib/shortcuts.ts)
   const translateRef = useRef(translate);
@@ -258,12 +262,35 @@ export function Toolbar() {
           type="button"
           className={`seg-btn ${mode === 'flow' ? 'active' : ''}`}
           aria-pressed={mode === 'flow'}
-          title={`逐句对照：原文与译文按句排列${kb('toggleMode')}`}
+          title={`逐句对照：原文与译文按句排列；只看译文时变成单栏的连续阅读，适合论文${kb('toggleMode')}`}
           onClick={() => setMode('flow')}
         >
           <Icon name="rows" size={15} />
           <span className="btn-label">逐句对照</span>
         </button>
+      </div>
+      <div className="segmented segmented-panes" role="group" aria-label="显示哪一栏">
+        {(
+          [
+            ['src', '原文', '只看原文'],
+            ['both', '双栏', '原文和译文并排'],
+            ['tgt', '译文', '只看译文（在逐句对照里是单栏的连续阅读）'],
+          ] as const
+        ).map(([key, label, tip]) => (
+          <button
+            key={key}
+            type="button"
+            className={`seg-btn ${panes === key ? 'active' : ''}`}
+            aria-pressed={panes === key}
+            title={`${tip}${kb('cyclePanes')}`}
+            onClick={() => setPanes(key)}
+          >
+            <span className="pane-full">{label}</span>
+            <span className="pane-short" aria-hidden>
+              {label[0]}
+            </span>
+          </button>
+        ))}
       </div>
 
       </div>

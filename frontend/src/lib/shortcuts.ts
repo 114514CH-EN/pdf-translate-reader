@@ -4,6 +4,7 @@ export type ShortcutAction =
   | 'prevPage'
   | 'nextPage'
   | 'toggleMode'
+  | 'cyclePanes'
   | 'toggleEdit'
   | 'translateDoc'
   | 'translatePage'
@@ -19,6 +20,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   prevPage: '上一页',
   nextPage: '下一页',
   toggleMode: '切换 整页预览 / 逐句对照',
+  cyclePanes: '切换 只看原文 / 双栏 / 只看译文',
   toggleEdit: '编辑译文 开/关',
   translateDoc: '翻译全文',
   translatePage: '翻译本页',
@@ -35,6 +37,7 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
   prevPage: 'ArrowLeft',
   nextPage: 'ArrowRight',
   toggleMode: 'M',
+  cyclePanes: 'V',
   toggleEdit: 'E',
   translateDoc: 'Ctrl+Shift+T',
   translatePage: 'T',

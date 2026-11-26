@@ -21,6 +21,8 @@ import type {
   SummaryResult,
   TestConnectionResult,
   TranslateRequest,
+  PaperInfo,
+  PaperIndex,
 } from '../types';
 
 const BASE = '/api';
@@ -87,6 +89,18 @@ export const api = {
     }
     if (!res.ok) throw await parseError(res);
     return (await res.json()) as { doc_id: string; warning?: string | null; converted_by?: string | null };
+  },
+
+  searchPapers(q: string, signal?: AbortSignal): Promise<{ kind: string; results: PaperInfo[] }> {
+    return request(`/papers/search?q=${encodeURIComponent(q)}`, { signal });
+  },
+
+  importPaper(paper: PaperInfo, again = false): Promise<{ doc_id: string; existing: boolean; warning?: string | null }> {
+    return request('/papers/import', jsonInit('POST', { paper, again }));
+  },
+
+  getPaperIndex(id: string): Promise<PaperIndex> {
+    return request<PaperIndex>(`/documents/${encodeURIComponent(id)}/paper-index`);
   },
 
   getDocument(id: string): Promise<DocDetail> {

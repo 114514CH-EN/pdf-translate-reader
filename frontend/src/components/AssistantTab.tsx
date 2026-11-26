@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '../stores/chat';
+import { useDocStore } from '../stores/doc';
+import { usePaperIndex } from '../stores/paperIndex';
 import { useSettingsStore } from '../stores/settings';
 import { useViewStore } from '../stores/view';
 import type { AssistantMode } from '../types';
@@ -28,6 +30,10 @@ export function AssistantTab({ docId }: { docId: string }) {
   const stop = useChatStore((s) => s.stopStreaming);
   const clear = useChatStore((s) => s.clearHistory);
   const refreshSummary = useChatStore((s) => s.refreshSummary);
+  // a paper: imported as one, or a document with a reference list
+  const detailPaper = useDocStore((s) => (s.detail && String(s.detail.id) === docId ? !!s.detail.paper : false));
+  const idx = usePaperIndex(docId);
+  const isPaper = detailPaper || (!!idx && Object.keys(idx.refs).length >= 3);
   const requestPageNav = useViewStore((s) => s.requestPageNav);
   const currentPage = useViewStore((s) => s.currentPage);
   const openSettings = useViewStore((s) => s.openSettings);
@@ -250,6 +256,17 @@ export function AssistantTab({ docId }: { docId: string }) {
         </div>
       </div>
       <div className="quick-row">
+        {isPaper && (
+          <button
+            type="button"
+            className="chip chip-sm chip-accent"
+            title="按研究问题、方法、实验结果、贡献、局限解读整篇论文，并告诉你先读哪几节"
+            disabled={streaming}
+            onClick={() => void send('解读这篇论文', page(), { mode: 'paper' })}
+          >
+            论文解读
+          </button>
+        )}
         {QUICK.map((q) => (
           <button
             key={q.mode}

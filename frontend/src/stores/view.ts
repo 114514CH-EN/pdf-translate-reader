@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import type { SidebarTab, ToastItem, ViewMode } from '../types';
 
 export type SettingsTab = 'translate' | 'assistant' | 'usage' | 'ui' | 'data';
+/** which reading panes are shown: the original, both side by side, or the translation */
+export type Panes = 'src' | 'both' | 'tgt';
+
+const PANES_KEY = 'pdftr.panes';
+function readPanes(): Panes {
+  try {
+    const v = localStorage.getItem(PANES_KEY);
+    return v === 'src' || v === 'tgt' ? v : 'both';
+  } catch {
+    return 'both';
+  }
+}
 
 interface ViewState {
   /** 整页预览 | 逐句对照 */
@@ -32,6 +44,12 @@ interface ViewState {
   hoverBlockId: string | null;
   /** Left pane width in percent (resizable divider). */
   leftPanePct: number;
+  panes: Panes;
+  setPanes: (p: Panes) => void;
+  /** 找论文: the dialog, and what to search for when it opens (a reference clicked in the text) */
+  paperSearch: { open: boolean; query: string; seq: number };
+  openPaperSearch: (query?: string) => void;
+  closePaperSearch: () => void;
   toasts: ToastItem[];
   /** Bumped to request both panes scroll to currentPage. */
   pageNavSeq: number;
@@ -88,6 +106,21 @@ export const useViewStore = create<ViewState>((set, get) => ({
   navFrac: 0,
   hoverBlockId: null,
   leftPanePct: 48,
+  panes: readPanes(),
+  paperSearch: { open: false, query: '', seq: 0 },
+  openPaperSearch: (query = '') => set({ paperSearch: { open: true, query, seq: get().paperSearch.seq + 1 } }),
+  closePaperSearch: () => set({ paperSearch: { ...get().paperSearch, open: false } }),
+  setPanes: (panes) => {
+    if (panes === get().panes) return;
+    set({ panes });
+    try {
+      localStorage.setItem(PANES_KEY, panes);
+    } catch {
+      /* private window: the choice lasts this session */
+    }
+    // a pane that was hidden kept its old place: bring both back to the page being read
+    window.setTimeout(() => get().requestPageNav(get().currentPage, get().navFrac), 0);
+  },
   toasts: [],
   pageNavSeq: 0,
 

@@ -193,6 +193,20 @@ MODES = {
     "translate": "Translate the quoted passage faithfully, then add short notes on any tricky terms.",
     "page": "Summarise the current page: its purpose, the key points / tasks, and anything easy to miss.",
     "quiz": "Write 3 short self-test questions (with answers hidden under a 'Answers' heading) about the current page.",
+    "paper": (
+        "Interpret this paper for a reader meeting it for the first time, from the section digest above. "
+        "Use these parts, each as a short Markdown heading in the reader's language: "
+        "(1) the paper in one sentence; (2) the problem and why it matters; (3) the method — the core idea, "
+        "the key steps, and the key equations in LaTeX; (4) experiments and results — the setup, data and "
+        "metrics, the main numbers, and which table or figure shows them; (5) the contributions; "
+        "(6) limitations and questions worth asking; (7) how to read it — which sections and pages first. "
+        "Be specific to this paper (names, numbers, terms it uses); no generic filler. Cite pages like [p3]."
+    ),
+    "section": (
+        "Explain the section quoted above as a guide reading along with the student: what it sets out to do, "
+        "its argument step by step, the key terms and equations (LaTeX, every symbol explained), how it "
+        "connects to the rest of the paper, and what to check while reading it. Cite pages like [p3]."
+    ),
 }
 
 
@@ -216,6 +230,73 @@ def _with_neighbours(doc_id: int, hits: list[dict], lang: str) -> list[dict]:
     return out
 
 
+_REF_HEAD = re.compile(r"^\s*(?:[IVX\d]+\.?\s*)?(references|bibliography|works cited|参考文献)\s*$", re.I)
+
+
+def _reading_rows(doc_id: int, lang: str) -> list[dict]:
+    with get_db() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT b.id, b.page_no, b.order_idx, b.type, b.text, t.text AS translation FROM blocks b"
+            " LEFT JOIN translations t ON t.block_id=b.id AND t.lang=?"
+            " WHERE b.doc_id=? AND b.type NOT IN ('image', 'formula') ORDER BY b.page_no, b.order_idx",
+            (lang, doc_id),
+        )]
+
+
+def _sections(rows: list[dict]) -> list[tuple[dict | None, list[dict]]]:
+    """The document cut at its headings (the reference list and what follows it left out)."""
+    out: list[tuple[dict | None, list[dict]]] = [(None, [])]
+    for r in rows:
+        first = (r["text"] or "").strip().split("\n", 1)[0]
+        if r["type"] == "heading" and _REF_HEAD.match(first):
+            break
+        if r["type"] == "heading":
+            out.append((r, []))
+        elif (r["text"] or "").strip():
+            out[-1][1].append(r)
+    return [s for s in out if s[0] is not None or s[1]]
+
+
+def paper_digest(doc_id: int, lang: str, budget: int) -> tuple[str, list[int]]:
+    """Every section of the paper, each cut to its share of the budget (beginnings kept: they
+    say what a section is about), so an interpretation sees the whole paper."""
+    secs = _sections(_reading_rows(doc_id, lang))
+    if not secs:
+        return "", []
+    share = max(300, budget // len(secs))
+    parts, pages = [], []
+    for head, body in secs:
+        title = re.sub(r"\s+", " ", head["text"])[:120] if head else "(before the first heading)"
+        page = head["page_no"] if head else (body[0]["page_no"] if body else 0)
+        text = " ".join(re.sub(r"\s+", " ", b["text"]) for b in body)
+        if len(text) > share:
+            text = text[:share].rsplit(" ", 1)[0] + " …"
+        parts.append(f"## {title} [p{page}]\n{text}")
+        if page and page not in pages:
+            pages.append(page)
+    return "\n\n".join(parts)[: budget + 2000], pages
+
+
+def section_text(doc_id: int, heading_id: int, lang: str, budget: int) -> tuple[str, str, list[int]]:
+    """A section in full (up to the budget): its heading, its text with translations, its pages."""
+    secs = _sections(_reading_rows(doc_id, lang))
+    for head, body in secs:
+        if head and head["id"] == heading_id:
+            lines, pages, used = [], [head["page_no"]], 0
+            for b in body:
+                tr = re.sub(r"\s+", " ", b.get("translation") or "")[:600]
+                line = f"[p{b['page_no']}] " + re.sub(r"\s+", " ", b["text"]) + (f"\n   (译: {tr})" if tr else "")
+                if used + len(line) > budget:
+                    lines.append("…")
+                    break
+                used += len(line)
+                lines.append(line)
+                if b["page_no"] not in pages:
+                    pages.append(b["page_no"])
+            return re.sub(r"\s+", " ", head["text"]).strip(), "\n".join(lines), pages
+    raise ValueError("没有找到这一节")
+
+
 async def stream_chat(
     doc_id: int,
     message: str,
@@ -223,6 +304,7 @@ async def stream_chat(
     *,
     mode: str = "ask",
     quote: str | None = None,
+    section_id: int | None = None,
 ) -> AsyncIterator[str | dict]:
     """Grounded answer stream. Yields {"sources": [...]} first, then text chunks; persists the exchange."""
     from .prompts import TARGET_NAMES
@@ -283,6 +365,13 @@ async def stream_chat(
         if d["page_no"] not in pages_used:
             pages_used.append(d["page_no"])
     context = "\n".join(parts)
+    if mode == "paper":
+        # the whole paper, section by section, instead of the passages nearest the question
+        context, pages_used = paper_digest(doc_id, lang, cfg["context_chars"])
+    elif mode == "section" and section_id:
+        title, body, pages_used = section_text(doc_id, section_id, lang, cfg["context_chars"])
+        quote = f"Section “{title}”:\n{body}"
+        context = ""
     yield {"sources": sorted(p for p in pages_used if p)[:12]}
 
     sys_prompt = (
@@ -300,6 +389,19 @@ async def stream_chat(
     for h in reversed(history):
         messages.append({"role": h["role"], "content": h["content"][:2500]})
     ctx_head = []
+    with get_db() as db:
+        prow = db.execute("SELECT paper_json FROM documents WHERE id=?", (doc_id,)).fetchone()
+    try:
+        paper = json.loads(prow["paper_json"]) if prow and prow["paper_json"] else None
+    except ValueError:
+        paper = None
+    if paper:
+        who = ", ".join((paper.get("authors") or [])[:8])
+        where = " ".join(str(x) for x in (paper.get("venue"), paper.get("year")) if x)
+        ctx_head.append(
+            f"Paper: {paper.get('title', '')}" + (f" — {who}" if who else "") + (f" ({where})" if where else "")
+            + (f"\nAbstract: {paper['abstract'][:2000]}" if paper.get("abstract") else "")
+        )
     if doc["summary_md"]:
         ctx_head.append(f"Document summary: {doc['summary_md']}")
     if heads:
@@ -308,7 +410,9 @@ async def stream_chat(
         ctx_head.append(f"The reader is currently on page {page_no}.")
     task = MODES.get(mode, "")
     q_parts = []
-    if quote:
+    if quote and mode == "section":
+        q_parts.append(f"The section to explain:\n\"\"\"\n{quote}\n\"\"\"")
+    elif quote:
         q_parts.append(f"Selected passage (page {page_no or '?'}):\n\"\"\"\n{quote[:3000]}\n\"\"\"")
     if task:
         q_parts.append(f"Task: {task}")
@@ -335,7 +439,7 @@ async def stream_chat(
     finally:
         answer = "".join(chunks)
         if answer.strip():  # keep what was generated, also when the reader pressed stop
-            user_text = message if not quote else f"> {quote[:600]}\n\n{message}"
+            user_text = message if not quote or mode == "section" else f"> {quote[:600]}\n\n{message}"
             meta = json.dumps({"sources": sorted(p for p in pages_used if p)[:12], "mode": mode})
             with get_db() as db:
                 db.execute("INSERT INTO chat_messages (doc_id, role, content) VALUES (?, 'user', ?)",

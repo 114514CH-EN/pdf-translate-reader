@@ -42,6 +42,16 @@ The interface can be switched between Chinese and English (EN in the tab strip);
 
 ![Home page](docs/img/home.png)
 
+**Reading papers**
+- **Find a paper and import it in one click**: type an arXiv id, a DOI, a link or title words ("找论文" in the tab bar or on the home page); papers with a free PDF (arXiv, open-access journals) are downloaded and opened, and the same paper is never imported twice. Paper details come from OpenAlex and arXiv — no account or API key
+- **References and figures at the pointer**: rest the pointer on `[12]`, `Smith et al., 2020`, `Figure 3` or 图 3 / 表 2 in the text to see the reference (with "find this paper" to import it next) or a crop of the figure with its caption, and jump there; works in both panes
+- **Outline** (side panel): the paper's details and abstract, its sections (with the one you are reading marked), its figures and tables, and its reference list
+- **Paper walkthrough**: the reading assistant explains the whole paper — in one sentence, the problem, the method, experiments and results, contributions, limitations, which sections to read first — with page references; "讲解" next to a section in the outline goes through that section in full
+- **Original only / both / translation only** (toolbar, shortcut V). Sentence view + translation only is **continuous reading**: a two-column paper becomes one column of translated text in reading order, figures, formulas and tables in place, running heads and footers left out, paragraphs cut by a column break joined again
+- Two-column pages are read (and translated) column by column
+
+![Continuous reading, a figure at the pointer and the outline panel](docs/img/paper.png)
+
 **Reading assistant**
 - Configured with its own model, separately from translation. It answers from the document and cites pages like `[p3]`, which you can click to jump to
 - One click to "explain" a selected passage or "walk through" a formula; "summarise this page" and "quiz me on this page"

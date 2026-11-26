@@ -32,6 +32,7 @@ def list_documents():
         rows = db.execute(
             "SELECT d.id, d.title, d.page_count, d.source_lang, d.target_lang, d.domain_guess, d.status,"
             " d.created_at, d.updated_at, d.last_opened_at, d.last_page,"
+            " (d.paper_json IS NOT NULL) AS is_paper,"
             # how far the translation has got (the library cards show it)
             " (SELECT COUNT(*) FROM blocks b WHERE b.doc_id=d.id AND b.type NOT IN ('image','formula')"
             "   AND trim(b.text)!='') AS blocks_total,"
@@ -61,6 +62,20 @@ async def upload_document(file: UploadFile):
             data, converted_by = await run_in_threadpool(office_to_pdf, data, ext, UPLOAD_DIR / "_convert")
         except ConvertError as e:
             raise HTTPException(400, str(e)) from e
+    result = await ingest_pdf(data, title, source=source, source_ext=ext)
+    if result.get("warning") is None and converted_by == SIMPLE:
+        result["warning"] = (
+            "电脑上没找到 Microsoft Word、WPS 或 LibreOffice，这份 Word 文档用的是内置的简易转换："
+            "表格、列表和部分排版可能会丢失。装上其中任意一个后重新导入，效果会好很多。"
+        )
+    result["converted_by"] = converted_by
+    return result
+
+
+async def ingest_pdf(data: bytes, title: str, source: bytes | None = None, source_ext: str = "",
+                     paper: dict | None = None) -> dict:
+    """A PDF's bytes in, a document out (or an HTTPException saying why not). ``source``: the
+    Word file it was made from; ``paper``: what is known about it as a paper."""
     try:
         probe = fitz.open(stream=data, filetype="pdf")
     except Exception as e:
@@ -75,8 +90,8 @@ async def upload_document(file: UploadFile):
 
     with get_db() as db:
         cur = db.execute(
-            "INSERT INTO documents (title, file_path, status) VALUES (?, ?, ?)",
-            (title, "", "extracting"),
+            "INSERT INTO documents (title, file_path, status, paper_json) VALUES (?, ?, ?, ?)",
+            (title, "", "extracting", json.dumps(paper, ensure_ascii=False) if paper else None),
         )
         doc_id = cur.lastrowid
 
@@ -85,7 +100,7 @@ async def upload_document(file: UploadFile):
     pdf_path = doc_dir / "original.pdf"
     pdf_path.write_bytes(data)
     if source is not None:
-        (doc_dir / f"source{ext}").write_bytes(source)
+        (doc_dir / f"source{source_ext}").write_bytes(source)
 
     try:
         # parsing is CPU-bound: keep it off the event loop so the app stays responsive
@@ -111,12 +126,7 @@ async def upload_document(file: UploadFile):
     warning = None
     if n_text == 0:
         warning = "未检测到可提取的文字层：这可能是扫描版/图片版 PDF，暂不支持翻译（需先用 OCR 工具转换为可搜索 PDF）。"
-    elif converted_by == SIMPLE:
-        warning = (
-            "电脑上没找到 Microsoft Word、WPS 或 LibreOffice，这份 Word 文档用的是内置的简易转换："
-            "表格、列表和部分排版可能会丢失。装上其中任意一个后重新导入，效果会好很多。"
-        )
-    return {"doc_id": doc_id, "warning": warning, "converted_by": converted_by}
+    return {"doc_id": doc_id, "warning": warning}
 
 
 PAPER = {"a4": (595.0, 842.0), "letter": (612.0, 792.0), "a4-landscape": (842.0, 595.0)}
@@ -904,7 +914,12 @@ def get_document(doc_id: int):
             db.execute("UPDATE documents SET last_opened_at=datetime('now') WHERE id=?", (doc_id,))
     except Exception:
         pass
-    return {**dict(row), "src_edits": edits["n"]}  # blocks of the original the reader has edited
+    try:
+        paper = json.loads(row["paper_json"]) if row["paper_json"] else None
+    except ValueError:
+        paper = None
+    # src_edits: blocks of the original the reader has edited; paper: title, authors, DOI… if known
+    return {**dict(row), "src_edits": edits["n"], "paper": paper}
 
 
 @router.get("/{doc_id}/file")

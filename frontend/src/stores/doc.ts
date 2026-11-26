@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, ApiError } from '../api/client';
-import type { DocDetail, DocumentRow } from '../types';
+import type { DocDetail, DocumentRow, PaperInfo } from '../types';
 import { useViewStore } from './view';
 
 const OPEN_KEY = 'pdftr.openTabs';
@@ -43,6 +43,8 @@ interface DocState {
   createBlank: (title: string) => Promise<void>;
   ensureOpen: (id: string) => void;
   uploadFile: (file: File) => Promise<string | null>;
+  /** download a found paper's PDF and open it (an already imported paper just opens); throws on failure */
+  importPaper: (paper: PaperInfo) => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
   setActive: (id: string | null) => void;
   patchDetail: (patch: Partial<DocDetail>) => void;
@@ -166,6 +168,15 @@ export const useDocStore = create<DocState>((set, get) => ({
       set({ uploading: false, error: errMsg(e) });
       return null;
     }
+  },
+
+  async importPaper(paper) {
+    const { doc_id, existing, warning } = await api.importPaper(paper);
+    const view = useViewStore.getState();
+    if (warning) view.toast(warning, 'error');
+    else view.toast(existing ? '这篇论文已经在文档库里，已为你打开' : `已导入：${paper.title}`, 'success');
+    await get().loadDocuments();
+    await get().openDocument(String(doc_id));
   },
 
   async deleteDocument(id) {

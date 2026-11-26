@@ -85,6 +85,10 @@ export default function HomeView() {
             <span className="home-drop-title">{uploading ? '正在上传…' : '把 PDF 或 Word 拖到这里'}</span>
             <span className="home-drop-sub">或者点击选择文件</span>
           </button>
+          <button type="button" className="btn home-blank" onClick={() => useViewStore.getState().openPaperSearch()}>
+            <Icon name="search" size={15} />
+            找论文：输入 arXiv 编号、DOI 或标题，一键导入
+          </button>
           <button type="button" className="btn home-blank" onClick={newBlank} disabled={uploading}>
             <Icon name="docPlus" size={15} />
             或者从一张空白页开始，自己写一份
@@ -159,6 +163,10 @@ export default function HomeView() {
               <button type="button" className="btn" onClick={pick} disabled={uploading}>
                 <Icon name="upload" size={15} />
                 {uploading ? '正在上传…' : '添加文档'}
+              </button>
+              <button type="button" className="btn" onClick={() => useViewStore.getState().openPaperSearch()} title="输入 arXiv 编号、DOI 或标题，下载论文并导入">
+                <Icon name="search" size={15} />
+                找论文
               </button>
               <button type="button" className="btn" onClick={newBlank} disabled={uploading} title="从一张空白页开始，自己写一份 PDF">
                 <Icon name="docPlus" size={15} />

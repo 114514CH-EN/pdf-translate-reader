@@ -20,6 +20,23 @@ export interface DocumentRow {
   blocks_done?: number;
   /** the page the reader stopped on (document list and detail) */
   last_page?: number | null;
+  /** imported as a paper (document list) */
+  is_paper?: number;
+}
+
+/** A paper as the search finds it, and as a document remembers it. */
+export interface PaperInfo {
+  title: string;
+  authors: string[];
+  year?: number | null;
+  venue?: string;
+  abstract?: string;
+  doi?: string;
+  arxiv?: string;
+  /** a free copy of the PDF; empty when none is known */
+  pdf_url?: string;
+  landing_url?: string;
+  source?: string;
 }
 
 export interface DocDetail extends DocumentRow {
@@ -30,6 +47,8 @@ export interface DocDetail extends DocumentRow {
   last_frac?: number | null;
   /** how many blocks of the original the reader has edited */
   src_edits?: number;
+  /** what is known about the document as a paper */
+  paper?: PaperInfo | null;
 }
 
 export type BlockType = 'heading' | 'paragraph' | 'list' | 'table' | 'image' | 'formula' | 'code';
@@ -393,7 +412,7 @@ export interface ChatMessage {
   reasoning?: string;
 }
 
-export type AssistantMode = 'ask' | 'explain' | 'formula' | 'translate' | 'page' | 'quiz';
+export type AssistantMode = 'ask' | 'explain' | 'formula' | 'translate' | 'page' | 'quiz' | 'paper' | 'section';
 
 export interface Note {
   id: string;
@@ -424,10 +443,48 @@ export type ExportFormat = 'md' | 'pdf_translated' | 'pdf_bilingual' | 'pdf_side
 export type EditSide = 'tgt' | 'src';
 export const SRC_LANG = '__src__';
 export type ViewMode = 'page' | 'flow';
-export type SidebarTab = 'assistant' | 'notes' | 'glossary';
+export type SidebarTab = 'outline' | 'assistant' | 'notes' | 'glossary';
 
 export interface ToastItem {
   id: number;
   kind: 'info' | 'error' | 'success';
   text: string;
+}
+
+/** A document's references, figures / tables and sections (GET /documents/:id/paper-index). */
+export interface PaperRef {
+  key: string;
+  text: string;
+  page: number;
+  block_id: number;
+  /** top of it on the page, PDF pt */
+  y: number;
+  /** what to search for to find the referenced paper (a DOI, an arXiv id or its title) */
+  query: string;
+}
+export interface PaperFig {
+  key: string;
+  label: string;
+  caption: string;
+  caption_zh?: string;
+  page: number;
+  block_id: number;
+  /** the figure / table on its page, PDF pt [x0, y0, x1, y1] */
+  area: [number, number, number, number] | null;
+  y: number;
+}
+export interface OutlineItem {
+  title: string;
+  title_zh?: string;
+  level: number;
+  page: number;
+  block_id: number | null;
+  y: number;
+}
+export interface PaperIndex {
+  refs: Record<string, PaperRef>;
+  figs: Record<string, PaperFig>;
+  outline: OutlineItem[];
+  style: 'numeric' | 'author-year' | '';
+  page_sizes: Record<string, [number, number]>;
 }

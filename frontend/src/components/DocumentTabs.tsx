@@ -223,6 +223,15 @@ export function DocumentTabs() {
       <button
         type="button"
         className="btn btn-ghost btn-sm doc-tab-add"
+        title="找论文：输入 arXiv 编号、DOI 或标题，下载并导入"
+        onClick={() => useViewStore.getState().openPaperSearch()}
+      >
+        <Icon name="search" size={15} />
+        找论文
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm doc-tab-add"
         title="上传 PDF 或 Word 文档"
         disabled={uploading}
         onClick={() => fileInputRef.current?.click()}

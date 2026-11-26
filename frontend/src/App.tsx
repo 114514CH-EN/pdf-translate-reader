@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 /** must equal backend/app/config.py APP_VERSION */
-const EXPECTED_BACKEND = '2026.11.22-4';
+const EXPECTED_BACKEND = '2026.11.26-1';
 import HomeView from './components/HomeView';
 import { api } from './api/client';
 import { DocumentTabs } from './components/DocumentTabs';
 import { Toolbar } from './components/Toolbar';
 import { PageAbsoluteView } from './components/PageAbsoluteView';
 import { FlowTranslationPane } from './components/FlowTranslationPane';
+import { PaperSearch } from './components/PaperSearch';
+import { CitationHover } from './components/CitationHover';
 import { Sidebar } from './components/Sidebar';
 import { FormulaEditor } from './components/FormulaEditor';
 import { PlaceTool } from './components/PlaceTool';
@@ -73,6 +75,7 @@ export default function App() {
 
   const mode = useViewStore((s) => s.mode);
   const leftPanePct = useViewStore((s) => s.leftPanePct);
+  const panes = useViewStore((s) => s.panes);
   const setLeftPanePct = useViewStore((s) => s.setLeftPanePct);
   const requestPageNav = useViewStore((s) => s.requestPageNav);
   const currentPage = useViewStore((s) => s.currentPage);
@@ -245,6 +248,9 @@ export default function App() {
         case 'toggleMode':
           view.setMode(view.mode === 'page' ? 'flow' : 'page');
           break;
+        case 'cyclePanes':
+          view.setPanes(view.panes === 'both' ? 'tgt' : view.panes === 'tgt' ? 'src' : 'both');
+          break;
         case 'toggleEdit':
           view.setEditMode(!view.editMode);
           break;
@@ -389,8 +395,12 @@ export default function App() {
             <HomeView />
           ) : (
           <>
-          <div className="split">
-          <section className="pane pane-left" style={{ width: `${leftPanePct}%` }}>
+          <div className={`split panes-${panes}`}>
+          <section
+            className="pane pane-left"
+            style={panes === 'both' ? { width: `${leftPanePct}%` } : undefined}
+            aria-hidden={panes === 'tgt' || undefined}
+          >
             {activeId && showSrcEdited ? (
               // the original as editable blocks: in edit mode, and afterwards while it carries edits
               <PageAbsoluteView scrollRef={leftRef} docId={activeId} side="src" />
@@ -417,7 +427,7 @@ export default function App() {
             aria-orientation="vertical"
             onPointerDown={onDividerPointerDown}
           />
-          <section className="pane pane-right">
+          <section className="pane pane-right" aria-hidden={panes === 'src' || undefined}>
             {activeId ? (
               mode === 'page' ? (
                 <PageAbsoluteView scrollRef={rightRef} docId={activeId} />
@@ -467,7 +477,7 @@ export default function App() {
           </span>
           {activeId && !homeOpen && (
             <span>
-              {mode === 'page' ? '整页预览' : '逐句对照'}，第 {currentPage} 页
+              {mode === 'page' ? '整页预览' : panes === 'tgt' ? '连续阅读' : '逐句对照'}，第 {currentPage} 页
             </span>
           )}
         </footer>
@@ -475,6 +485,8 @@ export default function App() {
         <Suspense fallback={null}>
           <SettingsModal />
         </Suspense>
+        <PaperSearch />
+        <CitationHover />
         <SelectionToolbar />
         <FormulaEditor />
         <PlaceTool />

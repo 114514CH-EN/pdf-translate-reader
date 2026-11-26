@@ -230,3 +230,37 @@ def delete_highlight(hl_id: int):
     with get_db() as db:
         db.execute("DELETE FROM highlights WHERE id=?", (hl_id,))
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- paper index
+@router.get("/api/documents/{doc_id}/paper-index")
+def get_paper_index(doc_id: int):
+    """References, figures / tables and sections of a document (see services/paper_index)."""
+    from ..services import paper_index
+
+    with get_db() as db:
+        doc = db.execute("SELECT id, target_lang, file_path FROM documents WHERE id=?", (doc_id,)).fetchone()
+        if doc is None:
+            raise HTTPException(404, "文档不存在")
+        rows = db.execute(
+            "SELECT b.id, b.page_no, b.order_idx, b.type, b.level, b.font_size, b.text, b.bbox_json, t.text AS tr"
+            " FROM blocks b LEFT JOIN translations t ON t.block_id=b.id AND t.lang=?"
+            " WHERE b.doc_id=? ORDER BY b.page_no, b.order_idx",
+            (doc["target_lang"], doc_id),
+        ).fetchall()
+        sizes = {r["page_no"]: [r["width"], r["height"]] for r in db.execute(
+            "SELECT page_no, width, height FROM pages WHERE doc_id=?", (doc_id,)).fetchall()}
+    blocks = []
+    tr = {}
+    for r in rows:
+        try:
+            bbox = json.loads(r["bbox_json"] or "[0,0,0,0]")
+        except ValueError:
+            bbox = [0, 0, 0, 0]
+        blocks.append({"id": r["id"], "page_no": r["page_no"], "order_idx": r["order_idx"], "type": r["type"],
+                       "level": r["level"], "font_size": r["font_size"], "text": r["text"] or "", "bbox": bbox})
+        if r["tr"]:
+            tr[r["id"]] = r["tr"]
+    out = paper_index.build(blocks, paper_index.pdf_toc(doc["file_path"]) if doc["file_path"] else [], tr)
+    out["page_sizes"] = sizes
+    return out

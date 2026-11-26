@@ -4,10 +4,12 @@ import type { SidebarTab } from '../types';
 import { AssistantTab } from './AssistantTab';
 import { NotesTab } from './NotesTab';
 import { GlossaryTab } from './GlossaryTab';
+import { OutlineTab } from './OutlineTab';
 import { Icon } from './Icon';
 import { isPetMode, summonPet } from '../pet/mode';
 
 const TABS: { key: SidebarTab; label: string; icon: string }[] = [
+  { key: 'outline', label: '目录', icon: 'rows' },
   { key: 'assistant', label: '阅读助手', icon: 'chat' },
   { key: 'notes', label: '笔记', icon: 'note' },
   { key: 'glossary', label: '术语库', icon: 'book' },
@@ -162,6 +164,8 @@ export function Sidebar({ docId }: { docId: string | null }) {
       <div className="sidebar-body">
         {!docId ? (
           <div className="empty-hint">请先上传 PDF</div>
+        ) : tab === 'outline' ? (
+          <OutlineTab docId={docId} />
         ) : tab === 'assistant' ? (
           <AssistantTab docId={docId} />
         ) : tab === 'notes' ? (

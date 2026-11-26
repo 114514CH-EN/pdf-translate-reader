@@ -7,6 +7,8 @@ export interface SendOptions {
   mode?: AssistantMode;
   /** text the reader selected in the document */
   quote?: string;
+  /** 讲解这一节: the section's heading block */
+  sectionId?: number;
 }
 
 interface ChatState {
@@ -192,7 +194,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         `/documents/${encodeURIComponent(docId)}/chat`,
         {
           method: 'POST',
-          body: { message, page_no: pageNo, mode: opts.mode ?? 'ask', quote: opts.quote },
+          body: { message, page_no: pageNo, mode: opts.mode ?? 'ask', quote: opts.quote, section_id: opts.sectionId },
           signal: abort.signal,
         },
         (event, data) => {

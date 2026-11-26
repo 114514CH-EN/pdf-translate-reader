@@ -82,7 +82,11 @@ async def chat(doc_id: int, payload: dict):
     if not message and not quote and mode == "ask":
         raise HTTPException(400, "message 必填")
     message = message or {"explain": "解释这段内容", "formula": "解释这个公式", "translate": "翻译这段",
-                          "page": "总结当前页", "quiz": "根据当前页出几道自测题"}.get(mode, "请解释")
+                          "page": "总结当前页", "quiz": "根据当前页出几道自测题",
+                          "paper": "解读这篇论文", "section": "讲解这一节"}.get(mode, "请解释")
+    section_id = _int_or_none(payload.get("section_id"))
+    if mode == "section" and not section_id:
+        raise HTTPException(400, "没有指定要讲解的章节")
     page_no = _int_or_none(payload.get("page_no"))
     _require_assistant(doc_id)
     with get_db() as db:
@@ -92,7 +96,8 @@ async def chat(doc_id: int, payload: dict):
 
     async def gen():
         try:
-            async for chunk in assistant.stream_chat(doc_id, message, page_no, mode=mode, quote=quote):
+            async for chunk in assistant.stream_chat(doc_id, message, page_no, mode=mode, quote=quote,
+                                                     section_id=section_id):
                 if isinstance(chunk, dict) and "reasoning" in chunk:
                     yield "event: reasoning\ndata: " + json.dumps({"text": chunk["reasoning"]}, ensure_ascii=False) + "\n\n"
                 elif isinstance(chunk, dict):

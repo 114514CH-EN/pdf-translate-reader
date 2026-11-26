@@ -260,14 +260,130 @@ function EditableTgt({
 }
 
 /** Place each figure right before the first block that starts below its top edge. */
+/**
+ * Figures go before the first block (in reading order) that is below them in their own
+ * column — by height alone, a figure in the right column of a two-column page would land
+ * in the middle of the left one.
+ */
 function interleave(blocks: Block[], figures: PageFigure[]): Array<Block | PageFigure> {
-  const pending = [...figures].sort((a, b) => a.bbox[1] - b.bbox[1]);
-  const out: Array<Block | PageFigure> = [];
-  for (const b of blocks) {
-    while (pending.length && pending[0].bbox[1] <= b.bbox[1] + 1) out.push(pending.shift()!);
-    out.push(b);
+  const at = new Map<number, PageFigure[]>();
+  const tail: PageFigure[] = [];
+  for (const f of [...figures].sort((a, b) => a.bbox[1] - b.bbox[1])) {
+    const same = (b: Block) => Math.min(b.bbox[2], f.bbox[2]) - Math.max(b.bbox[0], f.bbox[0]) > 0;
+    let i = blocks.findIndex((b) => same(b) && b.bbox[1] >= f.bbox[1] - 1);
+    if (i < 0) {
+      // nothing below it in its column: after the last block above it there
+      let last = -1;
+      blocks.forEach((b, k) => {
+        if (same(b) && b.bbox[1] < f.bbox[1]) last = k;
+      });
+      i = last >= 0 ? last + 1 : -1;
+    }
+    if (i < 0 || i >= blocks.length) tail.push(f);
+    else at.set(i, [...(at.get(i) ?? []), f]);
   }
-  return out.concat(pending);
+  const out: Array<Block | PageFigure> = [];
+  blocks.forEach((b, k) => {
+    out.push(...(at.get(k) ?? []), b);
+  });
+  return out.concat(tail);
+}
+
+/* ---- 连续阅读: the translation alone, read as one article (逐句对照 + 只看译文) ---- */
+
+const ENDS_SENTENCE = /[.!?:;。！？：；)\]"”’]\s*$/;
+
+/** Running heads, page numbers, footers: short lines in the top or bottom margin. */
+function inMargin(b: Block, pageHeight: number): boolean {
+  const t = (b.text || '').trim();
+  if (b.type === 'heading' || t.length > 60) return false;
+  return b.bbox[3] < pageHeight * 0.07 || b.bbox[1] > pageHeight * 0.93;
+}
+
+/** A paragraph cut by a column or a page: the next piece carries on without a new paragraph. */
+function carriesOn(prev: Block | undefined, b: Block): boolean {
+  if (!prev || prev.type !== 'paragraph' || b.type !== 'paragraph') return false;
+  return !ENDS_SENTENCE.test((prev.text || '').trim()) && /^[a-z(\d]/.test((b.text || '').trim());
+}
+
+function ArticleBlock({
+  block,
+  page,
+  cont,
+  onHover,
+}: {
+  block: Block;
+  page: PageImage;
+  cont: boolean;
+  onHover: (id: string | null) => void;
+}) {
+  const runs = block.meta?.math;
+  const basePt = block.style?.size || 11;
+  const src = block.meta?.ph ?? block.text;
+  const tgt = block.translation;
+  const text = tgt || src;
+  const show = (t: string) => <MathText text={t} runs={runs} page={page} basePt={basePt} />;
+  const hover = { onMouseEnter: () => onHover(block.id), onMouseLeave: () => onHover(null) };
+  const cls = tgt ? '' : ' art-untranslated';
+  if (block.type === 'heading') {
+    const Tag = block.level <= 1 ? 'h2' : block.level === 2 ? 'h3' : 'h4';
+    return (
+      <Tag className={`art-h${cls}`} data-block-id={block.id} {...hover}>
+        {show(text)}
+      </Tag>
+    );
+  }
+  if (block.type === 'formula') {
+    return (
+      <div className="art-formula" data-block-id={block.id} {...hover}>
+        <OrigFigure page={page} bbox={block.bbox} />
+      </div>
+    );
+  }
+  if (block.type === 'table') {
+    const rows = mdRows(tgt) || mdRows(src);
+    return (
+      <div className="art-table" data-block-id={block.id} {...hover}>
+        {rows ? <MdTable rows={rows} block={block} page={page} /> : <OrigFigure page={page} bbox={block.bbox} />}
+      </div>
+    );
+  }
+  if (block.type === 'code') {
+    return (
+      <pre className="flow-code art-code" data-block-id={block.id} {...hover}>
+        {text}
+      </pre>
+    );
+  }
+  // a reference list entry, a figure / table caption: each set as what it is
+  const kind = /^\s*(\[\d{1,3}\]|\d{1,3}\.\s)/.test(block.text || '') && /\b(19|20)\d{2}\b/.test(block.text || '')
+    ? ' art-ref'
+    : /^\s*(fig(ure)?\.?|table|tab\.|图|表)\s*\d+/i.test(src || '')
+      ? ' art-caption'
+      : '';
+  if (kind === ' art-ref') {
+    // the PDF often keeps a whole reference list in one block: one entry per line
+    const entries = text.replace(/\s*\n\s*/g, ' ').split(/\s+(?=\[\d{1,3}\]\s)/);
+    return (
+      <div className="art-refs" data-block-id={block.id} {...hover}>
+        {entries.map((e, i) => (
+          <p key={i} className={`art-p art-ref${cls}`}>
+            {show(e)}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <p
+      className={`art-p${block.type === 'list' ? ' art-list' : ''}${cont ? ' art-cont' : ''}${kind}${cls}`}
+      data-block-id={block.id}
+      title={tgt ? undefined : '这一段还没有翻译'}
+      {...hover}
+    >
+      {show(block.type === 'list' ? withMarker(text, block.list_marker) : text)}
+    </p>
+  );
 }
 
 /** Short labels drawn inside a figure (axis titles, ticks) — the figure image shows them. */
@@ -337,16 +453,52 @@ export function FlowTranslationPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNavSeq, scrollRef]);
 
+  // 逐句对照 with only the translation shown: one continuous article
+  const article = useViewStore((s) => s.panes === 'tgt') && !editMode;
   const total = pageCount || Math.max(currentPage, 1);
   const range: number[] = [];
   for (let n = 1; n <= total; n++) range.push(n);
 
   return (
-    <div className="translation-pane flow-view" ref={scrollRef}>
+    <div className={`translation-pane flow-view${article ? ' article-view' : ''}`} ref={scrollRef}>
       <div className="flow-column">
         {range.map((n) => {
           const page = pages[n];
           const blocks = page?.blocks ?? [];
+          if (article) {
+            const img = { url: page?.original, width: page?.width ?? 595, height: page?.height ?? 842 };
+            const shown = blocks.filter(
+              (b) =>
+                b.type !== 'image' &&
+                !inMargin(b, img.height) &&
+                !(page?.figures?.length && insideFigure(b, page.figures)),
+            );
+            // the last paragraph of the previous page, for a paragraph carried over the page break
+            const prevBlocks = pages[n - 1]?.blocks?.filter((b) => b.type !== 'image' && !inMargin(b, pages[n - 1]!.height)) ?? [];
+            let prev: Block | undefined = prevBlocks[prevBlocks.length - 1];
+            return (
+              <section key={n} className="flow-page art-page" data-page-no={n}>
+                <div className="art-page-mark" data-block-id={`__page_${n}`}>
+                  {n}
+                </div>
+                {!page?.loaded && <div className="flow-empty">加载中…</div>}
+                {interleave(shown, page?.figures ?? []).map((item, i) => {
+                  if (isFigure(item)) {
+                    prev = undefined;
+                    return (
+                      <figure key={`fig-${i}`} className="art-figure">
+                        <img src={item.url} alt={`第 ${n} 页插图`} loading="lazy" draggable={false}
+                          style={{ width: Math.min((item.bbox[2] - item.bbox[0]) * 1.3, 640) }} />
+                      </figure>
+                    );
+                  }
+                  const cont = carriesOn(prev, item);
+                  prev = item;
+                  return <ArticleBlock key={item.id} block={item} page={img} cont={cont} onHover={setHover} />;
+                })}
+              </section>
+            );
+          }
           return (
             <section key={n} className="flow-page" data-page-no={n}>
               <div className="flow-page-header" data-block-id={`__page_${n}`}>

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from . import cloud
 from .config import APP_VERSION, BASE_DIR, FRONTEND_DIST
 from .db import init_db
-from .routers import assistant, documents, export, glossary, notes, pages, pet, reading, settings, translate, update
+from .routers import assistant, documents, export, glossary, notes, pages, papers, pet, reading, settings, translate, update
 
 app = FastAPI(title="PDF Translate Reader", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -83,6 +83,7 @@ _cleanup_orphans()
 documents.upgrade_old_documents(background=True)
 
 app.include_router(documents.router)
+app.include_router(papers.router)
 app.include_router(pages.router)
 app.include_router(settings.router)
 app.include_router(translate.router)

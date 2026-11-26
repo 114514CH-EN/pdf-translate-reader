@@ -46,6 +46,8 @@ def init_db() -> None:
         cols = {r["name"] for r in db.execute("PRAGMA table_info(documents)").fetchall()}
         if "questions_json" not in cols:
             db.execute("ALTER TABLE documents ADD COLUMN questions_json TEXT")
+        if "paper_json" not in cols:  # what is known about a document as a paper (title, authors, DOI…)
+            db.execute("ALTER TABLE documents ADD COLUMN paper_json TEXT")
         if "last_page" not in cols:  # reading position (page + fraction scrolled into it)
             db.execute("ALTER TABLE documents ADD COLUMN last_page INTEGER")
             db.execute("ALTER TABLE documents ADD COLUMN last_frac REAL")
